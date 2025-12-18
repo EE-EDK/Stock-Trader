@@ -133,7 +133,9 @@ def composite_score(mention_vel_24h: float,
         @param scale Scaling factor for steepness
         @return Normalized value between 0 and 100
         """
-        return 100 / (1 + np.exp(-x / scale))
+        # Clip input to prevent overflow in exp()
+        clipped = np.clip(x / scale, -500, 500)
+        return 100 / (1 + np.exp(-clipped))
 
     try:
         score = (
