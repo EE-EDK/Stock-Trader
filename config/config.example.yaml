@@ -1,0 +1,57 @@
+# Sentiment Velocity Tracker Configuration Template
+# Copy this file to config.yaml and fill in your actual values
+
+# API Keys (get free keys from each provider)
+api_keys:
+  finnhub: "YOUR_FINNHUB_KEY"  # https://finnhub.io/register
+  fred: "YOUR_FRED_KEY"        # https://fred.stlouisfed.org/docs/api/api_key.html
+
+# Database
+database:
+  path: "data/sentiment.db"
+
+# Collection settings
+collection:
+  apewisdom:
+    interval_hours: 4        # How often to collect
+    top_n: 100               # How many tickers to track
+  openinsider:
+    interval_hours: 24       # Once daily
+    min_value: 25000         # Minimum transaction value
+  finnhub:
+    interval_hours: 4
+    rate_limit_per_min: 55   # Stay under 60/min free tier limit
+
+# Signal thresholds (can be tuned based on backtesting)
+thresholds:
+  velocity_spike:
+    mention_vel_24h_min: 100     # 100%+ increase in 24h
+    composite_score_min: 60       # Minimum composite score
+  insider_cluster:
+    min_insiders: 2               # At least 2 insiders buying
+    lookback_days: 14             # Within 14 days
+    min_value_total: 100000       # $100k+ total insider buying
+  sentiment_flip:
+    sentiment_delta_min: 0.3      # 30%+ shift in sentiment
+    lookback_days: 7
+  combined:
+    velocity_score_min: 50        # Lower threshold when combined with insider
+    requires_insider: true        # Must have insider activity
+  minimum_conviction: 40          # Don't report signals below this score
+
+# Email settings
+email:
+  enabled: true
+  smtp_server: "smtp.gmail.com"
+  smtp_port: 587
+  sender: "your-email@gmail.com"
+  password: "your-app-password"  # Use Gmail app password, not regular password
+  recipients:
+    - "your-email@gmail.com"
+
+# Report settings
+report:
+  include_charts: true
+  max_signals: 10            # Top N signals to include in report
+  include_watchlist: true    # Include full velocity rankings
+  watchlist_size: 20         # Number of tickers in watchlist
