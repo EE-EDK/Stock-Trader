@@ -32,6 +32,7 @@ class FinnhubCollector:
         self.rate_limit = rate_limit
         self._request_count = 0
         self._minute_start = time.time()
+        self._sentiment_endpoint_forbidden = False  # Track if sentiment endpoint is unavailable
 
     def _rate_limit_wait(self):
         """
@@ -74,6 +75,12 @@ class FinnhubCollector:
             )
             response.raise_for_status()
             return response.json()
+        except requests.exceptions.HTTPError as e:
+            # Re-raise 403 errors so caller can handle paid-tier limitations
+            if e.response.status_code == 403:
+                raise
+            logger.error(f"Finnhub API error for {endpoint}: {e}")
+            return {}
         except requests.RequestException as e:
             logger.error(f"Finnhub API error for {endpoint}: {e}")
             return {}
@@ -122,26 +129,41 @@ class FinnhubCollector:
         @brief Fetch news sentiment data for list of tickers
         @param tickers List of stock ticker symbols
         @return List of sentiment dictionaries
+        @note Sentiment endpoint requires paid Finnhub plan - gracefully skips if forbidden
         """
         results = []
 
+        # Skip if we've already detected this endpoint is forbidden
+        if self._sentiment_endpoint_forbidden:
+            logger.info("Sentiment endpoint unavailable (requires paid plan) - skipping")
+            return results
+
         for ticker in tickers:
-            data = self._get('news-sentiment', {'symbol': ticker})
+            try:
+                data = self._get('news-sentiment', {'symbol': ticker})
 
-            if data and 'sentiment' in data:
-                results.append({
-                    'ticker': ticker,
-                    'news_sentiment': data.get('companyNewsScore', 0),
-                    'bullish_pct': data.get('sentiment', {}).get('bullishPercent', 0),
-                    'bearish_pct': data.get('sentiment', {}).get('bearishPercent', 0),
-                    'buzz_score': data.get('buzz', {}).get('buzz', 0),
-                    'articles_week': data.get('buzz', {}).get('articlesInLastWeek', 0),
-                    'collected_at': datetime.now()
-                })
-            else:
-                logger.warning(f"No sentiment data for {ticker}")
+                if data and 'sentiment' in data:
+                    results.append({
+                        'ticker': ticker,
+                        'news_sentiment': data.get('companyNewsScore', 0),
+                        'bullish_pct': data.get('sentiment', {}).get('bullishPercent', 0),
+                        'bearish_pct': data.get('sentiment', {}).get('bearishPercent', 0),
+                        'buzz_score': data.get('buzz', {}).get('buzz', 0),
+                        'articles_week': data.get('buzz', {}).get('articlesInLastWeek', 0),
+                        'collected_at': datetime.now()
+                    })
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 403:
+                    # Sentiment endpoint requires paid plan
+                    self._sentiment_endpoint_forbidden = True
+                    logger.warning(f"Sentiment endpoint requires paid Finnhub plan - skipping remaining tickers")
+                    break
 
-        logger.info(f"Collected sentiment for {len(results)}/{len(tickers)} tickers")
+        if results:
+            logger.info(f"Collected sentiment for {len(results)}/{len(tickers)} tickers")
+        elif not self._sentiment_endpoint_forbidden:
+            logger.warning("No sentiment data collected")
+
         return results
 
     def collect_social_sentiment(self, ticker: str) -> Optional[Dict]:
