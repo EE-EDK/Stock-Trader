@@ -89,12 +89,12 @@ def run_pipeline(config: dict, skip_email: bool = False):
         mentions = ape.collect(top_n=config['collection']['apewisdom']['top_n'])
         if mentions:
             db.insert_mentions(mentions)
-            logger.info(f"  ✓ ApeWisdom: {len(mentions)} tickers collected")
+            logger.info(f"  [OK] ApeWisdom: {len(mentions)} tickers collected")
         else:
-            logger.warning("  ⚠ ApeWisdom: No data collected")
+            logger.warning("  [WARN] ApeWisdom: No data collected")
         ape.close()
     except Exception as e:
-        logger.error(f"  ✗ ApeWisdom failed: {e}")
+        logger.error(f"  [ERROR] ApeWisdom failed: {e}")
 
     # OpenInsider (insider trades)
     trades = []
@@ -106,19 +106,19 @@ def run_pipeline(config: dict, skip_email: bool = False):
         )
         if trades:
             db.insert_insiders(trades)
-            logger.info(f"  ✓ OpenInsider: {len(trades)} trades collected")
+            logger.info(f"  [OK] OpenInsider: {len(trades)} trades collected")
         else:
-            logger.warning("  ⚠ OpenInsider: No trades collected")
+            logger.warning("  [WARN] OpenInsider: No trades collected")
         insider.close()
     except Exception as e:
-        logger.error(f"  ✗ OpenInsider failed: {e}")
+        logger.error(f"  [ERROR] OpenInsider failed: {e}")
 
     # Finnhub (prices + sentiment)
     prices = []
     try:
         finnhub_key = config['api_keys'].get('finnhub')
         if not finnhub_key or finnhub_key == 'YOUR_FINNHUB_KEY':
-            logger.warning("  ⚠ Finnhub: API key not configured, skipping")
+            logger.warning("  [WARN] Finnhub: API key not configured, skipping")
         else:
             finnhub = FinnhubCollector(api_key=finnhub_key)
 
@@ -130,11 +130,11 @@ def run_pipeline(config: dict, skip_email: bool = False):
             prices = finnhub.combine_price_and_sentiment(tracked_tickers)
             if prices:
                 db.insert_prices(prices)
-                logger.info(f"  ✓ Finnhub: {len(prices)} ticker data points collected")
+                logger.info(f"  [OK] Finnhub: {len(prices)} ticker data points collected")
             else:
-                logger.warning("  ⚠ Finnhub: No data collected")
+                logger.warning("  [WARN] Finnhub: No data collected")
     except Exception as e:
-        logger.error(f"  ✗ Finnhub failed: {e}")
+        logger.error(f"  [ERROR] Finnhub failed: {e}")
 
     # ========== Step 2: Calculate Velocity Metrics ==========
     logger.info("Step 2: Calculating velocity metrics...")
@@ -145,11 +145,11 @@ def run_pipeline(config: dict, skip_email: bool = False):
         velocity_data = calc.calculate_all_velocities()
         if velocity_data:
             db.insert_velocity(velocity_data)
-            logger.info(f"  ✓ Calculated velocity for {len(velocity_data)} tickers")
+            logger.info(f"  [OK] Calculated velocity for {len(velocity_data)} tickers")
         else:
-            logger.warning("  ⚠ No velocity data calculated")
+            logger.warning("  [WARN] No velocity data calculated")
     except Exception as e:
-        logger.error(f"  ✗ Velocity calculation failed: {e}")
+        logger.error(f"  [ERROR] Velocity calculation failed: {e}")
 
     # ========== Step 3: Generate Signals ==========
     logger.info("Step 3: Generating signals...")
@@ -169,21 +169,21 @@ def run_pipeline(config: dict, skip_email: bool = False):
 
         if signals:
             db.insert_signals(signals)
-            logger.info(f"  ✓ Generated {len(signals)} signals above {min_conviction} conviction")
+            logger.info(f"  [OK] Generated {len(signals)} signals above {min_conviction} conviction")
         else:
-            logger.info("  ℹ No signals met conviction threshold")
+            logger.info("  [INFO] No signals met conviction threshold")
     except Exception as e:
-        logger.error(f"  ✗ Signal generation failed: {e}")
+        logger.error(f"  [ERROR] Signal generation failed: {e}")
 
     # ========== Step 4: Generate and Send Report ==========
     logger.info("Step 4: Generating report...")
 
     if skip_email:
-        logger.info("  ℹ Email sending skipped (--skip-email flag)")
+        logger.info("  [INFO] Email sending skipped (--skip-email flag)")
     elif not config.get('email', {}).get('enabled', False):
-        logger.info("  ℹ Email disabled in config")
+        logger.info("  [INFO] Email disabled in config")
     elif not signals:
-        logger.info("  ℹ No signals to report")
+        logger.info("  [INFO] No signals to report")
     else:
         try:
             reporter = EmailReporter(config['email'])
@@ -195,11 +195,11 @@ def run_pipeline(config: dict, skip_email: bool = False):
             )
 
             if reporter.send(report):
-                logger.info("  ✓ Email report sent successfully")
+                logger.info("  [OK] Email report sent successfully")
             else:
-                logger.error("  ✗ Failed to send email report")
+                logger.error("  [ERROR] Failed to send email report")
         except Exception as e:
-            logger.error(f"  ✗ Report generation/sending failed: {e}")
+            logger.error(f"  [ERROR] Report generation/sending failed: {e}")
 
     # ========== Step 5: Output Summary ==========
     logger.info("=" * 60)
