@@ -10,6 +10,11 @@ numpy>=1.23.0
 matplotlib>=3.6.0
 pandas>=1.5.0
 
+# FREE Data Sources (NEW!)
+yfinance>=0.2.28              # Yahoo Finance - unlimited, free
+vaderSentiment>=3.3.2         # Local sentiment analysis - no API
+praw>=7.7.1                   # Reddit API - free
+
 # Testing
 pytest>=7.0.0
 pytest-cov>=4.0.0

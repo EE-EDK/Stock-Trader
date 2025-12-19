@@ -66,20 +66,34 @@ class SignalGenerator:
     def generate_signals(self,
                          velocity_data: Dict[str, Dict[str, float]],
                          insider_data: Dict[str, List[Dict[str, Any]]],
-                         price_data: Dict[str, Dict[str, Any]]) -> List[Signal]:
+                         price_data: Dict[str, Dict[str, Any]],
+                         technical_data: Optional[Dict[str, Dict[str, Any]]] = None,
+                         sentiment_data: Optional[Dict[str, Dict[str, Any]]] = None,
+                         reddit_data: Optional[Dict[str, Dict[str, Any]]] = None) -> List[Signal]:
         """
-        @brief Main signal generation logic
+        @brief Main signal generation logic with FREE data sources
         @param velocity_data Dictionary mapping ticker to velocity metrics
         @param insider_data Dictionary mapping ticker to list of insider trades
         @param price_data Dictionary mapping ticker to current price info
+        @param technical_data Dictionary mapping ticker to technical analysis (RSI, MACD, etc.)
+        @param sentiment_data Dictionary mapping ticker to news sentiment (Alpha Vantage/VADER)
+        @param reddit_data Dictionary mapping ticker to Reddit mentions/sentiment
         @return List of Signal objects sorted by conviction score (descending)
         """
         signals = []
+
+        # Default to empty dicts if not provided
+        technical_data = technical_data or {}
+        sentiment_data = sentiment_data or {}
+        reddit_data = reddit_data or {}
 
         for ticker in velocity_data.keys():
             vel = velocity_data[ticker]
             insiders = insider_data.get(ticker, [])
             price = price_data.get(ticker, {})
+            tech = technical_data.get(ticker, {})
+            sentiment = sentiment_data.get(ticker, {})
+            reddit = reddit_data.get(ticker, {})
 
             triggers = []
             conviction = 0.0
@@ -99,6 +113,35 @@ class SignalGenerator:
                 triggers.append('sentiment_flip')
                 conviction += 20
 
+            # NEW: Technical breakout detection
+            if tech and self._check_technical_breakout(tech):
+                triggers.append('technical_breakout')
+                conviction += 25
+
+            # NEW: RSI oversold signal
+            if tech and self._check_rsi_oversold(tech):
+                triggers.append('rsi_oversold')
+                conviction += 15
+
+            # NEW: Golden cross
+            if tech and tech.get('golden_cross'):
+                triggers.append('golden_cross')
+                conviction += 20
+
+            # NEW: Positive news sentiment
+            if sentiment and self._check_positive_sentiment(sentiment):
+                triggers.append('news_sentiment_bullish')
+                conviction += 15
+
+            # NEW: Reddit viral signal
+            if reddit and self._check_reddit_viral(reddit):
+                triggers.append('reddit_viral')
+                conviction += 10
+
+            # Add technical score contribution (0-100 scale)
+            if tech and 'technical_score' in tech:
+                conviction += tech['technical_score'] * 0.2  # 20% weight
+
             # Boost for combined signals
             if len(triggers) >= 2:
                 conviction += 15
@@ -117,7 +160,7 @@ class SignalGenerator:
                     conviction_score=conviction,
                     price_at_signal=price.get('price', 0.0),
                     triggers=triggers,
-                    notes=self._generate_notes(ticker, vel, insiders, triggers),
+                    notes=self._generate_notes(ticker, vel, insiders, triggers, tech, sentiment, reddit),
                     created_at=datetime.now()
                 ))
 
@@ -190,13 +233,19 @@ class SignalGenerator:
                        ticker: str,
                        vel: Dict[str, float],
                        insiders: List[Dict[str, Any]],
-                       triggers: List[str]) -> str:
+                       triggers: List[str],
+                       tech: Optional[Dict[str, Any]] = None,
+                       sentiment: Optional[Dict[str, Any]] = None,
+                       reddit: Optional[Dict[str, Any]] = None) -> str:
         """
         @brief Generate human-readable notes for the signal
         @param ticker Stock ticker symbol
         @param vel Velocity metrics
         @param insiders List of insider trades
         @param triggers List of trigger types
+        @param tech Technical analysis data
+        @param sentiment Sentiment analysis data
+        @param reddit Reddit data
         @return Formatted note string
         """
         notes = []
@@ -215,11 +264,67 @@ class SignalGenerator:
             direction = "bullish" if sent_vel > 0 else "bearish"
             notes.append(f"Sentiment flipping {direction}")
 
+        if 'technical_breakout' in triggers:
+            notes.append("Technical breakout detected")
+
+        if 'rsi_oversold' in triggers and tech:
+            rsi = tech.get('rsi_14', 0)
+            notes.append(f"RSI oversold ({rsi:.1f})")
+
+        if 'golden_cross' in triggers:
+            notes.append("Golden cross (SMA)")
+
+        if 'news_sentiment_bullish' in triggers and sentiment:
+            score = sentiment.get('sentiment_score', 0)
+            notes.append(f"News bullish ({score:.2f})")
+
+        if 'reddit_viral' in triggers and reddit:
+            mentions = reddit.get('mention_count', 0)
+            notes.append(f"Reddit viral ({mentions} mentions)")
+
         # Add composite score
         comp_score = vel.get('composite_score', 0)
         notes.append(f"Composite: {comp_score:.0f}")
 
         return " | ".join(notes)
+
+    def _check_technical_breakout(self, tech: Dict[str, Any]) -> bool:
+        """
+        @brief Check if stock is breaking out (technical analysis)
+        @param tech Technical analysis dictionary
+        @return True if breakout detected
+        """
+        return tech.get('breakout_detected', False)
+
+    def _check_rsi_oversold(self, tech: Dict[str, Any]) -> bool:
+        """
+        @brief Check if RSI indicates oversold condition
+        @param tech Technical analysis dictionary
+        @return True if RSI < 30 (oversold)
+        """
+        rsi = tech.get('rsi_14', 50)
+        return rsi < 30
+
+    def _check_positive_sentiment(self, sentiment: Dict[str, Any]) -> bool:
+        """
+        @brief Check if news sentiment is positive
+        @param sentiment Sentiment analysis dictionary
+        @return True if sentiment is bullish
+        """
+        # Works with both Alpha Vantage and VADER sentiment
+        score = sentiment.get('sentiment_score', 0)
+        label = sentiment.get('sentiment_label', '')
+
+        return score > 0.15 or 'bullish' in label.lower() or 'positive' in label.lower()
+
+    def _check_reddit_viral(self, reddit: Dict[str, Any]) -> bool:
+        """
+        @brief Check if ticker is going viral on Reddit
+        @param reddit Reddit data dictionary
+        @return True if mention count is high
+        """
+        mention_count = reddit.get('mention_count', 0)
+        return mention_count >= 10  # 10+ mentions indicates viral potential
 
     def filter_by_conviction(self, signals: List[Signal], min_conviction: float = 40) -> List[Signal]:
         """

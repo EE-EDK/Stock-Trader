@@ -18,8 +18,39 @@ from src.collectors.openinsider import OpenInsiderCollector
 from src.collectors.finnhub import FinnhubCollector
 from src.database.models import Database
 from src.metrics.velocity import VelocityCalculator
+from src.metrics.technical import TechnicalAnalyzer
 from src.signals.generator import SignalGenerator
 from src.reporters.email import EmailReporter
+from src.reporters.dashboard import DashboardGenerator
+
+# NEW FREE DATA SOURCE COLLECTORS
+try:
+    from src.collectors.alphavantage import AlphaVantageCollector
+    ALPHAVANTAGE_AVAILABLE = True
+except ImportError:
+    ALPHAVANTAGE_AVAILABLE = False
+    logger.warning("Alpha Vantage collector not available")
+
+try:
+    from src.collectors.yfinance_collector import YFinanceCollector
+    YFINANCE_AVAILABLE = True
+except ImportError:
+    YFINANCE_AVAILABLE = False
+    logger.warning("YFinance collector not available - install yfinance: pip install yfinance")
+
+try:
+    from src.collectors.vader_sentiment import VaderSentimentAnalyzer
+    VADER_AVAILABLE = True
+except ImportError:
+    VADER_AVAILABLE = False
+    logger.warning("VADER sentiment not available - install: pip install vaderSentiment")
+
+try:
+    from src.collectors.reddit_collector import RedditCollector
+    REDDIT_AVAILABLE = True
+except ImportError:
+    REDDIT_AVAILABLE = False
+    logger.warning("Reddit collector not available - install praw: pip install praw")
 
 # Setup logging
 def setup_logging(log_level: str = 'INFO'):
@@ -136,6 +167,77 @@ def run_pipeline(config: dict, skip_email: bool = False):
     except Exception as e:
         logger.error(f"  [ERROR] Finnhub failed: {e}")
 
+    # ========== NEW: Collect Free Data Sources ==========
+    logger.info("Step 1b: Collecting FREE data sources...")
+
+    # Get tracked tickers for free data collection
+    tracked_tickers = db.get_tracked_tickers(days=7)
+    top_tickers = list(tracked_tickers)[:20]  # Top 20 to save API calls
+
+    # Alpha Vantage sentiment (100 calls/day - FREE!)
+    alpha_sentiment = {}
+    if ALPHAVANTAGE_AVAILABLE and config.get('collection', {}).get('alphavantage', {}).get('enabled', False):
+        try:
+            alpha_key = config['api_keys'].get('alphavantage')
+            if alpha_key and alpha_key != 'YOUR_ALPHAVANTAGE_KEY':
+                alpha = AlphaVantageCollector(api_key=alpha_key)
+                sentiments = alpha.collect_news_sentiment(
+                    top_tickers,
+                    limit_per_ticker=config.get('collection', {}).get('alphavantage', {}).get('articles_per_ticker', 50)
+                )
+                alpha_sentiment = {s['ticker']: s for s in sentiments}
+                logger.info(f"  [OK] Alpha Vantage: {len(sentiments)} sentiment analyses")
+            else:
+                logger.info("  [SKIP] Alpha Vantage: API key not configured")
+        except Exception as e:
+            logger.error(f"  [ERROR] Alpha Vantage failed: {e}")
+
+    # YFinance data (unlimited - FREE!)
+    yfinance_data = {}
+    if YFINANCE_AVAILABLE and config.get('collection', {}).get('yfinance', {}).get('enabled', True):
+        try:
+            yf_collector = YFinanceCollector()
+            yf_info = yf_collector.collect_stock_info(tracked_tickers)
+            yfinance_data = {d['ticker']: d for d in yf_info}
+            logger.info(f"  [OK] YFinance: {len(yf_info)} stock info records")
+        except Exception as e:
+            logger.error(f"  [ERROR] YFinance failed: {e}")
+
+    # VADER sentiment (local, no API - FREE!)
+    vader_sentiment = {}
+    if VADER_AVAILABLE and config.get('collection', {}).get('vader_sentiment', {}).get('enabled', True):
+        try:
+            vader = VaderSentimentAnalyzer()
+            for ticker in top_tickers[:10]:  # Limit scraping to top 10 to avoid being blocked
+                company_name = yfinance_data.get(ticker, {}).get('company_name')
+                sentiment = vader.analyze_ticker_sentiment(ticker, company_name)
+                if sentiment.get('total_headlines', 0) > 0:
+                    vader_sentiment[ticker] = sentiment
+            logger.info(f"  [OK] VADER Sentiment: {len(vader_sentiment)} tickers analyzed")
+        except Exception as e:
+            logger.error(f"  [ERROR] VADER Sentiment failed: {e}")
+
+    # Reddit data (FREE with API key)
+    reddit_data = {}
+    if REDDIT_AVAILABLE and config.get('collection', {}).get('reddit', {}).get('enabled', False):
+        try:
+            reddit_config = config['api_keys'].get('reddit', {})
+            if reddit_config.get('client_id') and reddit_config['client_id'] != 'YOUR_REDDIT_CLIENT_ID':
+                reddit = RedditCollector(
+                    client_id=reddit_config['client_id'],
+                    client_secret=reddit_config['client_secret'],
+                    user_agent=reddit_config['user_agent']
+                )
+                mentions = reddit.collect_ticker_mentions(
+                    hours=config.get('collection', {}).get('reddit', {}).get('lookback_hours', 24)
+                )
+                reddit_data = {m['ticker']: m for m in mentions}
+                logger.info(f"  [OK] Reddit: {len(mentions)} ticker mentions")
+            else:
+                logger.info("  [SKIP] Reddit: API credentials not configured")
+        except Exception as e:
+            logger.error(f"  [ERROR] Reddit failed: {e}")
+
     # ========== Step 2: Calculate Velocity Metrics ==========
     logger.info("Step 2: Calculating velocity metrics...")
 
@@ -151,8 +253,33 @@ def run_pipeline(config: dict, skip_email: bool = False):
     except Exception as e:
         logger.error(f"  [ERROR] Velocity calculation failed: {e}")
 
-    # ========== Step 3: Generate Signals ==========
-    logger.info("Step 3: Generating signals...")
+    # ========== NEW: Technical Analysis (Zero API calls!) ==========
+    logger.info("Step 2b: Running technical analysis...")
+
+    technical_data = {}
+    if config.get('collection', {}).get('technical_analysis', {}).get('enabled', True):
+        try:
+            tech_analyzer = TechnicalAnalyzer(db)
+            for ticker in velocity_data.keys():
+                tech_analysis = tech_analyzer.analyze_ticker(ticker)
+                if tech_analysis:
+                    tech_score = tech_analyzer.get_technical_score(tech_analysis)
+                    tech_analysis['technical_score'] = tech_score
+                    technical_data[ticker] = tech_analysis
+            logger.info(f"  [OK] Technical analysis for {len(technical_data)} tickers")
+        except Exception as e:
+            logger.error(f"  [ERROR] Technical analysis failed: {e}")
+
+    # ========== Step 3: Generate Signals with FREE Data ==========
+    logger.info("Step 3: Generating signals with FREE data sources...")
+
+    # Merge sentiment data (prefer Alpha Vantage, fallback to VADER)
+    sentiment_data = {}
+    for ticker in velocity_data.keys():
+        if ticker in alpha_sentiment:
+            sentiment_data[ticker] = alpha_sentiment[ticker]
+        elif ticker in vader_sentiment:
+            sentiment_data[ticker] = vader_sentiment[ticker]
 
     signals = []
     try:
@@ -160,7 +287,10 @@ def run_pipeline(config: dict, skip_email: bool = False):
         signals = gen.generate_signals(
             velocity_data=velocity_data,
             insider_data=db.get_recent_insiders(days=14),
-            price_data=db.get_latest_prices()
+            price_data=db.get_latest_prices(),
+            technical_data=technical_data,      # NEW!
+            sentiment_data=sentiment_data,      # NEW!
+            reddit_data=reddit_data             # NEW!
         )
 
         # Filter by minimum conviction
@@ -200,6 +330,22 @@ def run_pipeline(config: dict, skip_email: bool = False):
                 logger.error("  [ERROR] Failed to send email report")
         except Exception as e:
             logger.error(f"  [ERROR] Report generation/sending failed: {e}")
+
+    # ========== NEW: Generate HTML Dashboard ==========
+    logger.info("Step 4b: Generating HTML dashboard...")
+    try:
+        dashboard = DashboardGenerator(output_dir="reports")
+        dashboard_path = dashboard.generate(
+            signals=signals,
+            velocity_data=velocity_data,
+            technical_data=technical_data,
+            sentiment_data=sentiment_data,
+            reddit_data=reddit_data
+        )
+        logger.info(f"  [OK] Dashboard saved to: {dashboard_path}")
+        logger.info(f"  [TIP] Open {dashboard_path} in your browser to view results!")
+    except Exception as e:
+        logger.error(f"  [ERROR] Dashboard generation failed: {e}")
 
     # ========== Step 5: Output Summary ==========
     logger.info("=" * 60)
