@@ -3,8 +3,22 @@
 
 # API Keys (get free keys from each provider)
 api_keys:
-  finnhub: "YOUR_FINNHUB_KEY"  # https://finnhub.io/register
-  fred: "YOUR_FRED_KEY"        # https://fred.stlouisfed.org/docs/api/api_key.html
+  # REQUIRED
+  finnhub: "YOUR_FINNHUB_KEY"              # https://finnhub.io/register (FREE tier: 60 calls/min)
+
+  # OPTIONAL BUT RECOMMENDED (all FREE!)
+  alphavantage: "YOUR_ALPHAVANTAGE_KEY"    # https://www.alphavantage.co/support/#api-key (FREE: 100 calls/day for sentiment)
+  fmp: "YOUR_FMP_KEY"                      # https://site.financialmodelingprep.com/developer/docs/pricing (FREE: 250 calls/day)
+
+  # Reddit API (FREE - instant approval)
+  # Get at: https://www.reddit.com/prefs/apps (create app -> get client_id & secret)
+  reddit:
+    client_id: "YOUR_REDDIT_CLIENT_ID"
+    client_secret: "YOUR_REDDIT_SECRET"
+    user_agent: "stock-tracker:v1.0 (by u/yourusername)"
+
+  # LEGACY (optional)
+  fred: "YOUR_FRED_KEY"                    # https://fred.stlouisfed.org/docs/api/api_key.html
 
 # Database
 database:
@@ -21,6 +35,30 @@ collection:
   finnhub:
     interval_hours: 4
     rate_limit_per_min: 55   # Stay under 60/min free tier limit
+
+  # NEW FREE DATA SOURCES
+  alphavantage:
+    enabled: true            # Enable Alpha Vantage sentiment (100 calls/day)
+    top_n: 20                # Analyze top 20 tickers to save API calls
+    articles_per_ticker: 50  # News articles to analyze per ticker
+
+  yfinance:
+    enabled: true            # Enable Yahoo Finance (unlimited, free!)
+    collect_fundamentals: true
+    collect_analyst_ratings: true
+
+  vader_sentiment:
+    enabled: true            # Enable local VADER sentiment (no API calls!)
+    scrape_headlines: true   # Scrape Google News + Yahoo Finance headlines
+
+  reddit:
+    enabled: false           # Set to true if you have Reddit API credentials
+    subreddits: ["wallstreetbets", "stocks", "investing"]
+    lookback_hours: 24       # How far back to analyze posts
+
+  technical_analysis:
+    enabled: true            # Enable technical analysis (no API calls!)
+    lookback_days: 50        # Days of price history to analyze
 
 # Signal thresholds (can be tuned based on backtesting)
 thresholds:
