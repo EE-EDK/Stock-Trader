@@ -23,36 +23,7 @@ from src.signals.generator import SignalGenerator
 from src.reporters.email import EmailReporter
 from src.reporters.dashboard import DashboardGenerator
 
-# NEW FREE DATA SOURCE COLLECTORS
-try:
-    from src.collectors.alphavantage import AlphaVantageCollector
-    ALPHAVANTAGE_AVAILABLE = True
-except ImportError:
-    ALPHAVANTAGE_AVAILABLE = False
-    logger.warning("Alpha Vantage collector not available")
-
-try:
-    from src.collectors.yfinance_collector import YFinanceCollector
-    YFINANCE_AVAILABLE = True
-except ImportError:
-    YFINANCE_AVAILABLE = False
-    logger.warning("YFinance collector not available - install yfinance: pip install yfinance")
-
-try:
-    from src.collectors.vader_sentiment import VaderSentimentAnalyzer
-    VADER_AVAILABLE = True
-except ImportError:
-    VADER_AVAILABLE = False
-    logger.warning("VADER sentiment not available - install: pip install vaderSentiment")
-
-try:
-    from src.collectors.reddit_collector import RedditCollector
-    REDDIT_AVAILABLE = True
-except ImportError:
-    REDDIT_AVAILABLE = False
-    logger.warning("Reddit collector not available - install praw: pip install praw")
-
-# Setup logging
+# Setup logging first (before other imports that may need it)
 def setup_logging(log_level: str = 'INFO'):
     """
     @brief Configure logging for the application
@@ -70,6 +41,32 @@ def setup_logging(log_level: str = 'INFO'):
     )
 
 logger = logging.getLogger(__name__)
+
+
+# NEW FREE DATA SOURCE COLLECTORS (import after logger is defined)
+try:
+    from src.collectors.alphavantage import AlphaVantageCollector
+    ALPHAVANTAGE_AVAILABLE = True
+except ImportError:
+    ALPHAVANTAGE_AVAILABLE = False
+
+try:
+    from src.collectors.yfinance_collector import YFinanceCollector
+    YFINANCE_AVAILABLE = True
+except ImportError:
+    YFINANCE_AVAILABLE = False
+
+try:
+    from src.collectors.vader_sentiment import VaderSentimentAnalyzer
+    VADER_AVAILABLE = True
+except ImportError:
+    VADER_AVAILABLE = False
+
+try:
+    from src.collectors.reddit_collector import RedditCollector
+    REDDIT_AVAILABLE = True
+except ImportError:
+    REDDIT_AVAILABLE = False
 
 
 def load_config(config_path: str = "config/config.yaml") -> dict:
