@@ -29,7 +29,8 @@ class DashboardGenerator:
                 velocity_data: Dict[str, Dict],
                 technical_data: Dict[str, Dict] = None,
                 sentiment_data: Dict[str, Dict] = None,
-                reddit_data: Dict[str, Dict] = None) -> str:
+                reddit_data: Dict[str, Dict] = None,
+                paper_trading_stats: Dict = None) -> str:
         """
         @brief Generate complete HTML dashboard
         @param signals List of Signal objects
@@ -37,11 +38,13 @@ class DashboardGenerator:
         @param technical_data Technical analysis data
         @param sentiment_data Sentiment analysis data
         @param reddit_data Reddit mention data
+        @param paper_trading_stats Paper trading performance statistics
         @return Path to generated HTML file
         """
         technical_data = technical_data or {}
         sentiment_data = sentiment_data or {}
         reddit_data = reddit_data or {}
+        paper_trading_stats = paper_trading_stats or {}
 
         html = f"""
 <!DOCTYPE html>
@@ -210,6 +213,52 @@ class DashboardGenerator:
             margin-top: 30px;
             font-size: 12px;
         }}
+        .paper-trading {{
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }}
+        .pt-metrics {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }}
+        .pt-metric-card {{
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            text-align: center;
+        }}
+        .pt-metric-value {{
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }}
+        .pt-metric-value.positive {{ color: #00b894; }}
+        .pt-metric-value.negative {{ color: #d63031; }}
+        .pt-metric-value.neutral {{ color: #667eea; }}
+        .pt-metric-label {{
+            font-size: 11px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }}
+        .pt-position {{
+            border-left: 4px solid #00b894;
+            padding: 10px;
+            margin: 10px 0;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }}
+        .pt-closed {{
+            border-left-color: #667eea;
+        }}
+        .pt-loss {{
+            border-left-color: #d63031;
+        }}
     </style>
 </head>
 <body>
@@ -238,6 +287,8 @@ class DashboardGenerator:
                 <div class="stat-value">{len(sentiment_data)}</div>
             </div>
         </div>
+
+        {self._generate_paper_trading_html(paper_trading_stats)}
 
         <div class="signals">
             <h2>🎯 Top Trading Signals</h2>
@@ -358,3 +409,121 @@ class DashboardGenerator:
     def _format_trigger(self, trigger: str) -> str:
         """Format trigger name for display"""
         return trigger.replace('_', ' ').title()
+
+    def _generate_paper_trading_html(self, stats: Dict) -> str:
+        """Generate HTML for paper trading performance section"""
+        if not stats or not stats.get('closed_trades'):
+            return ""
+
+        closed = stats['closed_trades']
+        open_pos = stats['open_positions']
+
+        # Determine color classes
+        win_rate_class = 'positive' if closed['win_rate'] >= 50 else 'negative'
+        avg_return_class = 'positive' if closed['avg_return_pct'] > 0 else 'negative'
+        total_pnl_class = 'positive' if closed['total_pnl'] > 0 else 'negative'
+        unrealized_class = 'positive' if open_pos.get('unrealized_pnl', 0) > 0 else 'negative'
+
+        html = f"""
+        <div class="paper-trading">
+            <h2>📊 Paper Trading Performance</h2>
+            <p style="color: #666; font-size: 14px; margin-bottom: 15px;">
+                Tracking mock trades to validate signal performance (Moderate Strategy: 30 days, -10% stop, +20% target)
+            </p>
+
+            <h3 style="margin-top: 20px; color: #667eea;">Closed Positions Stats</h3>
+            <div class="pt-metrics">
+                <div class="pt-metric-card">
+                    <div class="pt-metric-value neutral">{closed['count']}</div>
+                    <div class="pt-metric-label">Total Trades</div>
+                </div>
+                <div class="pt-metric-card">
+                    <div class="pt-metric-value {win_rate_class}">{closed['win_rate']:.1f}%</div>
+                    <div class="pt-metric-label">Win Rate</div>
+                </div>
+                <div class="pt-metric-card">
+                    <div class="pt-metric-value {avg_return_class}">{closed['avg_return_pct']:+.1f}%</div>
+                    <div class="pt-metric-label">Avg Return</div>
+                </div>
+                <div class="pt-metric-card">
+                    <div class="pt-metric-value {total_pnl_class}">${closed['total_pnl']:+.0f}</div>
+                    <div class="pt-metric-label">Total P/L</div>
+                </div>
+                <div class="pt-metric-card">
+                    <div class="pt-metric-value neutral">{closed['avg_days_held']:.0f}</div>
+                    <div class="pt-metric-label">Avg Days Held</div>
+                </div>
+                <div class="pt-metric-card">
+                    <div class="pt-metric-value positive">{closed['best_return']:.1f}%</div>
+                    <div class="pt-metric-label">Best Trade</div>
+                </div>
+                <div class="pt-metric-card">
+                    <div class="pt-metric-value negative">{closed['worst_return']:.1f}%</div>
+                    <div class="pt-metric-label">Worst Trade</div>
+                </div>
+            </div>
+
+            <h3 style="margin-top: 25px; color: #667eea;">Open Positions ({open_pos['count']})</h3>
+            <div class="pt-metrics">
+                <div class="pt-metric-card">
+                    <div class="pt-metric-value neutral">${open_pos['total_deployed']:,.0f}</div>
+                    <div class="pt-metric-label">Capital Deployed</div>
+                </div>
+                <div class="pt-metric-card">
+                    <div class="pt-metric-value {unrealized_class}">${open_pos.get('unrealized_pnl', 0):+.0f}</div>
+                    <div class="pt-metric-label">Unrealized P/L</div>
+                </div>
+                <div class="pt-metric-card">
+                    <div class="pt-metric-value {unrealized_class}">{open_pos.get('unrealized_pct', 0):+.1f}%</div>
+                    <div class="pt-metric-label">Unrealized %</div>
+                </div>
+            </div>
+        """
+
+        # Add recent closes if available
+        if 'recent_closes' in stats and stats['recent_closes']:
+            html += """
+            <h3 style="margin-top: 25px; color: #667eea;">Recent Closes (Last 7 Days)</h3>
+            """
+            for trade in stats['recent_closes'][:5]:
+                pnl_class = 'pt-position' if trade['profit_loss'] > 0 else 'pt-position pt-loss'
+                exit_icon = '✅' if trade['profit_loss'] > 0 else '❌'
+                html += f"""
+                <div class="{pnl_class}">
+                    <strong>{exit_icon} {trade['ticker']}</strong> •
+                    {trade['exit_reason'].replace('_', ' ').title()} •
+                    <span style="color: {'#00b894' if trade['profit_loss'] > 0 else '#d63031'}; font-weight: bold;">
+                        {trade['return_pct']:+.1f}% (${trade['profit_loss']:+.0f})
+                    </span> •
+                    {trade['days_held']} days •
+                    Entry: ${trade['entry_price']:.2f} → Exit: ${trade['exit_price']:.2f}
+                </div>
+                """
+
+        # Add open positions if available
+        if 'open_positions' in stats and stats['open_positions']:
+            html += """
+            <h3 style="margin-top: 25px; color: #667eea;">Current Open Positions</h3>
+            """
+            for pos in stats['open_positions'][:10]:
+                current_price = pos.get('current_price')
+                if current_price:
+                    pnl_class = 'pt-position' if pos.get('unrealized_pnl', 0) > 0 else 'pt-position pt-loss'
+                    html += f"""
+                    <div class="{pnl_class}">
+                        <strong>{pos['ticker']}</strong> •
+                        Conviction: {pos['conviction']} •
+                        Entry: ${pos['entry_price']:.2f} → Now: ${current_price:.2f} •
+                        <span style="color: {'#00b894' if pos.get('unrealized_pnl', 0) > 0 else '#d63031'}; font-weight: bold;">
+                            {pos.get('unrealized_pct', 0):+.1f}% (${pos.get('unrealized_pnl', 0):+.0f})
+                        </span> •
+                        {pos['days_held']} days •
+                        Stop: ${pos['stop_loss']:.2f} | Target: ${pos['target_price']:.2f}
+                    </div>
+                    """
+
+        html += """
+        </div>
+        """
+
+        return html
