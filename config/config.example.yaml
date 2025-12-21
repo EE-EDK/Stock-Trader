@@ -60,6 +60,15 @@ collection:
     enabled: true            # Enable technical analysis (no API calls!)
     lookback_days: 50        # Days of price history to analyze
 
+  fred:
+    enabled: false           # Enable FRED macro indicators (100 calls/day)
+    # Get free API key: https://fred.stlouisfed.org/docs/api/api_key.html
+    collect_vix: true        # Market volatility index
+    collect_rates: true      # Interest rates (10Y Treasury)
+    collect_unemployment: true  # Unemployment rate
+    collect_inflation: true  # CPI (inflation)
+    collect_forex: true      # USD/EUR exchange rate
+
 # Paper Trading (track mock purchases to validate signals)
 paper_trading:
   enabled: true              # Enable paper trading system
@@ -75,6 +84,21 @@ paper_trading:
   # Reporting
   report_in_dashboard: true  # Include in HTML dashboard
   backfill_days: 30          # Backfill trades from last 30 days on first run
+
+# Backtesting (validate signals against historical data)
+backtesting:
+  initial_capital: 10000     # Starting capital for backtest ($10,000)
+  position_size: 1000        # Base position size ($1,000)
+  max_positions: 10          # Maximum concurrent positions
+  conviction_weighted: true  # Use conviction-weighted sizing (like paper trading)
+
+  # Exit strategy (same as paper trading for comparison)
+  hold_days: 30              # Maximum hold period
+  stop_loss_pct: -10         # Stop loss threshold
+  take_profit_pct: 20        # Take profit target
+
+  # Filtering
+  min_conviction: 60         # Only backtest signals >= 60 conviction
 
 # Signal thresholds (can be tuned based on backtesting)
 thresholds:

@@ -30,7 +30,9 @@ class DashboardGenerator:
                 technical_data: Dict[str, Dict] = None,
                 sentiment_data: Dict[str, Dict] = None,
                 reddit_data: Dict[str, Dict] = None,
-                paper_trading_stats: Dict = None) -> str:
+                paper_trading_stats: Dict = None,
+                macro_indicators: Dict = None,
+                market_assessment: Dict = None) -> str:
         """
         @brief Generate complete HTML dashboard
         @param signals List of Signal objects
@@ -39,12 +41,16 @@ class DashboardGenerator:
         @param sentiment_data Sentiment analysis data
         @param reddit_data Reddit mention data
         @param paper_trading_stats Paper trading performance statistics
+        @param macro_indicators FRED macro economic indicators
+        @param market_assessment Market risk assessment from FRED data
         @return Path to generated HTML file
         """
         technical_data = technical_data or {}
         sentiment_data = sentiment_data or {}
         reddit_data = reddit_data or {}
         paper_trading_stats = paper_trading_stats or {}
+        macro_indicators = macro_indicators or {}
+        market_assessment = market_assessment or {}
 
         html = f"""
 <!DOCTYPE html>
@@ -259,6 +265,49 @@ class DashboardGenerator:
         .pt-loss {{
             border-left-color: #d63031;
         }}
+        .macro-section {{
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }}
+        .macro-assessment {{
+            margin-bottom: 20px;
+        }}
+        .macro-detail {{
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }}
+        .macro-indicators {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }}
+        .indicator-card {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }}
+        .indicator-name {{
+            font-size: 12px;
+            opacity: 0.9;
+            margin-bottom: 5px;
+        }}
+        .indicator-value {{
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 3px;
+        }}
+        .indicator-date {{
+            font-size: 10px;
+            opacity: 0.8;
+        }}
     </style>
 </head>
 <body>
@@ -287,6 +336,8 @@ class DashboardGenerator:
                 <div class="stat-value">{len(sentiment_data)}</div>
             </div>
         </div>
+
+        {self._generate_macro_indicators_html(macro_indicators, market_assessment)}
 
         {self._generate_paper_trading_html(paper_trading_stats)}
 
@@ -525,5 +576,101 @@ class DashboardGenerator:
         html += """
         </div>
         """
+
+        return html
+
+    def _generate_macro_indicators_html(self, indicators: Dict, assessment: Dict) -> str:
+        """
+        @brief Generate HTML for FRED macro indicators and market assessment
+        @param indicators Dictionary of macro indicators
+        @param assessment Market risk assessment
+        @return HTML string
+        """
+        if not indicators and not assessment:
+            return ""
+
+        html = """
+        <div class="macro-section">
+            <h2>🌍 Market Conditions</h2>
+        """
+
+        # Market risk assessment
+        if assessment:
+            risk_level = assessment.get('risk_level', 'UNKNOWN')
+            risk_score = assessment.get('risk_score', 50)
+
+            # Color based on risk level
+            if risk_level == 'LOW':
+                risk_color = '#00b894'  # Green
+                risk_icon = '✅'
+            elif risk_level == 'MEDIUM':
+                risk_color = '#fdcb6e'  # Yellow
+                risk_icon = '⚠️'
+            else:  # HIGH
+                risk_color = '#d63031'  # Red
+                risk_icon = '🔴'
+
+            html += f"""
+            <div class="macro-assessment">
+                <div class="risk-header" style="background: {risk_color}; color: white; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <h3 style="margin: 0;">{risk_icon} Market Risk: {risk_level}</h3>
+                    <div style="font-size: 24px; font-weight: bold; margin-top: 5px;">Risk Score: {risk_score}/100</div>
+                </div>
+            """
+
+            # Conditions
+            if assessment.get('conditions'):
+                html += "<div class='macro-detail'><strong>Conditions:</strong><ul style='margin: 5px 0;'>"
+                for condition in assessment['conditions'][:5]:  # Top 5
+                    html += f"<li>{condition}</li>"
+                html += "</ul></div>"
+
+            # Warnings
+            if assessment.get('warnings'):
+                html += "<div class='macro-detail' style='color: #d63031;'><strong>⚠️ Warnings:</strong><ul style='margin: 5px 0;'>"
+                for warning in assessment['warnings']:
+                    html += f"<li>{warning}</li>"
+                html += "</ul></div>"
+
+            # Recommendations
+            if assessment.get('recommendations'):
+                html += "<div class='macro-detail' style='color: #0984e3;'><strong>💡 Recommendations:</strong><ul style='margin: 5px 0;'>"
+                for rec in assessment['recommendations']:
+                    html += f"<li>{rec}</li>"
+                html += "</ul></div>"
+
+            html += "</div>"
+
+        # Individual indicators
+        if indicators:
+            html += "<div class='macro-indicators'><h3>Key Economic Indicators:</h3>"
+
+            for indicator_name, data in indicators.items():
+                value = data.get('value', 'N/A')
+                name = data.get('name', indicator_name)
+                date = data.get('date', 'Unknown')
+
+                # Format value based on indicator
+                if indicator_name == 'VIX':
+                    value_str = f"{value:.2f}"
+                    unit = ""
+                elif indicator_name in ['UNEMPLOYMENT', 'TREASURY_10Y', 'INFLATION']:
+                    value_str = f"{value:.2f}"
+                    unit = "%"
+                else:
+                    value_str = f"{value:.2f}"
+                    unit = ""
+
+                html += f"""
+                <div class="indicator-card">
+                    <div class="indicator-name">{name}</div>
+                    <div class="indicator-value">{value_str}{unit}</div>
+                    <div class="indicator-date">as of {date}</div>
+                </div>
+                """
+
+            html += "</div>"
+
+        html += "</div>"
 
         return html

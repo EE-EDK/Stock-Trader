@@ -161,20 +161,36 @@ class Database:
             ON signals(ticker, created_at)
         """)
 
-        # Macro indicators table (Phase 2)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS macro (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                series_id TEXT NOT NULL,
-                value REAL,
-                observation_date DATE,
-                collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_macro_series_date
-            ON macro(series_id, observation_date)
-        """)
+        # Macro indicators tables (Phase 2 - enhanced)
+        macro_schema_path = Path(__file__).parent / "macro_schema.sql"
+        if macro_schema_path.exists():
+            with open(macro_schema_path, 'r') as f:
+                macro_schema = f.read()
+                cursor.executescript(macro_schema)
+        else:
+            # Fallback to basic schema if file doesn't exist
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS macro_indicators (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    indicator_name TEXT NOT NULL,
+                    series_id TEXT NOT NULL,
+                    value REAL NOT NULL,
+                    observation_date DATE NOT NULL,
+                    collected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(indicator_name, observation_date)
+                )
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_macro_indicator_date
+                ON macro_indicators(indicator_name, observation_date DESC)
+            """)
+
+        # Paper trading tables (Phase 2)
+        paper_trading_schema_path = Path(__file__).parent / "paper_trading_schema.sql"
+        if paper_trading_schema_path.exists():
+            with open(paper_trading_schema_path, 'r') as f:
+                paper_schema = f.read()
+                cursor.executescript(paper_schema)
 
         conn.commit()
         logger.info(f"Database initialized at {self.db_path}")
@@ -400,3 +416,120 @@ class Database:
         from src.database.queries import DatabaseQueries
         queries = DatabaseQueries(self.connect())
         return queries.get_sentiment_history(ticker, days)
+
+    def insert_macro_indicators(self, indicators: Dict[str, Dict[str, Any]]):
+        """
+        @brief Insert macro economic indicators
+        @param indicators Dictionary of indicator_name -> indicator data
+        """
+        if not indicators:
+            return
+
+        conn = self.connect()
+        cursor = conn.cursor()
+
+        for indicator_name, data in indicators.items():
+            cursor.execute("""
+                INSERT OR REPLACE INTO macro_indicators
+                (indicator_name, series_id, value, observation_date, collected_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                indicator_name,
+                data.get('series_id'),
+                data.get('value'),
+                data.get('date'),
+                data.get('collected_at', datetime.now())
+            ))
+
+        conn.commit()
+        logger.info(f"Inserted {len(indicators)} macro indicators")
+
+    def insert_market_assessment(self, assessment: Dict[str, Any], assessment_date: str = None):
+        """
+        @brief Insert market risk assessment
+        @param assessment Dictionary with risk_level, risk_score, conditions, etc.
+        @param assessment_date Date of assessment (default: today)
+        """
+        if not assessment:
+            return
+
+        import json
+        conn = self.connect()
+        cursor = conn.cursor()
+
+        if assessment_date is None:
+            assessment_date = datetime.now().strftime('%Y-%m-%d')
+
+        cursor.execute("""
+            INSERT OR REPLACE INTO market_assessments
+            (assessment_date, risk_level, risk_score, conditions, warnings, recommendations)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            assessment_date,
+            assessment.get('risk_level'),
+            assessment.get('risk_score'),
+            json.dumps(assessment.get('conditions', [])),
+            json.dumps(assessment.get('warnings', [])),
+            json.dumps(assessment.get('recommendations', []))
+        ))
+
+        conn.commit()
+        logger.info(f"Inserted market assessment: {assessment.get('risk_level')} risk")
+
+    def get_latest_macro_indicators(self) -> Dict[str, Dict[str, Any]]:
+        """
+        @brief Get latest values for all macro indicators
+        @return Dictionary of indicator_name -> latest data
+        """
+        conn = self.connect()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT indicator_name, series_id, value, observation_date
+            FROM macro_indicators
+            WHERE (indicator_name, observation_date) IN (
+                SELECT indicator_name, MAX(observation_date)
+                FROM macro_indicators
+                GROUP BY indicator_name
+            )
+        """)
+
+        results = {}
+        for row in cursor.fetchall():
+            results[row[0]] = {
+                'indicator_name': row[0],
+                'series_id': row[1],
+                'value': row[2],
+                'date': row[3]
+            }
+
+        return results
+
+    def get_latest_market_assessment(self) -> Optional[Dict[str, Any]]:
+        """
+        @brief Get most recent market risk assessment
+        @return Dictionary with assessment data, or None if no assessment exists
+        """
+        import json
+        conn = self.connect()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT assessment_date, risk_level, risk_score, conditions, warnings, recommendations
+            FROM market_assessments
+            ORDER BY assessment_date DESC
+            LIMIT 1
+        """)
+
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        return {
+            'assessment_date': row[0],
+            'risk_level': row[1],
+            'risk_score': row[2],
+            'conditions': json.loads(row[3]) if row[3] else [],
+            'warnings': json.loads(row[4]) if row[4] else [],
+            'recommendations': json.loads(row[5]) if row[5] else []
+        }
