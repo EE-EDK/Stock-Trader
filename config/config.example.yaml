@@ -60,6 +60,22 @@ collection:
     enabled: true            # Enable technical analysis (no API calls!)
     lookback_days: 50        # Days of price history to analyze
 
+# Paper Trading (track mock purchases to validate signals)
+paper_trading:
+  enabled: true              # Enable paper trading system
+  min_conviction: 60         # Only trade signals with conviction >= 60
+  position_size: 1000        # Base position size in dollars ($1000)
+  max_open_positions: 10     # Maximum concurrent positions
+
+  # Exit strategy (Moderate)
+  hold_days: 30              # Auto-close after 30 days
+  stop_loss_pct: -10         # Exit if down 10%
+  take_profit_pct: 20        # Exit if up 20%
+
+  # Reporting
+  report_in_dashboard: true  # Include in HTML dashboard
+  backfill_days: 30          # Backfill trades from last 30 days on first run
+
 # Signal thresholds (can be tuned based on backtesting)
 thresholds:
   velocity_spike:

@@ -22,6 +22,7 @@ from src.metrics.technical import TechnicalAnalyzer
 from src.signals.generator import SignalGenerator
 from src.reporters.email import EmailReporter
 from src.reporters.dashboard import DashboardGenerator
+from src.trading.paper_trading import PaperTradingManager
 
 # Setup logging first (before other imports that may need it)
 def setup_logging(log_level: str = 'INFO'):
@@ -106,6 +107,13 @@ def run_pipeline(config: dict, skip_email: bool = False):
     db = Database(db_path)
     db.initialize()
     logger.info(f"Database initialized at {db_path}")
+
+    # Initialize paper trading manager
+    paper_trading = PaperTradingManager(db_path, config)
+    if paper_trading.enabled:
+        logger.info("Paper trading system enabled")
+        # Backfill on first run (idempotent - safe to run multiple times)
+        paper_trading.backfill_from_signals(days=config.get('paper_trading', {}).get('backfill_days', 30))
 
     # ========== Step 1: Collect Data ==========
     logger.info("Step 1: Collecting data from sources...")
@@ -235,6 +243,17 @@ def run_pipeline(config: dict, skip_email: bool = False):
         except Exception as e:
             logger.error(f"  [ERROR] Reddit failed: {e}")
 
+    # ========== Update Paper Trading Positions ==========
+    if paper_trading.enabled:
+        logger.info("Updating paper trading positions with current prices...")
+        try:
+            # Get latest prices for all open positions
+            current_prices = db.get_latest_prices()
+            paper_trading.update_positions(current_prices, datetime.now())
+            logger.info(f"  [OK] Paper trading positions updated")
+        except Exception as e:
+            logger.error(f"  [ERROR] Paper trading update failed: {e}")
+
     # ========== Step 2: Calculate Velocity Metrics ==========
     logger.info("Step 2: Calculating velocity metrics...")
 
@@ -302,6 +321,30 @@ def run_pipeline(config: dict, skip_email: bool = False):
     except Exception as e:
         logger.error(f"  [ERROR] Signal generation failed: {e}")
 
+    # ========== Create Paper Trades from Signals ==========
+    if paper_trading.enabled and signals:
+        logger.info("Creating paper trades from new signals...")
+        try:
+            created_count = 0
+            for signal in signals:
+                # Check if signal meets paper trading conviction threshold
+                if signal.conviction_score >= paper_trading.min_conviction:
+                    # Get current price for this ticker
+                    current_price = db.get_latest_prices().get(signal.ticker)
+                    if current_price:
+                        trade_id = paper_trading.create_paper_trade(
+                            ticker=signal.ticker,
+                            entry_price=current_price,
+                            conviction=int(signal.conviction_score),
+                            signal_types=signal.triggers,
+                            entry_date=datetime.now()
+                        )
+                        if trade_id:
+                            created_count += 1
+            logger.info(f"  [OK] Created {created_count} new paper trades")
+        except Exception as e:
+            logger.error(f"  [ERROR] Paper trade creation failed: {e}")
+
     # ========== Step 4: Generate and Send Report ==========
     logger.info("Step 4: Generating report...")
 
@@ -331,13 +374,19 @@ def run_pipeline(config: dict, skip_email: bool = False):
     # ========== NEW: Generate HTML Dashboard ==========
     logger.info("Step 4b: Generating HTML dashboard...")
     try:
+        # Get paper trading stats for dashboard
+        paper_trading_stats = {}
+        if paper_trading.enabled:
+            paper_trading_stats = paper_trading.get_performance_summary()
+
         dashboard = DashboardGenerator(output_dir="reports")
         dashboard_path = dashboard.generate(
             signals=signals,
             velocity_data=velocity_data,
             technical_data=technical_data,
             sentiment_data=sentiment_data,
-            reddit_data=reddit_data
+            reddit_data=reddit_data,
+            paper_trading_stats=paper_trading_stats
         )
         logger.info(f"  [OK] Dashboard saved to: {dashboard_path}")
         logger.info(f"  [TIP] Open {dashboard_path} in your browser to view results!")
