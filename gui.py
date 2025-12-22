@@ -1,0 +1,765 @@
+#!/usr/bin/env python3
+"""
+Stock Trader GUI - Modern interface for configuration and pipeline execution
+"""
+
+import tkinter as tk
+from tkinter import ttk, messagebox, scrolledtext
+import ttkbootstrap as ttkb
+from ttkbootstrap.constants import *
+import yaml
+import subprocess
+import threading
+import queue
+import os
+from pathlib import Path
+
+
+class StockTraderGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Stock Trader - Configuration & Control Panel")
+        self.root.geometry("1200x800")
+
+        # Config file path
+        self.config_path = "config/config.yaml"
+        self.config = {}
+
+        # Queue for pipeline output
+        self.output_queue = queue.Queue()
+        self.pipeline_process = None
+
+        # Create main container
+        self.create_widgets()
+
+        # Load existing config
+        self.load_config()
+
+        # Start output queue checker
+        self.check_output_queue()
+
+    def create_widgets(self):
+        """Create all GUI widgets"""
+        # Create notebook (tabbed interface)
+        self.notebook = ttkb.Notebook(self.root, bootstyle="dark")
+        self.notebook.pack(fill=BOTH, expand=YES, padx=10, pady=10)
+
+        # Create tabs
+        self.create_api_keys_tab()
+        self.create_collection_tab()
+        self.create_paper_trading_tab()
+        self.create_backtesting_tab()
+        self.create_thresholds_tab()
+        self.create_email_tab()
+        self.create_pipeline_tab()
+
+        # Bottom buttons
+        button_frame = ttkb.Frame(self.root)
+        button_frame.pack(fill=X, padx=10, pady=10)
+
+        ttkb.Button(
+            button_frame,
+            text="💾 Save Configuration",
+            command=self.save_config,
+            bootstyle="success"
+        ).pack(side=LEFT, padx=5)
+
+        ttkb.Button(
+            button_frame,
+            text="🔄 Reload Configuration",
+            command=self.load_config,
+            bootstyle="info"
+        ).pack(side=LEFT, padx=5)
+
+        ttkb.Button(
+            button_frame,
+            text="❌ Exit",
+            command=self.root.quit,
+            bootstyle="danger"
+        ).pack(side=RIGHT, padx=5)
+
+    def create_api_keys_tab(self):
+        """API Keys configuration tab"""
+        tab = ttkb.Frame(self.notebook)
+        self.notebook.add(tab, text="🔑 API Keys")
+
+        # Scrollable frame
+        canvas = tk.Canvas(tab, bg='#2b3e50')
+        scrollbar = ttkb.Scrollbar(tab, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttkb.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # API Keys section
+        self.api_vars = {}
+
+        # Finnhub (Required)
+        self.create_labeled_entry(
+            scrollable_frame, "Finnhub API Key (REQUIRED)", "api_keys.finnhub",
+            "https://finnhub.io/register - FREE tier: 60 calls/min", row=0
+        )
+
+        # Alpha Vantage
+        self.create_labeled_entry(
+            scrollable_frame, "Alpha Vantage API Key", "api_keys.alphavantage",
+            "https://www.alphavantage.co/support/#api-key - FREE: 100 calls/day", row=1
+        )
+
+        # FMP
+        self.create_labeled_entry(
+            scrollable_frame, "Financial Modeling Prep Key", "api_keys.fmp",
+            "https://site.financialmodelingprep.com - FREE: 250 calls/day", row=2
+        )
+
+        # FRED
+        self.create_labeled_entry(
+            scrollable_frame, "FRED API Key", "api_keys.fred",
+            "https://fred.stlouisfed.org/docs/api/api_key.html - FREE", row=3
+        )
+
+        # Reddit section
+        ttkb.Label(
+            scrollable_frame,
+            text="Reddit API (Optional)",
+            font=("Helvetica", 12, "bold"),
+            bootstyle="info"
+        ).grid(row=4, column=0, columnspan=2, sticky=W, padx=10, pady=(20, 5))
+
+        self.create_labeled_entry(
+            scrollable_frame, "Reddit Client ID", "api_keys.reddit.client_id",
+            "https://www.reddit.com/prefs/apps - Create app", row=5
+        )
+
+        self.create_labeled_entry(
+            scrollable_frame, "Reddit Client Secret", "api_keys.reddit.client_secret",
+            "", row=6
+        )
+
+        self.create_labeled_entry(
+            scrollable_frame, "Reddit User Agent", "api_keys.reddit.user_agent",
+            "Example: stock-tracker:v1.0 (by u/yourusername)", row=7
+        )
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+    def create_collection_tab(self):
+        """Data collection settings tab"""
+        tab = ttkb.Frame(self.notebook)
+        self.notebook.add(tab, text="📊 Data Collection")
+
+        canvas = tk.Canvas(tab, bg='#2b3e50')
+        scrollbar = ttkb.Scrollbar(tab, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttkb.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        row = 0
+
+        # Alpha Vantage
+        self.create_section_header(scrollable_frame, "Alpha Vantage Sentiment", row)
+        row += 1
+        self.create_checkbox(scrollable_frame, "Enabled", "collection.alphavantage.enabled", row)
+        row += 1
+        self.create_labeled_spinbox(scrollable_frame, "Top N Tickers", "collection.alphavantage.top_n", 1, 100, row)
+        row += 1
+        self.create_labeled_spinbox(scrollable_frame, "Articles per Ticker", "collection.alphavantage.articles_per_ticker", 1, 100, row)
+        row += 1
+
+        # YFinance
+        self.create_section_header(scrollable_frame, "Yahoo Finance (FREE - Unlimited)", row)
+        row += 1
+        self.create_checkbox(scrollable_frame, "Enabled", "collection.yfinance.enabled", row)
+        row += 1
+        self.create_checkbox(scrollable_frame, "Collect Fundamentals", "collection.yfinance.collect_fundamentals", row)
+        row += 1
+        self.create_checkbox(scrollable_frame, "Collect Analyst Ratings", "collection.yfinance.collect_analyst_ratings", row)
+        row += 1
+
+        # VADER Sentiment
+        self.create_section_header(scrollable_frame, "VADER Sentiment (Local - No API)", row)
+        row += 1
+        self.create_checkbox(scrollable_frame, "Enabled", "collection.vader_sentiment.enabled", row)
+        row += 1
+        self.create_checkbox(scrollable_frame, "Scrape Headlines", "collection.vader_sentiment.scrape_headlines", row)
+        row += 1
+
+        # Reddit
+        self.create_section_header(scrollable_frame, "Reddit", row)
+        row += 1
+        self.create_checkbox(scrollable_frame, "Enabled", "collection.reddit.enabled", row)
+        row += 1
+        self.create_labeled_spinbox(scrollable_frame, "Lookback Hours", "collection.reddit.lookback_hours", 1, 168, row)
+        row += 1
+
+        # Technical Analysis
+        self.create_section_header(scrollable_frame, "Technical Analysis (No API)", row)
+        row += 1
+        self.create_checkbox(scrollable_frame, "Enabled", "collection.technical_analysis.enabled", row)
+        row += 1
+        self.create_labeled_spinbox(scrollable_frame, "Lookback Days", "collection.technical_analysis.lookback_days", 10, 200, row)
+        row += 1
+
+        # FRED
+        self.create_section_header(scrollable_frame, "FRED Macro Indicators", row)
+        row += 1
+        self.create_checkbox(scrollable_frame, "Enabled", "collection.fred.enabled", row)
+        row += 1
+        self.create_checkbox(scrollable_frame, "Collect VIX", "collection.fred.collect_vix", row)
+        row += 1
+        self.create_checkbox(scrollable_frame, "Collect Rates", "collection.fred.collect_rates", row)
+        row += 1
+        self.create_checkbox(scrollable_frame, "Collect Unemployment", "collection.fred.collect_unemployment", row)
+        row += 1
+        self.create_checkbox(scrollable_frame, "Collect Inflation", "collection.fred.collect_inflation", row)
+        row += 1
+        self.create_checkbox(scrollable_frame, "Collect Forex", "collection.fred.collect_forex", row)
+        row += 1
+
+        # Congress Trades
+        self.create_section_header(scrollable_frame, "Congress Stock Trades (100% FREE!)", row)
+        row += 1
+        self.create_checkbox(scrollable_frame, "Enabled", "collection.congress.enabled", row)
+        row += 1
+        self.create_labeled_spinbox(scrollable_frame, "Lookback Days", "collection.congress.lookback_days", 7, 365, row)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+    def create_paper_trading_tab(self):
+        """Paper trading configuration tab"""
+        tab = ttkb.Frame(self.notebook)
+        self.notebook.add(tab, text="📈 Paper Trading")
+
+        canvas = tk.Canvas(tab, bg='#2b3e50')
+        scrollbar = ttkb.Scrollbar(tab, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttkb.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        row = 0
+
+        self.create_checkbox(scrollable_frame, "Enable Paper Trading", "paper_trading.enabled", row)
+        row += 1
+
+        self.create_labeled_spinbox(scrollable_frame, "Minimum Conviction", "paper_trading.min_conviction", 0, 100, row)
+        row += 1
+
+        self.create_labeled_spinbox(scrollable_frame, "Position Size ($)", "paper_trading.position_size", 100, 10000, row)
+        row += 1
+
+        self.create_labeled_spinbox(scrollable_frame, "Max Open Positions", "paper_trading.max_open_positions", 1, 50, row)
+        row += 1
+
+        self.create_section_header(scrollable_frame, "Exit Strategy", row)
+        row += 1
+
+        self.create_labeled_spinbox(scrollable_frame, "Hold Days", "paper_trading.hold_days", 1, 365, row)
+        row += 1
+
+        self.create_labeled_spinbox(scrollable_frame, "Stop Loss %", "paper_trading.stop_loss_pct", -50, 0, row)
+        row += 1
+
+        self.create_labeled_spinbox(scrollable_frame, "Take Profit %", "paper_trading.take_profit_pct", 0, 200, row)
+        row += 1
+
+        self.create_section_header(scrollable_frame, "Reporting", row)
+        row += 1
+
+        self.create_checkbox(scrollable_frame, "Report in Dashboard", "paper_trading.report_in_dashboard", row)
+        row += 1
+
+        self.create_labeled_spinbox(scrollable_frame, "Backfill Days", "paper_trading.backfill_days", 0, 365, row)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+    def create_backtesting_tab(self):
+        """Backtesting configuration tab"""
+        tab = ttkb.Frame(self.notebook)
+        self.notebook.add(tab, text="🔬 Backtesting")
+
+        canvas = tk.Canvas(tab, bg='#2b3e50')
+        scrollable_frame = ttkb.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+
+        row = 0
+
+        self.create_labeled_spinbox(scrollable_frame, "Initial Capital ($)", "backtesting.initial_capital", 1000, 100000, row)
+        row += 1
+
+        self.create_labeled_spinbox(scrollable_frame, "Position Size ($)", "backtesting.position_size", 100, 10000, row)
+        row += 1
+
+        self.create_labeled_spinbox(scrollable_frame, "Max Positions", "backtesting.max_positions", 1, 50, row)
+        row += 1
+
+        self.create_checkbox(scrollable_frame, "Conviction Weighted Sizing", "backtesting.conviction_weighted", row)
+        row += 1
+
+        self.create_section_header(scrollable_frame, "Exit Strategy", row)
+        row += 1
+
+        self.create_labeled_spinbox(scrollable_frame, "Hold Days", "backtesting.hold_days", 1, 365, row)
+        row += 1
+
+        self.create_labeled_spinbox(scrollable_frame, "Stop Loss %", "backtesting.stop_loss_pct", -50, 0, row)
+        row += 1
+
+        self.create_labeled_spinbox(scrollable_frame, "Take Profit %", "backtesting.take_profit_pct", 0, 200, row)
+        row += 1
+
+        self.create_labeled_spinbox(scrollable_frame, "Min Conviction", "backtesting.min_conviction", 0, 100, row)
+
+        canvas.pack(side="left", fill="both", expand=True)
+
+    def create_thresholds_tab(self):
+        """Signal thresholds configuration tab"""
+        tab = ttkb.Frame(self.notebook)
+        self.notebook.add(tab, text="⚙️ Signal Thresholds")
+
+        canvas = tk.Canvas(tab, bg='#2b3e50')
+        scrollbar = ttkb.Scrollbar(tab, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttkb.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        row = 0
+
+        # Velocity Spike
+        self.create_section_header(scrollable_frame, "Velocity Spike", row)
+        row += 1
+        self.create_labeled_spinbox(scrollable_frame, "Mention Velocity 24h Min (%)", "thresholds.velocity_spike.mention_vel_24h_min", 0, 1000, row)
+        row += 1
+        self.create_labeled_spinbox(scrollable_frame, "Composite Score Min", "thresholds.velocity_spike.composite_score_min", 0, 100, row)
+        row += 1
+
+        # Insider Cluster
+        self.create_section_header(scrollable_frame, "Insider Cluster", row)
+        row += 1
+        self.create_labeled_spinbox(scrollable_frame, "Min Insiders", "thresholds.insider_cluster.min_insiders", 1, 10, row)
+        row += 1
+        self.create_labeled_spinbox(scrollable_frame, "Lookback Days", "thresholds.insider_cluster.lookback_days", 1, 90, row)
+        row += 1
+        self.create_labeled_spinbox(scrollable_frame, "Min Value Total ($)", "thresholds.insider_cluster.min_value_total", 1000, 10000000, row)
+        row += 1
+
+        # Minimum Conviction
+        self.create_section_header(scrollable_frame, "Reporting", row)
+        row += 1
+        self.create_labeled_spinbox(scrollable_frame, "Minimum Conviction to Report", "thresholds.minimum_conviction", 0, 100, row)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+    def create_email_tab(self):
+        """Email configuration tab"""
+        tab = ttkb.Frame(self.notebook)
+        self.notebook.add(tab, text="📧 Email")
+
+        canvas = tk.Canvas(tab, bg='#2b3e50')
+        scrollable_frame = ttkb.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+
+        row = 0
+
+        self.create_checkbox(scrollable_frame, "Enable Email Reports", "email.enabled", row)
+        row += 1
+
+        self.create_labeled_entry(scrollable_frame, "SMTP Server", "email.smtp_server", "smtp.gmail.com", row)
+        row += 1
+
+        self.create_labeled_spinbox(scrollable_frame, "SMTP Port", "email.smtp_port", 1, 65535, row)
+        row += 1
+
+        self.create_labeled_entry(scrollable_frame, "Sender Email", "email.sender", "your-email@gmail.com", row)
+        row += 1
+
+        self.create_labeled_entry(scrollable_frame, "Password (App Password)", "email.password", "Use Gmail app password", row, show="*")
+        row += 1
+
+        self.create_labeled_entry(scrollable_frame, "Recipients (comma-separated)", "email.recipients", "email1@gmail.com,email2@gmail.com", row)
+
+        canvas.pack(side="left", fill="both", expand=True)
+
+    def create_pipeline_tab(self):
+        """Pipeline execution tab"""
+        tab = ttkb.Frame(self.notebook)
+        self.notebook.add(tab, text="▶️ Run Pipeline")
+
+        # Control buttons
+        control_frame = ttkb.Frame(tab)
+        control_frame.pack(fill=X, padx=10, pady=10)
+
+        self.run_btn = ttkb.Button(
+            control_frame,
+            text="▶️ Run Main Pipeline",
+            command=self.run_pipeline,
+            bootstyle="success",
+            width=20
+        )
+        self.run_btn.pack(side=LEFT, padx=5)
+
+        self.stop_btn = ttkb.Button(
+            control_frame,
+            text="⏹️ Stop Pipeline",
+            command=self.stop_pipeline,
+            bootstyle="danger",
+            width=20,
+            state=DISABLED
+        )
+        self.stop_btn.pack(side=LEFT, padx=5)
+
+        ttkb.Button(
+            control_frame,
+            text="🧪 Run Backtest",
+            command=self.run_backtest,
+            bootstyle="info",
+            width=20
+        ).pack(side=LEFT, padx=5)
+
+        ttkb.Button(
+            control_frame,
+            text="🧹 Clear Output",
+            command=self.clear_output,
+            bootstyle="warning",
+            width=20
+        ).pack(side=LEFT, padx=5)
+
+        # Output console
+        console_frame = ttkb.LabelFrame(tab, text="Console Output", bootstyle="primary")
+        console_frame.pack(fill=BOTH, expand=YES, padx=10, pady=10)
+
+        self.console = scrolledtext.ScrolledText(
+            console_frame,
+            wrap=tk.WORD,
+            bg='#1e1e1e',
+            fg='#00ff00',
+            font=('Consolas', 10),
+            state=DISABLED
+        )
+        self.console.pack(fill=BOTH, expand=YES, padx=5, pady=5)
+
+    # Helper methods for creating form elements
+    def create_section_header(self, parent, text, row):
+        """Create a section header"""
+        ttkb.Label(
+            parent,
+            text=text,
+            font=("Helvetica", 12, "bold"),
+            bootstyle="info"
+        ).grid(row=row, column=0, columnspan=2, sticky=W, padx=10, pady=(15, 5))
+
+    def create_labeled_entry(self, parent, label, config_key, placeholder="", row=0, show=None):
+        """Create a labeled entry field"""
+        ttkb.Label(
+            parent,
+            text=label,
+            bootstyle="inverse-dark"
+        ).grid(row=row, column=0, sticky=W, padx=10, pady=5)
+
+        var = tk.StringVar()
+        entry = ttkb.Entry(
+            parent,
+            textvariable=var,
+            width=40,
+            show=show
+        )
+        entry.grid(row=row, column=1, sticky=W, padx=10, pady=5)
+
+        if placeholder:
+            ttkb.Label(
+                parent,
+                text=placeholder,
+                font=("Helvetica", 8),
+                bootstyle="secondary"
+            ).grid(row=row, column=2, sticky=W, padx=5, pady=5)
+
+        self.api_vars[config_key] = var
+        return var
+
+    def create_labeled_spinbox(self, parent, label, config_key, from_, to, row):
+        """Create a labeled spinbox"""
+        ttkb.Label(
+            parent,
+            text=label,
+            bootstyle="inverse-dark"
+        ).grid(row=row, column=0, sticky=W, padx=10, pady=5)
+
+        var = tk.IntVar()
+        spinbox = ttkb.Spinbox(
+            parent,
+            from_=from_,
+            to=to,
+            textvariable=var,
+            width=20
+        )
+        spinbox.grid(row=row, column=1, sticky=W, padx=10, pady=5)
+
+        self.api_vars[config_key] = var
+        return var
+
+    def create_checkbox(self, parent, label, config_key, row):
+        """Create a checkbox"""
+        var = tk.BooleanVar()
+        checkbox = ttkb.Checkbutton(
+            parent,
+            text=label,
+            variable=var,
+            bootstyle="success-round-toggle"
+        )
+        checkbox.grid(row=row, column=0, columnspan=2, sticky=W, padx=10, pady=5)
+
+        self.api_vars[config_key] = var
+        return var
+
+    def get_nested_value(self, config, key_path):
+        """Get nested dictionary value using dot notation"""
+        keys = key_path.split('.')
+        value = config
+        for key in keys:
+            if isinstance(value, dict) and key in value:
+                value = value[key]
+            else:
+                return None
+        return value
+
+    def set_nested_value(self, config, key_path, value):
+        """Set nested dictionary value using dot notation"""
+        keys = key_path.split('.')
+        current = config
+
+        for key in keys[:-1]:
+            if key not in current:
+                current[key] = {}
+            current = current[key]
+
+        current[keys[-1]] = value
+
+    def load_config(self):
+        """Load configuration from YAML file"""
+        try:
+            if os.path.exists(self.config_path):
+                with open(self.config_path, 'r') as f:
+                    self.config = yaml.safe_load(f) or {}
+
+                # Populate form fields
+                for key, var in self.api_vars.items():
+                    value = self.get_nested_value(self.config, key)
+                    if value is not None:
+                        if isinstance(var, tk.BooleanVar):
+                            var.set(bool(value))
+                        elif isinstance(var, tk.IntVar):
+                            var.set(int(value))
+                        elif isinstance(var, tk.StringVar):
+                            # Handle list for recipients
+                            if key == "email.recipients" and isinstance(value, list):
+                                var.set(",".join(value))
+                            else:
+                                var.set(str(value))
+
+                self.log_to_console("✓ Configuration loaded successfully\n")
+            else:
+                self.log_to_console("⚠ No config file found, using defaults\n")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load config: {e}")
+            self.log_to_console(f"✗ Error loading config: {e}\n")
+
+    def save_config(self):
+        """Save configuration to YAML file"""
+        try:
+            # Build config from form values
+            config = {
+                'api_keys': {},
+                'database': {'path': 'data/sentiment.db'},
+                'collection': {},
+                'paper_trading': {},
+                'backtesting': {},
+                'thresholds': {},
+                'email': {},
+                'report': {}
+            }
+
+            for key, var in self.api_vars.items():
+                value = var.get()
+
+                # Handle recipients list
+                if key == "email.recipients" and isinstance(value, str):
+                    value = [email.strip() for email in value.split(',') if email.strip()]
+
+                # Don't save placeholder values
+                if isinstance(value, str) and ('YOUR_' in value or not value):
+                    continue
+
+                self.set_nested_value(config, key, value)
+
+            # Ensure config directory exists
+            Path("config").mkdir(exist_ok=True)
+
+            # Save to file
+            with open(self.config_path, 'w') as f:
+                yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+            messagebox.showinfo("Success", "Configuration saved successfully!")
+            self.log_to_console("✓ Configuration saved to config/config.yaml\n")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save config: {e}")
+            self.log_to_console(f"✗ Error saving config: {e}\n")
+
+    def run_pipeline(self):
+        """Run the main pipeline in a separate thread"""
+        if self.pipeline_process and self.pipeline_process.poll() is None:
+            messagebox.showwarning("Warning", "Pipeline is already running!")
+            return
+
+        self.run_btn.config(state=DISABLED)
+        self.stop_btn.config(state=NORMAL)
+        self.clear_output()
+        self.log_to_console("▶️ Starting main pipeline...\n\n")
+
+        # Run pipeline in thread
+        thread = threading.Thread(target=self._run_pipeline_thread, daemon=True)
+        thread.start()
+
+    def _run_pipeline_thread(self):
+        """Thread function to run pipeline"""
+        try:
+            self.pipeline_process = subprocess.Popen(
+                ["python", "main.py"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+
+            # Read output line by line
+            for line in iter(self.pipeline_process.stdout.readline, ''):
+                if line:
+                    self.output_queue.put(line)
+
+            self.pipeline_process.wait()
+
+            if self.pipeline_process.returncode == 0:
+                self.output_queue.put("\n✓ Pipeline completed successfully!\n")
+            else:
+                self.output_queue.put(f"\n✗ Pipeline exited with code {self.pipeline_process.returncode}\n")
+
+        except Exception as e:
+            self.output_queue.put(f"\n✗ Error running pipeline: {e}\n")
+
+        finally:
+            self.root.after(0, lambda: self.run_btn.config(state=NORMAL))
+            self.root.after(0, lambda: self.stop_btn.config(state=DISABLED))
+
+    def stop_pipeline(self):
+        """Stop the running pipeline"""
+        if self.pipeline_process and self.pipeline_process.poll() is None:
+            self.pipeline_process.terminate()
+            self.log_to_console("\n⏹️ Pipeline stopped by user\n")
+            self.run_btn.config(state=NORMAL)
+            self.stop_btn.config(state=DISABLED)
+
+    def run_backtest(self):
+        """Run backtesting script"""
+        self.clear_output()
+        self.log_to_console("🧪 Running backtest...\n\n")
+
+        thread = threading.Thread(target=self._run_backtest_thread, daemon=True)
+        thread.start()
+
+    def _run_backtest_thread(self):
+        """Thread function to run backtest"""
+        try:
+            process = subprocess.Popen(
+                ["python", "backtest.py"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+
+            for line in iter(process.stdout.readline, ''):
+                if line:
+                    self.output_queue.put(line)
+
+            process.wait()
+
+            if process.returncode == 0:
+                self.output_queue.put("\n✓ Backtest completed!\n")
+            else:
+                self.output_queue.put(f"\n✗ Backtest failed with code {process.returncode}\n")
+
+        except Exception as e:
+            self.output_queue.put(f"\n✗ Error running backtest: {e}\n")
+
+    def log_to_console(self, message):
+        """Log message to console"""
+        self.console.config(state=NORMAL)
+        self.console.insert(tk.END, message)
+        self.console.see(tk.END)
+        self.console.config(state=DISABLED)
+
+    def clear_output(self):
+        """Clear console output"""
+        self.console.config(state=NORMAL)
+        self.console.delete(1.0, tk.END)
+        self.console.config(state=DISABLED)
+
+    def check_output_queue(self):
+        """Check output queue and update console"""
+        try:
+            while True:
+                message = self.output_queue.get_nowait()
+                self.log_to_console(message)
+        except queue.Empty:
+            pass
+
+        # Schedule next check
+        self.root.after(100, self.check_output_queue)
+
+
+def main():
+    # Create root window with dark theme
+    root = ttkb.Window(themename="darkly")
+    app = StockTraderGUI(root)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
