@@ -174,22 +174,31 @@ Stock-Trader/
      alphavantage: "YOUR_ALPHAVANTAGE_KEY"
    ```
 
-#### 1.3 Reddit API (OPTIONAL - 2 minutes)
+#### 1.3 Reddit API (OPTIONAL - Manual Approval Required)
 
 **What you get:** Track r/wallstreetbets, r/stocks, r/investing, unlimited
 
-1. Visit: https://www.reddit.com/prefs/apps
-2. Click "create app" at the bottom
-3. Fill in:
+**⚠️ Note:** Reddit now requires manual approval for API access. This can take 1-3 days.
+
+1. Visit: https://support.reddithelp.com/hc/en-us/requests/new?ticket_form_id=14868593862164
+2. Fill out the form:
+   - **Request Type:** Data API Access Request
+   - **App Name:** Stock Sentiment Tracker
+   - **Description:** Personal project to track stock mentions for sentiment analysis
+   - **Use Case:** Educational/Personal research
+3. Wait for approval email (typically 1-3 business days)
+4. Once approved, visit: https://www.reddit.com/prefs/apps
+5. Click "create app" at the bottom
+6. Fill in:
    - **Name:** stock-tracker
    - **Type:** Select "script"
    - **Description:** Stock sentiment tracker
    - **Redirect URI:** http://localhost:8080
-4. Click "create app"
-5. Copy:
+7. Click "create app"
+8. Copy:
    - **client_id** (under "personal use script")
    - **client_secret**
-6. Add to config:
+9. Add to config:
    ```yaml
    api_keys:
      reddit:
@@ -197,6 +206,8 @@ Stock-Trader/
        client_secret: "YOUR_SECRET"
        user_agent: "stock-tracker:v1.0 (by u/yourusername)"
    ```
+
+**Alternative:** The system works great without Reddit data - you still have 9 other FREE data sources!
 
 #### 1.4 Financial Modeling Prep (OPTIONAL - 2 minutes)
 
