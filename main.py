@@ -127,6 +127,11 @@ def run_pipeline(config: dict, skip_email: bool = False):
         # Backfill on first run (idempotent - safe to run multiple times)
         paper_trading.backfill_from_signals(days=config.get('paper_trading', {}).get('backfill_days', 30))
 
+    # Initialize optional data collection variables (Phase 3)
+    macro_indicators = {}
+    market_assessment = {}
+    congress_trades = []
+
     # ========== Step 1: Collect Data ==========
     logger.info("Step 1: Collecting data from sources...")
 
@@ -256,8 +261,6 @@ def run_pipeline(config: dict, skip_email: bool = False):
             logger.error(f"  [ERROR] Reddit failed: {e}")
 
     # FRED Macro Indicators (100 calls/day - FREE!)
-    macro_indicators = {}
-    market_assessment = {}
     if FRED_AVAILABLE and config.get('collection', {}).get('fred', {}).get('enabled', False):
         try:
             fred_key = config['api_keys'].get('fred')
@@ -281,7 +284,6 @@ def run_pipeline(config: dict, skip_email: bool = False):
             logger.error(f"  [ERROR] FRED failed: {e}")
 
     # Congress Stock Trades (100% FREE - no API key needed!)
-    congress_trades = []
     if CONGRESS_AVAILABLE and config.get('collection', {}).get('congress', {}).get('enabled', False):
         try:
             congress = CongressTradesCollector(config)
@@ -439,9 +441,9 @@ def run_pipeline(config: dict, skip_email: bool = False):
             sentiment_data=sentiment_data,
             reddit_data=reddit_data,
             paper_trading_stats=paper_trading_stats,
-            macro_indicators=macro_indicators if 'macro_indicators' in locals() else {},
-            market_assessment=market_assessment if 'market_assessment' in locals() else {},
-            congress_trades=congress_trades if 'congress_trades' in locals() else []
+            macro_indicators=macro_indicators,
+            market_assessment=market_assessment,
+            congress_trades=congress_trades
         )
         logger.info(f"  [OK] Dashboard saved to: {dashboard_path}")
         logger.info(f"  [TIP] Open {dashboard_path} in your browser to view results!")
