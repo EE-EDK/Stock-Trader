@@ -69,6 +69,18 @@ try:
 except ImportError:
     REDDIT_AVAILABLE = False
 
+try:
+    from src.collectors.fred import FREDCollector
+    FRED_AVAILABLE = True
+except ImportError:
+    FRED_AVAILABLE = False
+
+try:
+    from src.collectors.congress import CongressTradesCollector
+    CONGRESS_AVAILABLE = True
+except ImportError:
+    CONGRESS_AVAILABLE = False
+
 
 def load_config(config_path: str = "config/config.yaml") -> dict:
     """
@@ -243,6 +255,46 @@ def run_pipeline(config: dict, skip_email: bool = False):
         except Exception as e:
             logger.error(f"  [ERROR] Reddit failed: {e}")
 
+    # FRED Macro Indicators (100 calls/day - FREE!)
+    macro_indicators = {}
+    market_assessment = {}
+    if FRED_AVAILABLE and config.get('collection', {}).get('fred', {}).get('enabled', False):
+        try:
+            fred_key = config['api_keys'].get('fred')
+            if fred_key and fred_key != 'YOUR_FRED_KEY':
+                fred = FREDCollector(api_key=fred_key, config=config)
+                indicators = fred.collect_all_indicators()
+                if indicators:
+                    db.insert_macro_indicators(indicators)
+                    macro_indicators = indicators
+                    logger.info(f"  [OK] FRED: {len(indicators)} macro indicators")
+
+                    # Assess market conditions
+                    assessment = fred.assess_market_conditions(indicators)
+                    if assessment:
+                        db.insert_market_assessment(assessment)
+                        market_assessment = assessment
+                        logger.info(f"  [OK] FRED: Market risk level {assessment.get('risk_level')}")
+            else:
+                logger.info("  [SKIP] FRED: API key not configured")
+        except Exception as e:
+            logger.error(f"  [ERROR] FRED failed: {e}")
+
+    # Congress Stock Trades (100% FREE - no API key needed!)
+    congress_trades = []
+    if CONGRESS_AVAILABLE and config.get('collection', {}).get('congress', {}).get('enabled', False):
+        try:
+            congress = CongressTradesCollector(config)
+            trades = congress.collect_all_trades()
+            if trades:
+                db.insert_congress_trades(trades)
+                congress_trades = trades
+                logger.info(f"  [OK] Congress Trades: {len(trades)} trades")
+            else:
+                logger.info("  [INFO] Congress Trades: No recent trades")
+        except Exception as e:
+            logger.error(f"  [ERROR] Congress Trades failed: {e}")
+
     # ========== Update Paper Trading Positions ==========
     if paper_trading.enabled:
         logger.info("Updating paper trading positions with current prices...")
@@ -386,7 +438,10 @@ def run_pipeline(config: dict, skip_email: bool = False):
             technical_data=technical_data,
             sentiment_data=sentiment_data,
             reddit_data=reddit_data,
-            paper_trading_stats=paper_trading_stats
+            paper_trading_stats=paper_trading_stats,
+            macro_indicators=macro_indicators if 'macro_indicators' in locals() else {},
+            market_assessment=market_assessment if 'market_assessment' in locals() else {},
+            congress_trades=congress_trades if 'congress_trades' in locals() else []
         )
         logger.info(f"  [OK] Dashboard saved to: {dashboard_path}")
         logger.info(f"  [TIP] Open {dashboard_path} in your browser to view results!")

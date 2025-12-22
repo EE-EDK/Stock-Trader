@@ -8,7 +8,7 @@ import sqlite3
 import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +191,13 @@ class Database:
             with open(paper_trading_schema_path, 'r') as f:
                 paper_schema = f.read()
                 cursor.executescript(paper_schema)
+
+        # Congress trades tables (Phase 3)
+        congress_schema_path = Path(__file__).parent / "congress_schema.sql"
+        if congress_schema_path.exists():
+            with open(congress_schema_path, 'r') as f:
+                congress_schema = f.read()
+                cursor.executescript(congress_schema)
 
         conn.commit()
         logger.info(f"Database initialized at {self.db_path}")
@@ -532,4 +539,144 @@ class Database:
             'conditions': json.loads(row[3]) if row[3] else [],
             'warnings': json.loads(row[4]) if row[4] else [],
             'recommendations': json.loads(row[5]) if row[5] else []
+        }
+
+    def insert_congress_trades(self, trades: List[Dict[str, Any]]):
+        """
+        @brief Insert Congress stock trading data
+        @param trades List of trade dictionaries from collectors
+        """
+        if not trades:
+            return
+
+        conn = self.connect()
+        cursor = conn.cursor()
+
+        inserted = 0
+        duplicates = 0
+
+        for trade in trades:
+            try:
+                # Calculate midpoint amount
+                amount_from = trade.get('amount_from')
+                amount_to = trade.get('amount_to')
+                amount_mid = None
+                if amount_from and amount_to:
+                    amount_mid = (amount_from + amount_to) / 2
+
+                cursor.execute("""
+                    INSERT INTO congress_trades
+                    (representative_name, party, chamber, state, district,
+                     ticker, asset_name, transaction_type, transaction_date, filing_date, disclosure_date,
+                     amount_from, amount_to, amount_mid, owner, position, asset_type, source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    trade.get('representative_name'),
+                    trade.get('party'),
+                    trade.get('chamber'),
+                    trade.get('state'),
+                    trade.get('district'),
+                    trade.get('ticker'),
+                    trade.get('asset_name'),
+                    trade.get('transaction_type'),
+                    trade.get('transaction_date'),
+                    trade.get('filing_date'),
+                    trade.get('disclosure_date'),
+                    amount_from,
+                    amount_to,
+                    amount_mid,
+                    trade.get('owner'),
+                    trade.get('position'),
+                    trade.get('asset_type'),
+                    trade.get('source', 'housestockwatcher')
+                ))
+                inserted += 1
+            except sqlite3.IntegrityError:
+                duplicates += 1
+                continue
+
+        conn.commit()
+        logger.info(f"Inserted {inserted} Congress trades ({duplicates} duplicates skipped)")
+
+    def get_recent_congress_trades(self, days: int = 30, ticker: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        @brief Get recent Congress trades
+        @param days Number of days to look back
+        @param ticker Optional ticker filter
+        @return List of trade dictionaries
+        """
+        conn = self.connect()
+        cursor = conn.cursor()
+
+        cutoff_date = datetime.now() - timedelta(days=days)
+
+        if ticker:
+            cursor.execute("""
+                SELECT representative_name, party, chamber, ticker, asset_name,
+                       transaction_type, transaction_date, filing_date,
+                       amount_from, amount_to, amount_mid, owner
+                FROM congress_trades
+                WHERE transaction_date >= ? AND ticker = ?
+                ORDER BY transaction_date DESC
+                LIMIT 100
+            """, (cutoff_date, ticker))
+        else:
+            cursor.execute("""
+                SELECT representative_name, party, chamber, ticker, asset_name,
+                       transaction_type, transaction_date, filing_date,
+                       amount_from, amount_to, amount_mid, owner
+                FROM congress_trades
+                WHERE transaction_date >= ?
+                ORDER BY transaction_date DESC
+                LIMIT 100
+            """, (cutoff_date,))
+
+        rows = cursor.fetchall()
+
+        trades = []
+        for row in rows:
+            trades.append({
+                'representative_name': row[0],
+                'party': row[1],
+                'chamber': row[2],
+                'ticker': row[3],
+                'asset_name': row[4],
+                'transaction_type': row[5],
+                'transaction_date': row[6],
+                'filing_date': row[7],
+                'amount_from': row[8],
+                'amount_to': row[9],
+                'amount_mid': row[10],
+                'owner': row[11]
+            })
+
+        return trades
+
+    def get_congress_ticker_activity(self, ticker: str) -> Optional[Dict[str, Any]]:
+        """
+        @brief Get aggregated Congress activity for a specific ticker
+        @param ticker Stock ticker symbol
+        @return Dictionary with activity summary, or None
+        """
+        conn = self.connect()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT * FROM congress_ticker_activity WHERE ticker = ?
+        """, (ticker,))
+
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        return {
+            'ticker': row[0],
+            'total_trades': row[1],
+            'buy_count': row[2],
+            'sell_count': row[3],
+            'total_buys': row[4],
+            'total_sells': row[5],
+            'unique_members': row[6],
+            'latest_trade_date': row[7],
+            'earliest_trade_date': row[8]
         }
