@@ -265,7 +265,7 @@ def run_pipeline(config: dict, skip_email: bool = False):
         try:
             fred_key = config['api_keys'].get('fred')
             if fred_key and fred_key != 'YOUR_FRED_KEY':
-                fred = FREDCollector(api_key=fred_key, config=config)
+                fred = FREDCollector(api_key=fred_key)
                 indicators = fred.collect_all_indicators()
                 if indicators:
                     db.insert_macro_indicators(indicators)
