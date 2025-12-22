@@ -175,11 +175,13 @@ class PaperTradingManager:
         for trade in open_trades:
             trade_id, ticker, entry_date_str, entry_price, shares, stop_loss, target_price = trade
 
-            # Get current price
-            current_price = current_prices.get(ticker)
-            if not current_price:
+            # Get current price (extract from dict)
+            price_data = current_prices.get(ticker)
+            if not price_data or not isinstance(price_data, dict) or 'price' not in price_data:
                 logger.warning(f"No current price for {ticker}, skipping update")
                 continue
+
+            current_price = price_data['price']
 
             # Create snapshot
             unrealized_pnl = (current_price - entry_price) * shares
