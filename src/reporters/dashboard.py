@@ -380,7 +380,8 @@ class DashboardGenerator:
             return "<p>No signals generated</p>"
 
         html = ""
-        for signal in signals[:20]:  # Top 20 signals
+        signal_list = signals if isinstance(signals, list) else []
+        for signal in signal_list[:20]:  # Top 20 signals
             ticker = signal.ticker
             vel = velocity_data.get(ticker, {})
             tech = technical_data.get(ticker, {})
@@ -541,7 +542,8 @@ class DashboardGenerator:
             html += """
             <h3 style="margin-top: 25px; color: #667eea;">Recent Closes (Last 7 Days)</h3>
             """
-            for trade in stats['recent_closes'][:5]:
+            recent_closes = stats['recent_closes'] if isinstance(stats['recent_closes'], list) else []
+            for trade in recent_closes[:5]:
                 pnl_class = 'pt-position' if trade['profit_loss'] > 0 else 'pt-position pt-loss'
                 exit_icon = '✅' if trade['profit_loss'] > 0 else '❌'
                 html += f"""
@@ -561,7 +563,8 @@ class DashboardGenerator:
             html += """
             <h3 style="margin-top: 25px; color: #667eea;">Current Open Positions</h3>
             """
-            for pos in stats['open_positions'][:10]:
+            open_positions = stats['open_positions'] if isinstance(stats['open_positions'], list) else []
+            for pos in open_positions[:10]:
                 current_price = pos.get('current_price')
                 if current_price:
                     pnl_class = 'pt-position' if pos.get('unrealized_pnl', 0) > 0 else 'pt-position pt-loss'
@@ -626,7 +629,8 @@ class DashboardGenerator:
             # Conditions
             if assessment.get('conditions'):
                 html += "<div class='macro-detail'><strong>Conditions:</strong><ul style='margin: 5px 0;'>"
-                for condition in assessment['conditions'][:5]:  # Top 5
+                conditions = assessment['conditions'] if isinstance(assessment['conditions'], list) else []
+                for condition in conditions[:5]:  # Top 5
                     html += f"<li>{condition}</li>"
                 html += "</ul></div>"
 
@@ -849,7 +853,8 @@ class DashboardGenerator:
         """
 
         # Show recent trades (limit to 50 for dashboard)
-        for trade in trades[:50]:
+        trades_list = trades if isinstance(trades, list) else []
+        for trade in trades_list[:50]:
             rep_name = trade.get('representative_name', 'Unknown')
             party = trade.get('party', '').upper() or 'I'
             ticker = trade.get('ticker', '--')
