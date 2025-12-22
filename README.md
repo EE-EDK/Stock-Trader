@@ -36,7 +36,7 @@ firefox reports/dashboard_*.html
 
 ## 📊 What You Get
 
-### 10 FREE Data Sources
+### 11 FREE Data Sources
 
 | Source | Data | API Calls/Day | Cost | Setup Time |
 |--------|------|---------------|------|------------|
@@ -49,6 +49,7 @@ firefox reports/dashboard_*.html
 | **ApeWisdom** | Reddit stock mentions | Unlimited | FREE | 0 min |
 | **FMP** | Earnings, estimates | 250 | FREE | 2 min |
 | **FRED** | Macro indicators (VIX, rates) | 120/min | FREE | 2 min |
+| **Congress Trades** | Congressional stock trades | Unlimited | FREE | 0 min |
 | **Technical** | RSI, MACD, Bollinger | Unlimited | FREE | 0 min |
 
 **Total: $0/month forever**
@@ -80,7 +81,7 @@ firefox reports/dashboard_*.html
 
 ## 🎯 Features
 
-- ✅ **Multi-source analysis** - Combines 10 different FREE data sources
+- ✅ **Multi-source analysis** - Combines 11 different FREE data sources
 - ✅ **Conviction scoring** - Ranks signals 0-100 based on strength
 - ✅ **HTML dashboards** - Beautiful visual reports
 - ✅ **Email alerts** - Optional email notifications
@@ -116,7 +117,8 @@ Stock-Trader/
 │   │   ├── finnhub.py              # Finnhub prices
 │   │   ├── apewisdom.py            # Reddit mentions
 │   │   ├── openinsider.py          # Insider trades
-│   │   └── fred.py                 # FRED macro indicators
+│   │   ├── fred.py                 # FRED macro indicators
+│   │   └── congress.py             # Congress stock trades
 │   ├── metrics/
 │   │   ├── velocity.py             # Social momentum
 │   │   └── technical.py            # Technical indicators
@@ -134,9 +136,10 @@ Stock-Trader/
 │       ├── models.py               # Database schema
 │       ├── queries.py              # Query helpers
 │       ├── paper_trading_schema.sql # Paper trading tables
-│       └── macro_schema.sql        # Macro indicators tables
+│       ├── macro_schema.sql        # Macro indicators tables
+│       └── congress_schema.sql     # Congress trades tables
 ├── backtest.py                     # Backtesting CLI tool
-├── tests/                          # Unit tests (122 tests)
+├── tests/                          # Unit tests (238 tests, 50% coverage)
 ├── reports/                        # Generated dashboards
 ├── logs/                          # Application logs
 ├── data/                          # SQLite database
@@ -891,6 +894,230 @@ backtesting:
 
 ---
 
+## 🏛️ Congress Stock Trades Tracking
+
+**Track stock purchases and sales by US Congress members - 100% FREE, no API key needed!**
+
+The Congress trades feature monitors financial disclosures from US Representatives and Senators to identify trading patterns and potential investment opportunities. This data is completely free and requires no API key.
+
+### Why Track Congress Trades?
+
+Studies have shown that Congress members' stock trades can outperform the market. This feature lets you:
+- **Follow the money**: See what stocks politicians are buying/selling
+- **Identify trends**: Spot patterns in Congressional trading activity
+- **Gauge sentiment**: Multiple Congress members buying the same stock may signal confidence
+- **Research compliance**: Track adherence to the STOCK Act (45-day disclosure requirement)
+
+### Data Source
+
+- **Provider**: [House Stock Watcher](https://housestockwatcher.com/api)
+- **Cost**: 100% FREE (no API key required)
+- **Coverage**: US House of Representatives + US Senate
+- **Update Frequency**: Daily
+- **Data Points**: Representative name, party, ticker, transaction type, amount range, filing date
+
+### How It Works
+
+1. **Daily Collection**: Automatically fetches recent Congressional trades
+2. **Database Storage**: Stores all trade details with full metadata
+3. **Dashboard Display**: Shows recent activity with color-coded party badges
+4. **Ticker Aggregation**: Summarizes Congressional activity per stock
+
+### Setup
+
+Enable in `config/config.yaml`:
+
+```yaml
+collection:
+  congress:
+    enabled: true           # Enable Congress trades tracking
+    lookback_days: 90       # Collect trades from last 90 days
+```
+
+**That's it!** No API key needed. The collector will automatically fetch data from the House Stock Watcher API.
+
+### Usage Example
+
+```bash
+# Enable in config, then run pipeline
+python main.py
+
+# View in dashboard
+open reports/dashboard_*.html
+```
+
+### Dashboard Display
+
+The Congress trades section shows:
+
+```
+🏛️ Congress Stock Trades (Last 90 Days)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Statistics:
+  Total Trades: 247     Purchases: 156     Sales: 91     Members: 42
+
+Recent Trades Table:
+┌────────────┬─────────────────┬───────┬────────┬──────────┬──────────────────┬────────┐
+│ Date       │ Member          │ Party │ Ticker │ Type     │ Amount           │ Owner  │
+├────────────┼─────────────────┼───────┼────────┼──────────┼──────────────────┼────────┤
+│ 2025-12-20 │ Nancy Pelosi    │ D     │ NVDA   │ PURCHASE │ $1,001 - $15,000 │ spouse │
+│ 2025-12-19 │ Tommy Tuberville│ R     │ TSLA   │ SALE     │ $50,001 - $100K  │ self   │
+│ 2025-12-18 │ Josh Gottheimer │ D     │ AAPL   │ PURCHASE │ $15,001 - $50K   │ self   │
+└────────────┴─────────────────┴───────┴────────┴──────────┴──────────────────┴────────┘
+```
+
+**Visual Features:**
+- 🟦 **Blue badges** for Democrats (D)
+- 🟥 **Red badges** for Republicans (R)
+- ⬜ **Gray badges** for Independents (I)
+- 🟢 **Green** for purchases
+- 🔴 **Red** for sales
+- 🟡 **Yellow** for exchanges
+
+### Database Schema
+
+```sql
+CREATE TABLE congress_trades (
+    id INTEGER PRIMARY KEY,
+    representative_name TEXT,
+    party TEXT,
+    chamber TEXT,           -- 'house' or 'senate'
+    state TEXT,
+    district TEXT,
+    ticker TEXT,
+    asset_name TEXT,
+    transaction_type TEXT,  -- 'purchase', 'sale', 'exchange'
+    transaction_date DATE,
+    filing_date DATE,
+    amount_from REAL,
+    amount_to REAL,
+    amount_mid REAL,       -- Midpoint for calculations
+    owner TEXT,            -- 'self', 'spouse', 'dependent', 'joint'
+    source TEXT,
+    collected_at TIMESTAMP
+);
+
+-- Aggregate view for ticker analysis
+CREATE VIEW congress_ticker_activity AS
+SELECT
+    ticker,
+    COUNT(*) as total_trades,
+    SUM(CASE WHEN transaction_type = 'purchase' THEN 1 ELSE 0 END) as buy_count,
+    SUM(CASE WHEN transaction_type = 'sale' THEN 1 ELSE 0 END) as sell_count,
+    COUNT(DISTINCT representative_name) as unique_members,
+    MAX(transaction_date) as latest_trade_date
+FROM congress_trades
+GROUP BY ticker;
+```
+
+### Programmatic Access
+
+```python
+from src.database.models import Database
+
+db = Database('data/sentiment.db')
+
+# Get recent trades for a specific ticker
+trades = db.get_recent_congress_trades(days=30, ticker='AAPL')
+
+# Get aggregated activity for a ticker
+activity = db.get_congress_ticker_activity('TSLA')
+print(f"Total trades: {activity['total_trades']}")
+print(f"Buys: {activity['buy_count']}, Sells: {activity['sell_count']}")
+print(f"Unique members: {activity['unique_members']}")
+```
+
+### Understanding the Data
+
+**Transaction Types:**
+- **Purchase**: Member or spouse bought shares
+- **Sale**: Member or spouse sold shares
+- **Exchange**: Conversion or swap of assets
+
+**Amount Ranges:**
+Congress members report ranges, not exact amounts:
+- $1,001 - $15,000
+- $15,001 - $50,000
+- $50,001 - $100,000
+- $100,001 - $250,000
+- $250,001 - $500,000
+- $500,001 - $1,000,000
+- $1,000,001 - $5,000,000
+- $5,000,001 - $25,000,000
+- $25,000,001 - $50,000,000
+- Over $50,000,000
+
+The system calculates `amount_mid` (midpoint) for analysis purposes.
+
+**Owner Types:**
+- **self**: Congress member's personal account
+- **spouse**: Spouse's account
+- **dependent**: Dependent child's account
+- **joint**: Joint account
+
+### Important Disclaimers
+
+⚠️ **Legal Requirements**:
+- Congress members must file within **45 days** of transaction
+- Some trades may be reported late (filing date ≠ transaction date)
+- Not all transactions require disclosure (mutual funds, diversified funds exempt)
+
+⚠️ **Investment Considerations**:
+- **Past performance ≠ future results**: Congressional trades are historical data
+- **Information lag**: Trades disclosed up to 45 days after execution
+- **Context matters**: Members may trade for personal reasons, not investment thesis
+- **Do your own research**: Use this as one signal among many
+
+### Best Practices
+
+1. **Look for clusters**: Multiple members buying the same stock is more significant than one trade
+2. **Check the amount**: Larger trades ($1M+) may indicate higher conviction
+3. **Consider the party**: Bipartisan agreement on a stock may be noteworthy
+4. **Verify the timing**: Check if trades preceded major company announcements
+5. **Use as confirmation**: Combine with other signals (velocity, insider trades, technicals)
+
+### Example Analysis Workflow
+
+```python
+# 1. Collect Congress trades
+python main.py  # Runs daily collection
+
+# 2. Analyze ticker of interest
+from src.database.models import Database
+db = Database('data/sentiment.db')
+
+ticker = 'NVDA'
+activity = db.get_congress_ticker_activity(ticker)
+
+if activity and activity['buy_count'] > activity['sell_count'] * 2:
+    print(f"🟢 Bullish signal: {activity['buy_count']} buys vs {activity['sell_count']} sells")
+    print(f"   {activity['unique_members']} Congress members involved")
+
+    # Get recent trades for details
+    trades = db.get_recent_congress_trades(days=90, ticker=ticker)
+    for trade in trades[:5]:
+        print(f"   {trade['transaction_date']}: {trade['representative_name']} "
+              f"({trade['party']}) - {trade['transaction_type'].upper()}")
+```
+
+### Data Quality Notes
+
+- **Completeness**: House Stock Watcher aggregates from official sources
+- **Accuracy**: Data directly from Congressional disclosure filings
+- **Timeliness**: Updated daily as new filings become available
+- **Coverage**: All House members; Senate coverage varies
+
+### Resources
+
+- **House Stock Watcher**: https://housestockwatcher.com
+- **Capitol Trades**: https://www.capitoltrades.com
+- **Official House Disclosures**: https://disclosures-clerk.house.gov
+- **Official Senate Disclosures**: https://efdsearch.senate.gov
+- **STOCK Act Info**: https://www.congress.gov/bill/112th-congress/senate-bill/2038
+
+---
+
 ## 📖 Configuration Reference
 
 ### Full Config Example
@@ -1170,15 +1397,16 @@ VACUUM;
 
 ## 🧪 Test Coverage
 
-**Comprehensive unit testing with 200+ test cases**
+**Comprehensive unit testing with 238 test cases**
 
 | Component | Tests | Coverage | Status |
 |-----------|-------|----------|--------|
+| Congress Trades Collector | 33 | 96% | ✅ All passing |
 | Backtesting Module | 32 | 94% | ✅ All passing |
-| Paper Trading System | 28 | 95% | ✅ All passing |
-| FRED Macro Indicators | 24 | 93% | ✅ All passing |
+| Paper Trading System | 31 | 95% | ✅ All passing |
 | Technical Analysis | 30 | 87% | ✅ All passing |
 | Velocity Metrics | 25 | 92% | ✅ All passing |
+| FRED Macro Indicators | 24 | 93% | ✅ All passing |
 | Signal Generator | - | 79% | ✅ Verified |
 | Alpha Vantage Collector | 4 | 81% | ✅ All passing |
 | ApeWisdom Collector | 5 | 79% | ✅ All passing |
@@ -1186,7 +1414,7 @@ VACUUM;
 | OpenInsider Collector | 5 | 74% | ✅ All passing |
 | FMP Collector | 4 | 61% | ✅ All passing |
 | Velocity Calculator | 4 | 92% | ✅ All passing |
-| **Total** | **200+** | **50%** | **✅ 200+ passing** |
+| **Total** | **238** | **50%** | **✅ 238 passing** |
 
 ### Run Tests
 
@@ -1204,6 +1432,7 @@ python -m pytest tests/test_velocity.py -v
 python -m pytest tests/test_paper_trading.py -v
 python -m pytest tests/test_backtester.py -v
 python -m pytest tests/test_fred.py -v
+python -m pytest tests/test_congress.py -v
 
 # Run specific test class
 python -m pytest tests/test_technical_analyzer.py::TestRSI -v
@@ -1307,6 +1536,22 @@ MIT License - See LICENSE file for details
 
 ## 📚 Version History
 
+### v1.3.0 (2025-12-22) - Phase 3: Congress Trades
+- **Congress Stock Trades Tracking** - Monitor Congressional trading activity
+  - 100% FREE data source (House Stock Watcher API, no API key needed)
+  - Tracks purchases and sales by US Representatives and Senators
+  - Complete metadata: representative name, party, ticker, amount range, filing date
+  - Database schema with congress_trades table and aggregate view
+  - Dashboard integration with color-coded party badges (D/R/I)
+  - Visual trade type highlighting (purchases=green, sales=red)
+  - Configurable lookback period (default 90 days)
+  - Programmatic access via Database methods
+  - 33 comprehensive unit tests with 96% coverage
+- Updated dashboard footer to include all 11 FREE data sources
+- Total test coverage: 238 tests (50% code coverage)
+- Complete documentation with usage examples and disclaimers
+- Database additions: congress_trades table, congress_ticker_activity view
+
 ### v1.2.0 (2025-12-21) - Phase 2 Complete
 - **Backtesting Module** - Complete historical validation system
   - Simulates trades using actual historical prices
@@ -1366,9 +1611,9 @@ MIT License - See LICENSE file for details
 - [x] **Backtesting module** - ✅ Complete (v1.2.0)
 - [x] **Enhanced dashboard** - ✅ Complete (v1.2.0)
 
-### Phase 3 (Future)
-- [ ] Options flow data (Unusual Whales/Cheddar Flow)
-- [ ] Congress trades tracking (Quiver Quant)
+### Phase 3 - 🚧 IN PROGRESS
+- [x] **Congress trades tracking** - ✅ Complete (v1.3.0) - 100% FREE, no API key!
+- [ ] Options flow data (Unusual Whales/Cheddar Flow) - Requires paid subscription
 - [ ] Web dashboard (Flask/FastAPI)
 - [ ] Discord/Telegram bot for notifications
 
