@@ -384,11 +384,11 @@ def run_pipeline(config: dict, skip_email: bool = False):
                 # Check if signal meets paper trading conviction threshold
                 if signal.conviction_score >= paper_trading.min_conviction:
                     # Get current price for this ticker
-                    current_price = db.get_latest_prices().get(signal.ticker)
-                    if current_price:
+                    price_data = db.get_latest_prices().get(signal.ticker)
+                    if price_data and 'price' in price_data:
                         trade_id = paper_trading.create_paper_trade(
                             ticker=signal.ticker,
-                            entry_price=current_price,
+                            entry_price=price_data['price'],
                             conviction=int(signal.conviction_score),
                             signal_types=signal.triggers,
                             entry_date=datetime.now()
