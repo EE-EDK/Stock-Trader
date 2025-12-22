@@ -69,6 +69,12 @@ collection:
     collect_inflation: true  # CPI (inflation)
     collect_forex: true      # USD/EUR exchange rate
 
+  congress:
+    enabled: false           # Enable Congress stock trades tracking (100% FREE!)
+    # Data source: House Stock Watcher API (no API key needed)
+    # Tracks stock purchases/sales by US Representatives and Senators
+    lookback_days: 90        # Collect trades from last 90 days
+
 # Paper Trading (track mock purchases to validate signals)
 paper_trading:
   enabled: true              # Enable paper trading system

@@ -80,20 +80,21 @@ firefox reports/dashboard_*.html
 
 ## 🎯 Features
 
-- ✅ **Multi-source analysis** - Combines 9 different data sources
+- ✅ **Multi-source analysis** - Combines 10 different FREE data sources
 - ✅ **Conviction scoring** - Ranks signals 0-100 based on strength
 - ✅ **HTML dashboards** - Beautiful visual reports
 - ✅ **Email alerts** - Optional email notifications
 - ✅ **Technical analysis** - Professional-grade indicators
 - ✅ **Sentiment analysis** - News + social media
 - ✅ **Insider tracking** - Follow the smart money
+- ✅ **Congress trades** - Track stock trades by US Representatives & Senators (100% FREE!)
 - ✅ **Paper trading** - Mock purchases to validate signals before risking capital
 - ✅ **Backtesting** - Validate strategy against historical data with comprehensive metrics
 - ✅ **Macro indicators** - FRED economic data integration (VIX, rates, unemployment, etc.)
 - ✅ **100% FREE** - Zero recurring costs
 - ✅ **Local database** - Your data stays on your machine
 - ✅ **Automated** - Set and forget with cron
-- ✅ **200+ unit tests** - Comprehensive test coverage
+- ✅ **240+ unit tests** - Comprehensive test coverage
 
 ---
 
