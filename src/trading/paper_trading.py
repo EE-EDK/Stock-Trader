@@ -246,10 +246,10 @@ class PaperTradingManager:
         # Get signals from last N days with conviction >= threshold
         cutoff_date = datetime.now() - timedelta(days=days)
         cursor.execute("""
-            SELECT ticker, conviction, triggers, generated_at
+            SELECT ticker, conviction_score, triggers, created_at
             FROM signals
-            WHERE generated_at >= ? AND conviction >= ?
-            ORDER BY generated_at ASC
+            WHERE created_at >= ? AND conviction_score >= ?
+            ORDER BY created_at ASC
         """, (cutoff_date, self.min_conviction))
 
         signals = cursor.fetchall()
@@ -259,20 +259,20 @@ class PaperTradingManager:
         skipped_count = 0
 
         for signal in signals:
-            ticker, conviction, triggers_json, generated_at_str = signal
+            ticker, conviction, triggers_json, created_at_str = signal
             signal_types = json.loads(triggers_json) if triggers_json else []
-            generated_at = datetime.fromisoformat(generated_at_str)
+            created_at = datetime.fromisoformat(created_at_str)
 
             # Get entry price (from prices table at that date)
-            entry_price = self._get_historical_price(ticker, generated_at)
+            entry_price = self._get_historical_price(ticker, created_at)
             if not entry_price:
-                logger.warning(f"No historical price for {ticker} on {generated_at}, skipping")
+                logger.warning(f"No historical price for {ticker} on {created_at}, skipping")
                 skipped_count += 1
                 continue
 
             # Create paper trade (will skip if already exists)
             trade_id = self.create_paper_trade(ticker, entry_price, conviction,
-                                              signal_types, generated_at)
+                                              signal_types, created_at)
             if trade_id:
                 created_count += 1
             else:
@@ -287,7 +287,7 @@ class PaperTradingManager:
 
         # Get price closest to the date (within 1 day)
         cursor.execute("""
-            SELECT current_price FROM prices
+            SELECT price FROM prices
             WHERE ticker = ? AND collected_at >= ? AND collected_at < ?
             ORDER BY collected_at ASC
             LIMIT 1

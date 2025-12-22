@@ -637,15 +637,15 @@ class TestBackfillFromSignals:
 
             CREATE TABLE IF NOT EXISTS signals (
                 ticker TEXT,
-                conviction INTEGER,
+                conviction_score REAL,
                 triggers TEXT,
-                generated_at DATETIME
+                created_at TIMESTAMP
             );
 
             CREATE TABLE IF NOT EXISTS prices (
                 ticker TEXT,
-                current_price REAL,
-                collected_at DATETIME
+                price REAL,
+                collected_at TIMESTAMP
             );
         """)
         conn.commit()
@@ -664,12 +664,12 @@ class TestBackfillFromSignals:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO signals (ticker, conviction, triggers, generated_at)
+            INSERT INTO signals (ticker, conviction_score, triggers, created_at)
             VALUES (?, ?, ?, ?)
         """, ('AAPL', 80, json.dumps(['velocity_spike']), signal_date))
 
         cursor.execute("""
-            INSERT INTO prices (ticker, current_price, collected_at)
+            INSERT INTO prices (ticker, price, collected_at)
             VALUES (?, ?, ?)
         """, ('AAPL', 150.0, signal_date))
 
@@ -697,13 +697,13 @@ class TestBackfillFromSignals:
 
         # Below threshold (50 < 60)
         cursor.execute("""
-            INSERT INTO signals (ticker, conviction, triggers, generated_at)
+            INSERT INTO signals (ticker, conviction_score, triggers, created_at)
             VALUES (?, ?, ?, ?)
         """, ('LOW', 50, json.dumps(['test']), signal_date))
 
         # Above threshold (80 > 60)
         cursor.execute("""
-            INSERT INTO signals (ticker, conviction, triggers, generated_at)
+            INSERT INTO signals (ticker, conviction_score, triggers, created_at)
             VALUES (?, ?, ?, ?)
         """, ('HIGH', 80, json.dumps(['test']), signal_date))
 
@@ -734,12 +734,12 @@ class TestBackfillFromSignals:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO signals (ticker, conviction, triggers, generated_at)
+            INSERT INTO signals (ticker, conviction_score, triggers, created_at)
             VALUES (?, ?, ?, ?)
         """, ('AAPL', 80, json.dumps(['test']), signal_date))
 
         cursor.execute("""
-            INSERT INTO prices (ticker, current_price, collected_at)
+            INSERT INTO prices (ticker, price, collected_at)
             VALUES (?, ?, ?)
         """, ('AAPL', 150.0, signal_date))
 
