@@ -139,7 +139,7 @@ class SignalGenerator:
                 conviction += 10
 
             # Add technical score contribution (0-100 scale)
-            if tech and 'technical_score' in tech:
+            if tech and 'technical_score' in tech and tech['technical_score'] is not None:
                 conviction += tech['technical_score'] * 0.2  # 20% weight
 
             # Boost for combined signals
@@ -303,6 +303,8 @@ class SignalGenerator:
         @return True if RSI < 30 (oversold)
         """
         rsi = tech.get('rsi_14', 50)
+        if rsi is None:
+            return False
         return rsi < 30
 
     def _check_positive_sentiment(self, sentiment: Dict[str, Any]) -> bool:
@@ -313,7 +315,11 @@ class SignalGenerator:
         """
         # Works with both Alpha Vantage and VADER sentiment
         score = sentiment.get('sentiment_score', 0)
+        if score is None:
+            score = 0
         label = sentiment.get('sentiment_label', '')
+        if label is None:
+            label = ''
 
         return score > 0.15 or 'bullish' in label.lower() or 'positive' in label.lower()
 
@@ -324,6 +330,8 @@ class SignalGenerator:
         @return True if mention count is high
         """
         mention_count = reddit.get('mention_count', 0)
+        if mention_count is None:
+            return False
         return mention_count >= 10  # 10+ mentions indicates viral potential
 
     def filter_by_conviction(self, signals: List[Signal], min_conviction: float = 40) -> List[Signal]:
