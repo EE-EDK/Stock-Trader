@@ -260,7 +260,13 @@ class PaperTradingManager:
 
         for signal in signals:
             ticker, conviction, triggers_json, created_at_str = signal
-            signal_types = json.loads(triggers_json) if triggers_json else []
+
+            # Parse triggers JSON safely (handle empty strings and invalid JSON)
+            try:
+                signal_types = json.loads(triggers_json) if triggers_json and triggers_json.strip() else []
+            except (json.JSONDecodeError, ValueError):
+                signal_types = []
+
             created_at = datetime.fromisoformat(created_at_str)
 
             # Get entry price (from prices table at that date)
