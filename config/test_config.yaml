@@ -1,0 +1,68 @@
+# Test configuration for runtime validation
+# Uses minimal settings to test the pipeline without real API calls
+
+api_keys:
+  finnhub: "test_key_finnhub_123"
+  alphavantage: "test_key_av_123"
+  fmp: "test_key_fmp_123"
+  reddit:
+    client_id: "test_client_id"
+    client_secret: "test_secret"
+    user_agent: "test:v1.0"
+  fred: "test_fred_key"
+
+database:
+  path: "data/test_sentiment.db"
+
+collection:
+  apewisdom:
+    interval_hours: 24
+    top_n: 10
+  openinsider:
+    interval_hours: 24
+    min_value: 50000
+  finnhub:
+    interval_hours: 24
+    rate_limit_per_min: 55
+  alphavantage:
+    enabled: false  # Disabled for test
+    top_n: 5
+    articles_per_ticker: 10
+  yfinance:
+    enabled: true
+    collect_fundamentals: true
+    collect_analyst_ratings: true
+  vader_sentiment:
+    enabled: false  # Disabled for test
+  reddit:
+    enabled: false  # Disabled for test
+  fred:
+    enabled: false  # Disabled for test
+  congress:
+    enabled: false  # Disabled for test
+    lookback_days: 30
+
+signals:
+  min_sentiment_score: 0.5
+  min_velocity_threshold: 1.5
+  conviction_weights:
+    sentiment: 0.3
+    velocity: 0.4
+    technical: 0.3
+
+paper_trading:
+  enabled: false  # Disabled for test
+  initial_capital: 10000
+  position_sizing: "conviction"
+  max_position_pct: 0.15
+  backfill_days: 7
+
+reporting:
+  output_dir: "reports_test"
+  email:
+    enabled: false
+
+watchlist:
+  - AAPL
+  - MSFT
+  - TSLA
