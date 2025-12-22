@@ -64,3 +64,4 @@ reports/
 outputs/
 *.csv
 *.html
+type_check_report.txt
