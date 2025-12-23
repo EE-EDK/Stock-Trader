@@ -189,6 +189,11 @@ class EmailReporter:
                 for t in signal.triggers
             ])
 
+            # Build price display if available
+            price_display = ""
+            if signal.price_at_signal is not None:
+                price_display = f'<div style="margin-top: 10px; font-size: 13px; color: #999;">Price at signal: ${signal.price_at_signal:.2f}</div>'
+
             html += f"""
             <div class="signal-card">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -197,9 +202,7 @@ class EmailReporter:
                 </div>
                 <div class="triggers">{triggers_html}</div>
                 <div class="notes">{signal.notes}</div>
-                <div style="margin-top: 10px; font-size: 13px; color: #999;">
-                    Price at signal: ${signal.price_at_signal:.2f}
-                </div>
+                {price_display}
             </div>
             """
 

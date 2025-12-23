@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 import yaml
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from src.collectors.apewisdom import ApeWisdomCollector
 from src.collectors.openinsider import OpenInsiderCollector
@@ -103,6 +104,105 @@ def load_config(config_path: str = "config/config.yaml") -> dict:
         raise
 
 
+# Parallel collection helper functions
+def collect_apewisdom(config):
+    """Collect ApeWisdom data in parallel"""
+    try:
+        ape = ApeWisdomCollector()
+        mentions = ape.collect(top_n=config['collection']['apewisdom']['top_n'])
+        ape.close()
+        return ('apewisdom', mentions, None)
+    except Exception as e:
+        return ('apewisdom', [], str(e))
+
+
+def collect_openinsider(config):
+    """Collect OpenInsider data in parallel"""
+    try:
+        insider = OpenInsiderCollector()
+        trades = insider.collect_cluster_buys()
+        trades += insider.collect_ceo_cfo_buys(
+            min_value=config['collection']['openinsider']['min_value']
+        )
+        insider.close()
+        return ('openinsider', trades, None)
+    except Exception as e:
+        return ('openinsider', [], str(e))
+
+
+def collect_alphavantage(config, top_tickers):
+    """Collect Alpha Vantage sentiment in parallel"""
+    if not ALPHAVANTAGE_AVAILABLE or not config.get('collection', {}).get('alphavantage', {}).get('enabled', False):
+        return ('alphavantage', {}, None)
+    
+    try:
+        alpha_key = config['api_keys'].get('alphavantage')
+        if not alpha_key or alpha_key == 'YOUR_ALPHAVANTAGE_KEY':
+            return ('alphavantage', {}, None)
+        
+        alpha = AlphaVantageCollector(api_key=alpha_key)
+        sentiments = alpha.collect_news_sentiment(
+            top_tickers,
+            limit_per_ticker=config.get('collection', {}).get('alphavantage', {}).get('articles_per_ticker', 50)
+        )
+        alpha_sentiment = {s['ticker']: s for s in sentiments}
+        return ('alphavantage', alpha_sentiment, None)
+    except Exception as e:
+        return ('alphavantage', {}, str(e))
+
+
+def collect_yfinance(tracked_tickers):
+    """Collect YFinance data in parallel"""
+    if not YFINANCE_AVAILABLE:
+        return ('yfinance', {}, None)
+    
+    try:
+        yf_collector = YFinanceCollector()
+        yf_info = yf_collector.collect_stock_info(tracked_tickers)
+        yfinance_data = {d['ticker']: d for d in yf_info}
+        return ('yfinance', yfinance_data, None)
+    except Exception as e:
+        return ('yfinance', {}, str(e))
+
+
+def collect_vader(top_tickers, yfinance_data, config):
+    """Collect VADER sentiment in parallel"""
+    if not VADER_AVAILABLE or not config.get('collection', {}).get('vader_sentiment', {}).get('enabled', True):
+        return ('vader', {}, None)
+    
+    try:
+        vader = VaderSentimentAnalyzer()
+        vader_sentiment = {}
+        for ticker in top_tickers[:10]:
+            company_name = yfinance_data.get(ticker, {}).get('company_name')
+            sentiment = vader.analyze_ticker_sentiment(ticker, company_name)
+            if sentiment.get('total_headlines', 0) > 0:
+                vader_sentiment[ticker] = sentiment
+        return ('vader', vader_sentiment, None)
+    except Exception as e:
+        return ('vader', {}, str(e))
+
+
+def collect_fred(config):
+    """Collect FRED macro indicators in parallel"""
+    if not FRED_AVAILABLE or not config.get('collection', {}).get('fred', {}).get('enabled', False):
+        return ('fred', {}, {}, None)
+    
+    try:
+        fred_key = config['api_keys'].get('fred')
+        if not fred_key or fred_key == 'YOUR_FRED_KEY':
+            return ('fred', {}, {}, None)
+        
+        fred = FREDCollector(api_key=fred_key)
+        indicators = fred.collect_all_indicators()
+        assessment = {}
+        if indicators:
+            assessment = fred.assess_market_conditions(indicators)
+        return ('fred', indicators, assessment, None)
+    except Exception as e:
+        return ('fred', {}, {}, str(e))
+
+
 def run_pipeline(config: dict, skip_email: bool = False):
     """
     @brief Execute the full data collection and analysis pipeline
@@ -132,114 +232,121 @@ def run_pipeline(config: dict, skip_email: bool = False):
     market_assessment = {}
     congress_trades = []
 
-    # ========== Step 1: Collect Data ==========
-    logger.info("Step 1: Collecting data from sources...")
-
-    # ApeWisdom (social mentions)
+    # ========== Step 1: Collect Data IN PARALLEL ==========
+    logger.info("Step 1: Collecting data from sources (PARALLEL MODE)...")
+    
+    # Get tracked tickers first (needed by multiple collectors)
+    tracked_tickers = db.get_tracked_tickers(days=7)
+    top_tickers = list(tracked_tickers)[:20]
+    
+    # Run initial collectors in parallel
     mentions = []
-    try:
-        ape = ApeWisdomCollector()
-        mentions = ape.collect(top_n=config['collection']['apewisdom']['top_n'])
-        if mentions:
-            db.insert_mentions(mentions)
-            logger.info(f"  [OK] ApeWisdom: {len(mentions)} tickers collected")
-        else:
-            logger.warning("  [WARN] ApeWisdom: No data collected")
-        ape.close()
-    except Exception as e:
-        logger.error(f"  [ERROR] ApeWisdom failed: {e}")
-
-    # OpenInsider (insider trades)
     trades = []
-    try:
-        insider = OpenInsiderCollector()
-        trades = insider.collect_cluster_buys()
-        trades += insider.collect_ceo_cfo_buys(
-            min_value=config['collection']['openinsider']['min_value']
-        )
-        if trades:
-            db.insert_insiders(trades)
-            logger.info(f"  [OK] OpenInsider: {len(trades)} trades collected")
-        else:
-            logger.warning("  [WARN] OpenInsider: No trades collected")
-        insider.close()
-    except Exception as e:
-        logger.error(f"  [ERROR] OpenInsider failed: {e}")
-
-    # Finnhub (prices + sentiment)
     prices = []
+    alpha_sentiment = {}
+    yfinance_data = {}
+    vader_sentiment = {}
+    macro_indicators = {}
+    market_assessment = {}
+    
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        # Submit initial collection tasks
+        future_ape = executor.submit(collect_apewisdom, config)
+        future_insider = executor.submit(collect_openinsider, config)
+        
+        # Wait for results
+        for future in as_completed([future_ape, future_insider]):
+            collector_name, data, error = future.result()
+            
+            if collector_name == 'apewisdom':
+                mentions = data
+                if error:
+                    logger.error(f"  [ERROR] ApeWisdom failed: {error}")
+                elif mentions:
+                    db.insert_mentions(mentions)
+                    logger.info(f"  [OK] ApeWisdom: {len(mentions)} tickers collected")
+                else:
+                    logger.warning("  [WARN] ApeWisdom: No data collected")
+            
+            elif collector_name == 'openinsider':
+                trades = data
+                if error:
+                    logger.error(f"  [ERROR] OpenInsider failed: {error}")
+                elif trades:
+                    db.insert_insiders(trades)
+                    logger.info(f"  [OK] OpenInsider: {len(trades)} trades collected")
+                else:
+                    logger.warning("  [WARN] OpenInsider: No trades collected")
+    
+    # Finnhub (still sequential as it needs tracked_tickers immediately)
     try:
         finnhub_key = config['api_keys'].get('finnhub')
-        if not finnhub_key or finnhub_key == 'YOUR_FINNHUB_KEY':
-            logger.warning("  [WARN] Finnhub: API key not configured, skipping")
-        else:
-            finnhub = FinnhubCollector(api_key=finnhub_key)
-
-            # Get tickers we're tracking
-            tracked_tickers = db.get_tracked_tickers(days=7)
+        if finnhub_key and finnhub_key != 'YOUR_FINNHUB_KEY':
             logger.info(f"  Fetching data for {len(tracked_tickers)} tracked tickers")
-
-            # Collect combined price and sentiment data
+            finnhub = FinnhubCollector(api_key=finnhub_key)
             prices = finnhub.combine_price_and_sentiment(tracked_tickers)
             if prices:
                 db.insert_prices(prices)
                 logger.info(f"  [OK] Finnhub: {len(prices)} ticker data points collected")
-            else:
-                logger.warning("  [WARN] Finnhub: No data collected")
+        else:
+            logger.warning("  [WARN] Finnhub: API key not configured, skipping")
     except Exception as e:
         logger.error(f"  [ERROR] Finnhub failed: {e}")
-
-    # ========== NEW: Collect Free Data Sources ==========
-    logger.info("Step 1b: Collecting FREE data sources...")
-
-    # Get tracked tickers for free data collection
-    tracked_tickers = db.get_tracked_tickers(days=7)
-    top_tickers = list(tracked_tickers)[:20]  # Top 20 to save API calls
-
-    # Alpha Vantage sentiment (100 calls/day - FREE!)
-    alpha_sentiment = {}
-    if ALPHAVANTAGE_AVAILABLE and config.get('collection', {}).get('alphavantage', {}).get('enabled', False):
-        try:
-            alpha_key = config['api_keys'].get('alphavantage')
-            if alpha_key and alpha_key != 'YOUR_ALPHAVANTAGE_KEY':
-                alpha = AlphaVantageCollector(api_key=alpha_key)
-                sentiments = alpha.collect_news_sentiment(
-                    top_tickers,
-                    limit_per_ticker=config.get('collection', {}).get('alphavantage', {}).get('articles_per_ticker', 50)
-                )
-                alpha_sentiment = {s['ticker']: s for s in sentiments}
-                logger.info(f"  [OK] Alpha Vantage: {len(sentiments)} sentiment analyses")
-            else:
-                logger.info("  [SKIP] Alpha Vantage: API key not configured")
-        except Exception as e:
-            logger.error(f"  [ERROR] Alpha Vantage failed: {e}")
-
-    # YFinance data (unlimited - FREE!)
-    yfinance_data = {}
-    if YFINANCE_AVAILABLE and config.get('collection', {}).get('yfinance', {}).get('enabled', True):
-        try:
-            yf_collector = YFinanceCollector()
-            yf_info = yf_collector.collect_stock_info(tracked_tickers)
-            yfinance_data = {d['ticker']: d for d in yf_info}
-            logger.info(f"  [OK] YFinance: {len(yf_info)} stock info records")
-        except Exception as e:
-            logger.error(f"  [ERROR] YFinance failed: {e}")
-
-    # VADER sentiment (local, no API - FREE!)
-    vader_sentiment = {}
-    if VADER_AVAILABLE and config.get('collection', {}).get('vader_sentiment', {}).get('enabled', True):
-        try:
-            vader = VaderSentimentAnalyzer()
-            for ticker in top_tickers[:10]:  # Limit scraping to top 10 to avoid being blocked
-                company_name = yfinance_data.get(ticker, {}).get('company_name')
-                sentiment = vader.analyze_ticker_sentiment(ticker, company_name)
-                if sentiment.get('total_headlines', 0) > 0:
-                    vader_sentiment[ticker] = sentiment
-            logger.info(f"  [OK] VADER Sentiment: {len(vader_sentiment)} tickers analyzed")
-        except Exception as e:
-            logger.error(f"  [ERROR] VADER Sentiment failed: {e}")
-
-    # Reddit data (FREE with API key)
+    
+    # ========== Step 1b: Collect FREE data sources IN PARALLEL ==========
+    logger.info("Step 1b: Collecting FREE data sources (PARALLEL MODE)...")
+    
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        # Submit all free data collectors in parallel
+        future_yf = executor.submit(collect_yfinance, tracked_tickers)
+        future_fred = executor.submit(collect_fred, config)
+        future_alpha = executor.submit(collect_alphavantage, config, top_tickers)
+        
+        # Collect YFinance first as VADER depends on it
+        collector_name, data, error = future_yf.result()
+        yfinance_data = data
+        if error:
+            logger.error(f"  [ERROR] YFinance failed: {error}")
+        elif yfinance_data:
+            logger.info(f"  [OK] YFinance: {len(yfinance_data)} stock info records")
+        
+        # Now submit VADER with yfinance_data
+        future_vader = executor.submit(collect_vader, top_tickers, yfinance_data, config)
+        
+        # Collect remaining results
+        for future in as_completed([future_alpha, future_fred, future_vader]):
+            result = future.result()
+            
+            if result[0] == 'alphavantage':
+                _, alpha_sentiment, error = result
+                if error:
+                    logger.error(f"  [ERROR] Alpha Vantage failed: {error}")
+                elif alpha_sentiment:
+                    logger.info(f"  [OK] Alpha Vantage: {len(alpha_sentiment)} sentiment analyses")
+                else:
+                    logger.info("  [SKIP] Alpha Vantage: API key not configured")
+            
+            elif result[0] == 'vader':
+                _, vader_sentiment, error = result
+                if error:
+                    logger.error(f"  [ERROR] VADER Sentiment failed: {error}")
+                else:
+                    logger.info(f"  [OK] VADER Sentiment: {len(vader_sentiment)} tickers analyzed")
+            
+            elif result[0] == 'fred':
+                _, macro_indicators, market_assessment, error = result
+                if error:
+                    logger.error(f"  [ERROR] FRED failed: {error}")
+                elif macro_indicators:
+                    db.insert_macro_indicators(macro_indicators)
+                    logger.info(f"  [OK] FRED: {len(macro_indicators)} macro indicators")
+                    if market_assessment:
+                        db.insert_market_assessment(market_assessment)
+                        logger.info(f"  [OK] FRED: Market risk level {market_assessment.get('risk_level')}")
+                else:
+                    logger.info("  [SKIP] FRED: API key not configured")
+    
+    # Reddit data (optional, sequential)
     reddit_data = {}
     if REDDIT_AVAILABLE and config.get('collection', {}).get('reddit', {}).get('enabled', False):
         try:
@@ -250,48 +357,25 @@ def run_pipeline(config: dict, skip_email: bool = False):
                     client_secret=reddit_config['client_secret'],
                     user_agent=reddit_config['user_agent']
                 )
-                mentions = reddit.collect_ticker_mentions(
+                mentions_reddit = reddit.collect_ticker_mentions(
                     hours=config.get('collection', {}).get('reddit', {}).get('lookback_hours', 24)
                 )
-                reddit_data = {m['ticker']: m for m in mentions}
-                logger.info(f"  [OK] Reddit: {len(mentions)} ticker mentions")
+                reddit_data = {m['ticker']: m for m in mentions_reddit}
+                logger.info(f"  [OK] Reddit: {len(mentions_reddit)} ticker mentions")
             else:
                 logger.info("  [SKIP] Reddit: API credentials not configured")
         except Exception as e:
             logger.error(f"  [ERROR] Reddit failed: {e}")
-
-    # FRED Macro Indicators (100 calls/day - FREE!)
-    if FRED_AVAILABLE and config.get('collection', {}).get('fred', {}).get('enabled', False):
-        try:
-            fred_key = config['api_keys'].get('fred')
-            if fred_key and fred_key != 'YOUR_FRED_KEY':
-                fred = FREDCollector(api_key=fred_key)
-                indicators = fred.collect_all_indicators()
-                if indicators:
-                    db.insert_macro_indicators(indicators)
-                    macro_indicators = indicators
-                    logger.info(f"  [OK] FRED: {len(indicators)} macro indicators")
-
-                    # Assess market conditions
-                    assessment = fred.assess_market_conditions(indicators)
-                    if assessment:
-                        db.insert_market_assessment(assessment)
-                        market_assessment = assessment
-                        logger.info(f"  [OK] FRED: Market risk level {assessment.get('risk_level')}")
-            else:
-                logger.info("  [SKIP] FRED: API key not configured")
-        except Exception as e:
-            logger.error(f"  [ERROR] FRED failed: {e}")
-
-    # Congress Stock Trades (100% FREE - no API key needed!)
+    
+    # Congress Stock Trades (optional, sequential)
+    congress_trades = []
     if CONGRESS_AVAILABLE and config.get('collection', {}).get('congress', {}).get('enabled', False):
         try:
             congress = CongressTradesCollector(config)
-            trades = congress.collect_all_trades()
-            if trades:
-                db.insert_congress_trades(trades)
-                congress_trades = trades
-                logger.info(f"  [OK] Congress Trades: {len(trades)} trades")
+            congress_trades = congress.collect_all_trades()
+            if congress_trades:
+                db.insert_congress_trades(congress_trades)
+                logger.info(f"  [OK] Congress Trades: {len(congress_trades)} trades")
             else:
                 logger.info("  [INFO] Congress Trades: No recent trades")
         except Exception as e:
@@ -448,7 +532,9 @@ def run_pipeline(config: dict, skip_email: bool = False):
         logger.info(f"  [OK] Dashboard saved to: {dashboard_path}")
         logger.info(f"  [TIP] Open {dashboard_path} in your browser to view results!")
     except Exception as e:
+        import traceback
         logger.error(f"  [ERROR] Dashboard generation failed: {e}")
+        logger.error(f"  [TRACEBACK] {traceback.format_exc()}")
 
     # ========== Step 5: Output Summary ==========
     logger.info("=" * 60)

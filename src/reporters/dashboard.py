@@ -397,10 +397,13 @@ class DashboardGenerator:
             # Technical details
             tech_info = ""
             if tech:
-                rsi = tech.get('rsi_14', 0)
-                trend = tech.get('trend', 'neutral')
-                tech_score = tech.get('technical_score', 0)
-                tech_info = f"""
+                rsi = tech.get('rsi_14')
+                trend = tech.get('trend') or 'neutral'
+                tech_score = tech.get('technical_score')
+                
+                # Only show technical info if we have valid values
+                if rsi is not None and tech_score is not None:
+                    tech_info = f"""
                 <div style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
                     <strong>Technical:</strong> RSI: {rsi:.1f} | Trend: {trend} | Score: {tech_score:.0f}/100
                 </div>
@@ -409,9 +412,12 @@ class DashboardGenerator:
             # Sentiment details
             sent_info = ""
             if sent:
-                sent_score = sent.get('sentiment_score', 0)
-                sent_label = sent.get('sentiment_label', 'neutral')
-                sent_info = f"""
+                sent_score = sent.get('sentiment_score')
+                sent_label = sent.get('sentiment_label') or 'neutral'
+                
+                # Only show sentiment if we have a valid score
+                if sent_score is not None:
+                    sent_info = f"""
                 <div style="margin-top: 5px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
                     <strong>Sentiment:</strong> {sent_label} ({sent_score:.2f})
                 </div>
@@ -427,6 +433,11 @@ class DashboardGenerator:
                 </div>
                 """
 
+            # Price display - check if price exists
+            price_display = ""
+            if signal.price_at_signal is not None:
+                price_display = f'<div class="price">Current Price: ${signal.price_at_signal:.2f}</div>'
+
             html += f"""
             <div class="signal-card">
                 <div class="signal-header">
@@ -440,7 +451,7 @@ class DashboardGenerator:
                     {trigger_badges}
                 </div>
                 <div class="notes">{signal.notes}</div>
-                <div class="price">Current Price: ${signal.price_at_signal:.2f}</div>
+                {price_display}
                 {tech_info}
                 {sent_info}
                 {reddit_info}
@@ -475,11 +486,25 @@ class DashboardGenerator:
         closed = stats['closed_trades']
         open_pos = stats['open_positions']
 
+        # Safely get values with defaults
+        win_rate = closed.get('win_rate', 0) or 0
+        avg_return_pct = closed.get('avg_return_pct', 0) or 0
+        total_pnl = closed.get('total_pnl', 0) or 0
+        avg_days_held = closed.get('avg_days_held', 0) or 0
+        best_return = closed.get('best_return', 0) or 0
+        worst_return = closed.get('worst_return', 0) or 0
+        trade_count = closed.get('count', 0) or 0
+        
+        total_deployed = open_pos.get('total_deployed', 0) or 0
+        unrealized_pnl = open_pos.get('unrealized_pnl', 0) or 0
+        unrealized_pct = open_pos.get('unrealized_pct', 0) or 0
+        open_count = open_pos.get('count', 0) or 0
+
         # Determine color classes
-        win_rate_class = 'positive' if closed['win_rate'] >= 50 else 'negative'
-        avg_return_class = 'positive' if closed['avg_return_pct'] > 0 else 'negative'
-        total_pnl_class = 'positive' if closed['total_pnl'] > 0 else 'negative'
-        unrealized_class = 'positive' if open_pos.get('unrealized_pnl', 0) > 0 else 'negative'
+        win_rate_class = 'positive' if win_rate >= 50 else 'negative'
+        avg_return_class = 'positive' if avg_return_pct > 0 else 'negative'
+        total_pnl_class = 'positive' if total_pnl > 0 else 'negative'
+        unrealized_class = 'positive' if unrealized_pnl > 0 else 'negative'
 
         html = f"""
         <div class="paper-trading">
@@ -491,47 +516,47 @@ class DashboardGenerator:
             <h3 style="margin-top: 20px; color: #667eea;">Closed Positions Stats</h3>
             <div class="pt-metrics">
                 <div class="pt-metric-card">
-                    <div class="pt-metric-value neutral">{closed['count']}</div>
+                    <div class="pt-metric-value neutral">{trade_count}</div>
                     <div class="pt-metric-label">Total Trades</div>
                 </div>
                 <div class="pt-metric-card">
-                    <div class="pt-metric-value {win_rate_class}">{closed['win_rate']:.1f}%</div>
+                    <div class="pt-metric-value {win_rate_class}">{win_rate:.1f}%</div>
                     <div class="pt-metric-label">Win Rate</div>
                 </div>
                 <div class="pt-metric-card">
-                    <div class="pt-metric-value {avg_return_class}">{closed['avg_return_pct']:+.1f}%</div>
+                    <div class="pt-metric-value {avg_return_class}">{avg_return_pct:+.1f}%</div>
                     <div class="pt-metric-label">Avg Return</div>
                 </div>
                 <div class="pt-metric-card">
-                    <div class="pt-metric-value {total_pnl_class}">${closed['total_pnl']:+.0f}</div>
+                    <div class="pt-metric-value {total_pnl_class}">${total_pnl:+.0f}</div>
                     <div class="pt-metric-label">Total P/L</div>
                 </div>
                 <div class="pt-metric-card">
-                    <div class="pt-metric-value neutral">{closed['avg_days_held']:.0f}</div>
+                    <div class="pt-metric-value neutral">{avg_days_held:.0f}</div>
                     <div class="pt-metric-label">Avg Days Held</div>
                 </div>
                 <div class="pt-metric-card">
-                    <div class="pt-metric-value positive">{closed['best_return']:.1f}%</div>
+                    <div class="pt-metric-value positive">{best_return:.1f}%</div>
                     <div class="pt-metric-label">Best Trade</div>
                 </div>
                 <div class="pt-metric-card">
-                    <div class="pt-metric-value negative">{closed['worst_return']:.1f}%</div>
+                    <div class="pt-metric-value negative">{worst_return:.1f}%</div>
                     <div class="pt-metric-label">Worst Trade</div>
                 </div>
             </div>
 
-            <h3 style="margin-top: 25px; color: #667eea;">Open Positions ({open_pos['count']})</h3>
+            <h3 style="margin-top: 25px; color: #667eea;">Open Positions ({open_count})</h3>
             <div class="pt-metrics">
                 <div class="pt-metric-card">
-                    <div class="pt-metric-value neutral">${open_pos['total_deployed']:,.0f}</div>
+                    <div class="pt-metric-value neutral">${total_deployed:,.0f}</div>
                     <div class="pt-metric-label">Capital Deployed</div>
                 </div>
                 <div class="pt-metric-card">
-                    <div class="pt-metric-value {unrealized_class}">${open_pos.get('unrealized_pnl', 0):+.0f}</div>
+                    <div class="pt-metric-value {unrealized_class}">${unrealized_pnl:+.0f}</div>
                     <div class="pt-metric-label">Unrealized P/L</div>
                 </div>
                 <div class="pt-metric-card">
-                    <div class="pt-metric-value {unrealized_class}">{open_pos.get('unrealized_pct', 0):+.1f}%</div>
+                    <div class="pt-metric-value {unrealized_class}">{unrealized_pct:+.1f}%</div>
                     <div class="pt-metric-label">Unrealized %</div>
                 </div>
             </div>
@@ -544,17 +569,25 @@ class DashboardGenerator:
             """
             recent_closes = stats['recent_closes'] if isinstance(stats['recent_closes'], list) else []
             for trade in recent_closes[:5]:
-                pnl_class = 'pt-position' if trade['profit_loss'] > 0 else 'pt-position pt-loss'
-                exit_icon = '✅' if trade['profit_loss'] > 0 else '❌'
-                html += f"""
+                profit_loss = trade.get('profit_loss')
+                return_pct = trade.get('return_pct')
+                entry_price = trade.get('entry_price')
+                exit_price = trade.get('exit_price')
+                days_held = trade.get('days_held')
+                exit_reason = trade.get('exit_reason', 'unknown')
+                
+                if profit_loss is not None and return_pct is not None and entry_price and exit_price and days_held is not None:
+                    pnl_class = 'pt-position' if profit_loss > 0 else 'pt-position pt-loss'
+                    exit_icon = '✅' if profit_loss > 0 else '❌'
+                    html += f"""
                 <div class="{pnl_class}">
                     <strong>{exit_icon} {trade['ticker']}</strong> •
-                    {trade['exit_reason'].replace('_', ' ').title()} •
-                    <span style="color: {'#00b894' if trade['profit_loss'] > 0 else '#d63031'}; font-weight: bold;">
-                        {trade['return_pct']:+.1f}% (${trade['profit_loss']:+.0f})
+                    {exit_reason.replace('_', ' ').title()} •
+                    <span style="color: {'#00b894' if profit_loss > 0 else '#d63031'}; font-weight: bold;">
+                        {return_pct:+.1f}% (${profit_loss:+.0f})
                     </span> •
-                    {trade['days_held']} days •
-                    Entry: ${trade['entry_price']:.2f} → Exit: ${trade['exit_price']:.2f}
+                    {days_held} days •
+                    Entry: ${entry_price:.2f} → Exit: ${exit_price:.2f}
                 </div>
                 """
 
@@ -566,18 +599,22 @@ class DashboardGenerator:
             open_positions = stats['open_positions'] if isinstance(stats['open_positions'], list) else []
             for pos in open_positions[:10]:
                 current_price = pos.get('current_price')
-                if current_price:
+                entry_price = pos.get('entry_price')
+                stop_loss = pos.get('stop_loss')
+                target_price = pos.get('target_price')
+                
+                if current_price and entry_price and stop_loss and target_price:
                     pnl_class = 'pt-position' if pos.get('unrealized_pnl', 0) > 0 else 'pt-position pt-loss'
                     html += f"""
                     <div class="{pnl_class}">
                         <strong>{pos['ticker']}</strong> •
                         Conviction: {pos['conviction']} •
-                        Entry: ${pos['entry_price']:.2f} → Now: ${current_price:.2f} •
+                        Entry: ${entry_price:.2f} → Now: ${current_price:.2f} •
                         <span style="color: {'#00b894' if pos.get('unrealized_pnl', 0) > 0 else '#d63031'}; font-weight: bold;">
                             {pos.get('unrealized_pct', 0):+.1f}% (${pos.get('unrealized_pnl', 0):+.0f})
                         </span> •
                         {pos['days_held']} days •
-                        Stop: ${pos['stop_loss']:.2f} | Target: ${pos['target_price']:.2f}
+                        Stop: ${stop_loss:.2f} | Target: ${target_price:.2f}
                     </div>
                     """
 
@@ -655,12 +692,15 @@ class DashboardGenerator:
             html += "<div class='macro-indicators'><h3>Key Economic Indicators:</h3>"
 
             for indicator_name, data in indicators.items():
-                value = data.get('value', 'N/A')
+                value = data.get('value')
                 name = data.get('name', indicator_name)
                 date = data.get('date', 'Unknown')
 
-                # Format value based on indicator
-                if indicator_name == 'VIX':
+                # Format value based on indicator - check if value exists and is numeric
+                if value is None or value == 'N/A':
+                    value_str = 'N/A'
+                    unit = ""
+                elif indicator_name == 'VIX':
                     value_str = f"{value:.2f}"
                     unit = ""
                 elif indicator_name in ['UNEMPLOYMENT', 'TREASURY_10Y', 'INFLATION']:
