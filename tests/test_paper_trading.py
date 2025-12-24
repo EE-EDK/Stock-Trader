@@ -489,7 +489,7 @@ class TestUpdatePositions:
         )
 
         # Update with current price
-        current_prices = {'AAPL': 110.0}
+        current_prices = {'AAPL': {'price': 110.0, 'date': '2025-12-22'}}
         self.manager.update_positions(current_prices, datetime.now())
 
         # Check snapshot was created
@@ -517,7 +517,7 @@ class TestUpdatePositions:
         )
 
         # Update with price at target ($120 = 20% profit)
-        current_prices = {'AAPL': 121.0}  # Above target
+        current_prices = {'AAPL': {'price': 121.0, 'date': '2025-12-22'}}  # Above target
         self.manager.update_positions(current_prices, datetime.now())
 
         # Check trade was closed
@@ -544,7 +544,7 @@ class TestUpdatePositions:
         )
 
         # Update with price at stop loss ($90 = -10%)
-        current_prices = {'AAPL': 89.0}  # Below stop loss
+        current_prices = {'AAPL': {'price': 89.0, 'date': '2025-12-22'}}  # Below stop loss
         self.manager.update_positions(current_prices, datetime.now())
 
         # Check trade was closed
@@ -571,7 +571,7 @@ class TestUpdatePositions:
         )
 
         # Update with current price
-        current_prices = {'AAPL': 105.0}
+        current_prices = {'AAPL': {'price': 105.0, 'date': '2025-12-22'}}
         self.manager.update_positions(current_prices, datetime.now())
 
         # Check trade was closed

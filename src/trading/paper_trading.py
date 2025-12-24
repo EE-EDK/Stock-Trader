@@ -64,6 +64,9 @@ class PaperTradingManager:
         conviction 60 → 1.2x base ($1200)
         conviction 50 → 1.0x base ($1000)
         """
+        # Clamp conviction to minimum of 0 to avoid negative position sizes
+        conviction = max(0, conviction)
+
         # Linear scaling from conviction
         # conviction 50 = 1.0x, conviction 100 = 2.0x
         multiplier = 1.0 + ((conviction - 50) / 50)

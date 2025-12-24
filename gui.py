@@ -51,6 +51,7 @@ class StockTraderGUI:
         self.create_backtesting_tab()
         self.create_thresholds_tab()
         self.create_email_tab()
+        self.create_utilities_tab()
         self.create_pipeline_tab()
 
         # Bottom buttons
@@ -417,6 +418,183 @@ class StockTraderGUI:
         self.create_labeled_entry(scrollable_frame, "Recipients (comma-separated)", "email.recipients", "email1@gmail.com,email2@gmail.com", row)
 
         canvas.pack(side="left", fill="both", expand=True)
+
+    def create_utilities_tab(self):
+        """Development utilities tab"""
+        tab = ttkb.Frame(self.notebook)
+        self.notebook.add(tab, text="🛠️ Utilities")
+
+        # Main container with padding
+        container = ttkb.Frame(tab)
+        container.pack(fill=BOTH, expand=YES, padx=20, pady=20)
+
+        # Title
+        ttkb.Label(
+            container,
+            text="Development & Testing Utilities",
+            font=("Helvetica", 16, "bold")
+        ).pack(anchor=W, pady=(0, 20))
+
+        # Type Verification section
+        type_frame = ttkb.LabelFrame(container, text="Type Safety Verification", padding=15)
+        type_frame.pack(fill=X, pady=10)
+
+        ttkb.Label(
+            type_frame,
+            text="AST-based type checker - finds dict/float confusion, NoneType issues, unsafe JSON parsing",
+            wraplength=600
+        ).pack(anchor=W, pady=5)
+
+        ttkb.Button(
+            type_frame,
+            text="🔍 Run Type Checker",
+            command=lambda: self.run_utility("utils/type_check.py", "Type Checker"),
+            bootstyle="info"
+        ).pack(anchor=W, pady=5)
+
+        # Bug Fix Verification section
+        verify_frame = ttkb.LabelFrame(container, text="Bug Fix Verification", padding=15)
+        verify_frame.pack(fill=X, pady=10)
+
+        ttkb.Label(
+            verify_frame,
+            text="Verify all known bug fixes are present in your codebase",
+            wraplength=600
+        ).pack(anchor=W, pady=5)
+
+        ttkb.Button(
+            verify_frame,
+            text="✅ Verify Bug Fixes",
+            command=lambda: self.run_utility("utils/verify_version.py", "Bug Fix Verifier"),
+            bootstyle="success"
+        ).pack(anchor=W, pady=5)
+
+        # Backtesting section
+        backtest_frame = ttkb.LabelFrame(container, text="Backtesting", padding=15)
+        backtest_frame.pack(fill=X, pady=10)
+
+        ttkb.Label(
+            backtest_frame,
+            text="Run backtest on historical signals to validate strategy performance",
+            wraplength=600
+        ).pack(anchor=W, pady=5)
+
+        days_frame = ttkb.Frame(backtest_frame)
+        days_frame.pack(anchor=W, pady=5)
+
+        ttkb.Label(days_frame, text="Lookback days:").pack(side=LEFT, padx=5)
+        self.backtest_days = ttkb.Entry(days_frame, width=10)
+        self.backtest_days.insert(0, "90")
+        self.backtest_days.pack(side=LEFT, padx=5)
+
+        ttkb.Button(
+            backtest_frame,
+            text="📊 Run Backtest",
+            command=self.run_backtest,
+            bootstyle="primary"
+        ).pack(anchor=W, pady=5)
+
+        # Runtime Validation section
+        runtime_frame = ttkb.LabelFrame(container, text="Runtime Validation", padding=15)
+        runtime_frame.pack(fill=X, pady=10)
+
+        ttkb.Label(
+            runtime_frame,
+            text="Test complete pipeline with mock data (no API calls required)",
+            wraplength=600
+        ).pack(anchor=W, pady=5)
+
+        ttkb.Button(
+            runtime_frame,
+            text="🧪 Run Runtime Tests",
+            command=lambda: self.run_utility("utils/test_runtime.py", "Runtime Validator"),
+            bootstyle="warning"
+        ).pack(anchor=W, pady=5)
+
+        # Output area
+        output_frame = ttkb.LabelFrame(container, text="Output", padding=10)
+        output_frame.pack(fill=BOTH, expand=YES, pady=10)
+
+        self.util_output = scrolledtext.ScrolledText(
+            output_frame,
+            height=15,
+            bg='#2b3e50',
+            fg='#ecf0f1',
+            font=('Courier', 10)
+        )
+        self.util_output.pack(fill=BOTH, expand=YES)
+
+    def run_utility(self, script_path, name):
+        """Run a utility script and display output"""
+        self.util_output.delete(1.0, tk.END)
+        self.util_output.insert(tk.END, f"Running {name}...\n\n")
+
+        def run():
+            try:
+                process = subprocess.Popen(
+                    ["python", script_path],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1
+                )
+
+                for line in process.stdout:
+                    self.util_output.insert(tk.END, line)
+                    self.util_output.see(tk.END)
+
+                process.wait()
+
+                if process.returncode == 0:
+                    self.util_output.insert(tk.END, f"\n✅ {name} completed successfully\n")
+                else:
+                    self.util_output.insert(tk.END, f"\n❌ {name} failed with code {process.returncode}\n")
+
+            except Exception as e:
+                self.util_output.insert(tk.END, f"\n❌ Error: {str(e)}\n")
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def run_backtest(self):
+        """Run backtest with specified days"""
+        days = self.backtest_days.get()
+        try:
+            days_int = int(days)
+            if days_int <= 0:
+                messagebox.showerror("Invalid Input", "Days must be a positive number")
+                return
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Days must be a valid number")
+            return
+
+        self.util_output.delete(1.0, tk.END)
+        self.util_output.insert(tk.END, f"Running backtest for last {days} days...\n\n")
+
+        def run():
+            try:
+                process = subprocess.Popen(
+                    ["python", "utils/backtest.py", "--days", days],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1
+                )
+
+                for line in process.stdout:
+                    self.util_output.insert(tk.END, line)
+                    self.util_output.see(tk.END)
+
+                process.wait()
+
+                if process.returncode == 0:
+                    self.util_output.insert(tk.END, f"\n✅ Backtest completed successfully\n")
+                else:
+                    self.util_output.insert(tk.END, f"\n❌ Backtest failed with code {process.returncode}\n")
+
+            except Exception as e:
+                self.util_output.insert(tk.END, f"\n❌ Error: {str(e)}\n")
+
+        threading.Thread(target=run, daemon=True).start()
 
     def create_pipeline_tab(self):
         """Pipeline execution tab"""
