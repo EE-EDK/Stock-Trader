@@ -379,14 +379,15 @@ The Stock Trader includes a full-featured GUI built with ttkbootstrap for users 
 
 ### Features
 
-- **7 Tabbed Sections:**
+- **8 Tabbed Sections:**
   1. **API Keys** - Manage all API credentials
   2. **Data Collection** - Toggle and configure data sources
   3. **Paper Trading** - Configure mock trading settings
   4. **Backtesting** - Set up backtesting parameters
   5. **Thresholds** - Tune signal detection thresholds
   6. **Email** - Configure email alerts
-  7. **Run Pipeline** - Execute the pipeline with live console output
+  7. **Utilities** - Run development tools (type checker, bug verifier, backtest, runtime tests)
+  8. **Run Pipeline** - Execute the pipeline with live console output
 
 - **Dark Theme** - Professional dark UI using ttkbootstrap's "darkly" theme
 - **Live Console Output** - See pipeline progress in real-time
@@ -479,6 +480,14 @@ python gui.py
 - Password (app password for Gmail)
 - Recipients list
 - Test email button
+
+**Utilities Tab:**
+- Type Safety Verification section with "Run Type Checker" button
+- Bug Fix Verification section with "Verify Bug Fixes" button
+- Backtesting section with configurable lookback days and "Run Backtest" button
+- Runtime Validation section with "Run Runtime Tests" button
+- Live output area showing results from utility scripts
+- All utilities run in background threads
 
 **Run Pipeline Tab:**
 - Large "Run Pipeline" button
