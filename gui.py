@@ -627,7 +627,7 @@ class StockTraderGUI:
         ttkb.Button(
             control_frame,
             text="🧪 Run Backtest",
-            command=self.run_backtest,
+            command=self.run_backtest_from_pipeline,
             bootstyle="info",
             width=20
         ).pack(side=LEFT, padx=5)
@@ -873,19 +873,19 @@ class StockTraderGUI:
             self.run_btn.config(state=NORMAL)
             self.stop_btn.config(state=DISABLED)
 
-    def run_backtest(self):
-        """Run backtesting script"""
+    def run_backtest_from_pipeline(self):
+        """Run backtesting script from pipeline tab"""
         self.clear_output()
         self.log_to_console("🧪 Running backtest...\n\n")
 
-        thread = threading.Thread(target=self._run_backtest_thread, daemon=True)
+        thread = threading.Thread(target=self._run_backtest_pipeline_thread, daemon=True)
         thread.start()
 
-    def _run_backtest_thread(self):
-        """Thread function to run backtest"""
+    def _run_backtest_pipeline_thread(self):
+        """Thread function to run backtest from pipeline tab"""
         try:
             process = subprocess.Popen(
-                ["python", "backtest.py"],
+                ["python", "utils/backtest.py"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
