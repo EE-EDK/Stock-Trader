@@ -84,6 +84,24 @@ class StockTraderGUI:
         tab = ttkb.Frame(self.notebook)
         self.notebook.add(tab, text="🔑 API Keys")
 
+        # Help button at the top
+        help_frame = ttkb.Frame(tab)
+        help_frame.pack(fill=X, padx=10, pady=10)
+
+        ttkb.Button(
+            help_frame,
+            text="📖 API Setup Guide",
+            command=self.show_api_setup_guide,
+            bootstyle="info-outline",
+            width=20
+        ).pack(side=LEFT, padx=5)
+
+        ttkb.Label(
+            help_frame,
+            text="Click for detailed instructions on getting your FREE API keys",
+            font=("Helvetica", 9, "italic")
+        ).pack(side=LEFT, padx=10)
+
         # Scrollable frame
         canvas = tk.Canvas(tab, bg='#2b3e50')
         scrollbar = ttkb.Scrollbar(tab, orient="vertical", command=canvas.yview)
@@ -172,69 +190,89 @@ class StockTraderGUI:
         # Alpha Vantage
         self.create_section_header(scrollable_frame, "Alpha Vantage Sentiment", row)
         row += 1
-        self.create_checkbox(scrollable_frame, "Enabled", "collection.alphavantage.enabled", row)
+        self.create_checkbox(scrollable_frame, "Enabled", "collection.alphavantage.enabled", row,
+            tooltip="Enable Alpha Vantage news sentiment analysis. Provides bullish/bearish sentiment scores from financial news articles. Uses FREE API tier (100 calls/day).")
         row += 1
-        self.create_labeled_spinbox(scrollable_frame, "Top N Tickers", "collection.alphavantage.top_n", 1, 100, row)
+        self.create_labeled_spinbox(scrollable_frame, "Top N Tickers", "collection.alphavantage.top_n", 1, 100, row,
+            tooltip="Analyze sentiment for top N tickers by social media mentions. Lower = fewer API calls. Recommended: 20 for FREE tier to stay within limits.")
         row += 1
-        self.create_labeled_spinbox(scrollable_frame, "Articles per Ticker", "collection.alphavantage.articles_per_ticker", 1, 100, row)
+        self.create_labeled_spinbox(scrollable_frame, "Articles per Ticker", "collection.alphavantage.articles_per_ticker", 1, 100, row,
+            tooltip="Number of news articles to analyze per ticker. More articles = better sentiment accuracy but uses more API calls. Recommended: 50.")
         row += 1
 
         # YFinance
         self.create_section_header(scrollable_frame, "Yahoo Finance (FREE - Unlimited)", row)
         row += 1
-        self.create_checkbox(scrollable_frame, "Enabled", "collection.yfinance.enabled", row)
+        self.create_checkbox(scrollable_frame, "Enabled", "collection.yfinance.enabled", row,
+            tooltip="Enable Yahoo Finance data collection. Provides stock fundamentals, company info, and financial metrics. 100% FREE with unlimited calls.")
         row += 1
-        self.create_checkbox(scrollable_frame, "Collect Fundamentals", "collection.yfinance.collect_fundamentals", row)
+        self.create_checkbox(scrollable_frame, "Collect Fundamentals", "collection.yfinance.collect_fundamentals", row,
+            tooltip="Collect fundamental data: P/E ratio, market cap, EPS, dividend yield, debt ratios. Used to filter out overvalued or risky stocks.")
         row += 1
-        self.create_checkbox(scrollable_frame, "Collect Analyst Ratings", "collection.yfinance.collect_analyst_ratings", row)
+        self.create_checkbox(scrollable_frame, "Collect Analyst Ratings", "collection.yfinance.collect_analyst_ratings", row,
+            tooltip="Collect Wall Street analyst recommendations (buy/hold/sell) and price targets. Useful for confirming signal quality.")
         row += 1
 
         # VADER Sentiment
         self.create_section_header(scrollable_frame, "VADER Sentiment (Local - No API)", row)
         row += 1
-        self.create_checkbox(scrollable_frame, "Enabled", "collection.vader_sentiment.enabled", row)
+        self.create_checkbox(scrollable_frame, "Enabled", "collection.vader_sentiment.enabled", row,
+            tooltip="Enable VADER (Valence Aware Dictionary for sEntiment Reasoning). Local sentiment analysis - no API required. Analyzes scraped headlines for bullish/bearish tone.")
         row += 1
-        self.create_checkbox(scrollable_frame, "Scrape Headlines", "collection.vader_sentiment.scrape_headlines", row)
+        self.create_checkbox(scrollable_frame, "Scrape Headlines", "collection.vader_sentiment.scrape_headlines", row,
+            tooltip="Automatically scrape financial news headlines from public sources and analyze sentiment. Backup for Alpha Vantage when API limit reached.")
         row += 1
 
         # Reddit
         self.create_section_header(scrollable_frame, "Reddit", row)
         row += 1
-        self.create_checkbox(scrollable_frame, "Enabled", "collection.reddit.enabled", row)
+        self.create_checkbox(scrollable_frame, "Enabled", "collection.reddit.enabled", row,
+            tooltip="Enable Reddit data collection from r/wallstreetbets, r/stocks, r/investing. Tracks social momentum and viral stocks. Requires API credentials.")
         row += 1
-        self.create_labeled_spinbox(scrollable_frame, "Lookback Hours", "collection.reddit.lookback_hours", 1, 168, row)
+        self.create_labeled_spinbox(scrollable_frame, "Lookback Hours", "collection.reddit.lookback_hours", 1, 168, row,
+            tooltip="How many hours of Reddit history to analyze. 24 hours = daily momentum. 168 hours = weekly trends. Lower = fresher signals.")
         row += 1
 
         # Technical Analysis
         self.create_section_header(scrollable_frame, "Technical Analysis (No API)", row)
         row += 1
-        self.create_checkbox(scrollable_frame, "Enabled", "collection.technical_analysis.enabled", row)
+        self.create_checkbox(scrollable_frame, "Enabled", "collection.technical_analysis.enabled", row,
+            tooltip="Enable technical indicator calculations: RSI, MACD, Bollinger Bands, Moving Averages. Uses local price data - no API required.")
         row += 1
-        self.create_labeled_spinbox(scrollable_frame, "Lookback Days", "collection.technical_analysis.lookback_days", 10, 200, row)
+        self.create_labeled_spinbox(scrollable_frame, "Lookback Days", "collection.technical_analysis.lookback_days", 10, 200, row,
+            tooltip="Days of price history for technical calculations. 50 days = standard for RSI/MACD. More = smoother trends but slower reaction. Less = faster signals but noisier.")
         row += 1
 
         # FRED
         self.create_section_header(scrollable_frame, "FRED Macro Indicators", row)
         row += 1
-        self.create_checkbox(scrollable_frame, "Enabled", "collection.fred.enabled", row)
+        self.create_checkbox(scrollable_frame, "Enabled", "collection.fred.enabled", row,
+            tooltip="Enable Federal Reserve Economic Data (FRED) collection. Tracks macro economic conditions to assess market risk. FREE API with 120 calls/minute.")
         row += 1
-        self.create_checkbox(scrollable_frame, "Collect VIX", "collection.fred.collect_vix", row)
+        self.create_checkbox(scrollable_frame, "Collect VIX", "collection.fred.collect_vix", row,
+            tooltip="VIX (Volatility Index) - Market 'fear gauge'. High VIX (>30) = high volatility/risk. Low VIX (<15) = calm market. Used to adjust position sizing.")
         row += 1
-        self.create_checkbox(scrollable_frame, "Collect Rates", "collection.fred.collect_rates", row)
+        self.create_checkbox(scrollable_frame, "Collect Rates", "collection.fred.collect_rates", row,
+            tooltip="10-Year Treasury Rate - Risk-free rate benchmark. Rising rates can pressure stock valuations. Affects discount rate for future earnings.")
         row += 1
-        self.create_checkbox(scrollable_frame, "Collect Unemployment", "collection.fred.collect_unemployment", row)
+        self.create_checkbox(scrollable_frame, "Collect Unemployment", "collection.fred.collect_unemployment", row,
+            tooltip="Unemployment Rate - Economic health indicator. Low (<4%) = strong economy. High (>7%) = recession risk. Affects consumer spending and earnings.")
         row += 1
-        self.create_checkbox(scrollable_frame, "Collect Inflation", "collection.fred.collect_inflation", row)
+        self.create_checkbox(scrollable_frame, "Collect Inflation", "collection.fred.collect_inflation", row,
+            tooltip="CPI (Consumer Price Index) - Inflation measure. Target ~2% = healthy. High (>4%) = inflation concerns, Fed may raise rates. Affects profit margins.")
         row += 1
-        self.create_checkbox(scrollable_frame, "Collect Forex", "collection.fred.collect_forex", row)
+        self.create_checkbox(scrollable_frame, "Collect Forex", "collection.fred.collect_forex", row,
+            tooltip="USD/EUR Exchange Rate - Dollar strength indicator. Strong dollar hurts international revenue. Affects companies with foreign exposure.")
         row += 1
 
         # Congress Trades
         self.create_section_header(scrollable_frame, "Congress Stock Trades (100% FREE!)", row)
         row += 1
-        self.create_checkbox(scrollable_frame, "Enabled", "collection.congress.enabled", row)
+        self.create_checkbox(scrollable_frame, "Enabled", "collection.congress.enabled", row,
+            tooltip="Track stock trades by US Congress members (House & Senate). Studies show Congressional trades can outperform market. 100% FREE - no API key needed!")
         row += 1
-        self.create_labeled_spinbox(scrollable_frame, "Lookback Days", "collection.congress.lookback_days", 7, 365, row)
+        self.create_labeled_spinbox(scrollable_frame, "Lookback Days", "collection.congress.lookback_days", 7, 365, row,
+            tooltip="Days of Congressional trading history to collect. 90 days = quarterly activity. Trades must be reported within 45 days of transaction. Longer lookback = more historical context.")
 
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
@@ -258,28 +296,35 @@ class StockTraderGUI:
 
         row = 0
 
-        self.create_checkbox(scrollable_frame, "Enable Paper Trading", "paper_trading.enabled", row)
+        self.create_checkbox(scrollable_frame, "Enable Paper Trading", "paper_trading.enabled", row,
+            tooltip="Enable mock trading system to validate signals before risking real capital. Tracks entry/exit, P/L, win rate. Build confidence with 30+ days of paper trading first!")
         row += 1
 
-        self.create_labeled_spinbox(scrollable_frame, "Minimum Conviction", "paper_trading.min_conviction", 0, 100, row)
+        self.create_labeled_spinbox(scrollable_frame, "Minimum Conviction", "paper_trading.min_conviction", 0, 100, row,
+            tooltip="Only create paper trades for signals with conviction >= this value. Higher = more selective. Recommended: 60 for quality signals. 70+ for high conviction only.")
         row += 1
 
-        self.create_labeled_spinbox(scrollable_frame, "Position Size ($)", "paper_trading.position_size", 100, 10000, row)
+        self.create_labeled_spinbox(scrollable_frame, "Position Size ($)", "paper_trading.position_size", 100, 10000, row,
+            tooltip="Base position size in dollars. Actual size scales with conviction (50 conv = 1x, 100 conv = 2x). Example: $1000 base, 75 conviction = $1500 position.")
         row += 1
 
-        self.create_labeled_spinbox(scrollable_frame, "Max Open Positions", "paper_trading.max_open_positions", 1, 50, row)
+        self.create_labeled_spinbox(scrollable_frame, "Max Open Positions", "paper_trading.max_open_positions", 1, 50, row,
+            tooltip="Maximum concurrent open positions. Limits total capital deployed. Prevents over-concentration. Recommended: 10 for diversification. Lower = more selective.")
         row += 1
 
         self.create_section_header(scrollable_frame, "Exit Strategy", row)
         row += 1
 
-        self.create_labeled_spinbox(scrollable_frame, "Hold Days", "paper_trading.hold_days", 1, 365, row)
+        self.create_labeled_spinbox(scrollable_frame, "Hold Days", "paper_trading.hold_days", 1, 365, row,
+            tooltip="Auto-close positions after this many days. Conservative: 14 days. Moderate: 30 days. Aggressive: 60 days. Longer = more patience for gains.")
         row += 1
 
-        self.create_labeled_spinbox(scrollable_frame, "Stop Loss %", "paper_trading.stop_loss_pct", -50, 0, row)
+        self.create_labeled_spinbox(scrollable_frame, "Stop Loss %", "paper_trading.stop_loss_pct", -50, 0, row,
+            tooltip="Exit if position loses this %. -10% = exit when down 10%. Conservative: -5%. Moderate: -10%. Aggressive: -15%. Protects against large losses.")
         row += 1
 
-        self.create_labeled_spinbox(scrollable_frame, "Take Profit %", "paper_trading.take_profit_pct", 0, 200, row)
+        self.create_labeled_spinbox(scrollable_frame, "Take Profit %", "paper_trading.take_profit_pct", 0, 200, row,
+            tooltip="Exit if position gains this %. 20% = exit when up 20%. Conservative: 10%. Moderate: 20%. Aggressive: 30%. Locks in profits before reversals.")
         row += 1
 
         self.create_section_header(scrollable_frame, "Reporting", row)
@@ -627,7 +672,7 @@ class StockTraderGUI:
         ttkb.Button(
             control_frame,
             text="🧪 Run Backtest",
-            command=self.run_backtest,
+            command=self.run_backtest_from_pipeline,
             bootstyle="info",
             width=20
         ).pack(side=LEFT, padx=5)
@@ -664,13 +709,14 @@ class StockTraderGUI:
             bootstyle="info"
         ).grid(row=row, column=0, columnspan=2, sticky=W, padx=10, pady=(15, 5))
 
-    def create_labeled_entry(self, parent, label, config_key, placeholder="", row=0, show=None):
+    def create_labeled_entry(self, parent, label, config_key, placeholder="", row=0, show=None, tooltip=None):
         """Create a labeled entry field"""
-        ttkb.Label(
+        label_widget = ttkb.Label(
             parent,
             text=label,
             bootstyle="inverse-dark"
-        ).grid(row=row, column=0, sticky=W, padx=10, pady=5)
+        )
+        label_widget.grid(row=row, column=0, sticky=W, padx=10, pady=5)
 
         var = tk.StringVar()
         entry = ttkb.Entry(
@@ -689,16 +735,22 @@ class StockTraderGUI:
                 bootstyle="secondary"
             ).grid(row=row, column=2, sticky=W, padx=5, pady=5)
 
+        # Add tooltip if provided
+        if tooltip:
+            self.create_tooltip(label_widget, tooltip)
+            self.create_tooltip(entry, tooltip)
+
         self.api_vars[config_key] = var
         return var
 
-    def create_labeled_spinbox(self, parent, label, config_key, from_, to, row):
+    def create_labeled_spinbox(self, parent, label, config_key, from_, to, row, tooltip=None):
         """Create a labeled spinbox"""
-        ttkb.Label(
+        label_widget = ttkb.Label(
             parent,
             text=label,
             bootstyle="inverse-dark"
-        ).grid(row=row, column=0, sticky=W, padx=10, pady=5)
+        )
+        label_widget.grid(row=row, column=0, sticky=W, padx=10, pady=5)
 
         var = tk.IntVar()
         spinbox = ttkb.Spinbox(
@@ -710,10 +762,15 @@ class StockTraderGUI:
         )
         spinbox.grid(row=row, column=1, sticky=W, padx=10, pady=5)
 
+        # Add tooltip if provided
+        if tooltip:
+            self.create_tooltip(label_widget, tooltip)
+            self.create_tooltip(spinbox, tooltip)
+
         self.api_vars[config_key] = var
         return var
 
-    def create_checkbox(self, parent, label, config_key, row):
+    def create_checkbox(self, parent, label, config_key, row, tooltip=None):
         """Create a checkbox"""
         var = tk.BooleanVar()
         checkbox = ttkb.Checkbutton(
@@ -723,6 +780,10 @@ class StockTraderGUI:
             bootstyle="success-round-toggle"
         )
         checkbox.grid(row=row, column=0, columnspan=2, sticky=W, padx=10, pady=5)
+
+        # Add tooltip if provided
+        if tooltip:
+            self.create_tooltip(checkbox, tooltip)
 
         self.api_vars[config_key] = var
         return var
@@ -873,19 +934,19 @@ class StockTraderGUI:
             self.run_btn.config(state=NORMAL)
             self.stop_btn.config(state=DISABLED)
 
-    def run_backtest(self):
-        """Run backtesting script"""
+    def run_backtest_from_pipeline(self):
+        """Run backtesting script from pipeline tab"""
         self.clear_output()
         self.log_to_console("🧪 Running backtest...\n\n")
 
-        thread = threading.Thread(target=self._run_backtest_thread, daemon=True)
+        thread = threading.Thread(target=self._run_backtest_pipeline_thread, daemon=True)
         thread.start()
 
-    def _run_backtest_thread(self):
-        """Thread function to run backtest"""
+    def _run_backtest_pipeline_thread(self):
+        """Thread function to run backtest from pipeline tab"""
         try:
             process = subprocess.Popen(
-                ["python", "backtest.py"],
+                ["python", "utils/backtest.py"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -918,6 +979,195 @@ class StockTraderGUI:
         self.console.config(state=NORMAL)
         self.console.delete(1.0, tk.END)
         self.console.config(state=DISABLED)
+
+    def show_api_setup_guide(self):
+        """Show API setup guide in a popup window"""
+        guide_window = tk.Toplevel(self.root)
+        guide_window.title("API Setup Quick Start Guide")
+        guide_window.geometry("800x700")
+        guide_window.configure(bg='#2b3e50')
+
+        # Make it modal
+        guide_window.transient(self.root)
+        guide_window.grab_set()
+
+        # Scrollable text widget
+        text_frame = ttkb.Frame(guide_window)
+        text_frame.pack(fill=BOTH, expand=YES, padx=20, pady=20)
+
+        text_widget = scrolledtext.ScrolledText(
+            text_frame,
+            wrap=tk.WORD,
+            bg='#1e1e1e',
+            fg='#ecf0f1',
+            font=('Helvetica', 10),
+            padx=15,
+            pady=15
+        )
+        text_widget.pack(fill=BOTH, expand=YES)
+
+        # Add content
+        guide_content = """🔑 API SETUP QUICK START GUIDE
+═══════════════════════════════════════════════════════════
+
+All APIs are 100% FREE with no credit card required!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1️⃣ FINNHUB (REQUIRED - 2 minutes)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+What you get: Stock prices, 60 API calls/minute
+
+Steps:
+ 1. Visit: https://finnhub.io/register
+ 2. Sign up with email (no credit card)
+ 3. Copy your API key from the dashboard
+ 4. Paste into "Finnhub API Key" field above
+ 5. Click "Save Configuration" at the bottom
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+2️⃣ ALPHA VANTAGE (Recommended - 2 minutes)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+What you get: News sentiment, market movers, 100 calls/day
+
+Steps:
+ 1. Visit: https://www.alphavantage.co/support/#api-key
+ 2. Enter your email → Get instant key (no credit card!)
+ 3. Copy your API key
+ 4. Paste into "Alpha Vantage API Key" field
+ 5. Click "Save Configuration"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+3️⃣ FRED (Optional - 2 minutes)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+What you get: Economic indicators (VIX, rates, unemployment), 120/min
+
+Steps:
+ 1. Visit: https://fred.stlouisfed.org/docs/api/api_key.html
+ 2. Click "Request API Key"
+ 3. Fill in your information (instant approval)
+ 4. Copy your API key
+ 5. Paste into "FRED API Key" field
+ 6. Go to "Data Collection" tab → Enable FRED
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+4️⃣ FINANCIAL MODELING PREP (Optional - 2 minutes)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+What you get: Earnings calendar, analyst estimates, 250 calls/day
+
+Steps:
+ 1. Visit: https://site.financialmodelingprep.com/developer/docs/pricing
+ 2. Sign up for FREE tier
+ 3. Copy your API key
+ 4. Paste into "Financial Modeling Prep Key" field
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+5️⃣ REDDIT (Optional - Requires manual approval)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️  Note: Reddit now requires manual approval (1-3 days)
+
+What you get: Track r/wallstreetbets, r/stocks mentions
+
+Steps:
+ 1. Request Access:
+    Visit: https://support.reddithelp.com/hc/en-us/requests/new
+    Form: Data API Access Request
+    App Name: Stock Sentiment Tracker
+    Use Case: Educational/Personal research
+
+ 2. Wait for approval email (1-3 days)
+
+ 3. Once approved:
+    a. Visit: https://www.reddit.com/prefs/apps
+    b. Click "create app" at bottom
+    c. Name: stock-tracker
+    d. Type: Select "script"
+    e. Redirect URI: http://localhost:8080
+    f. Click "create app"
+
+ 4. Copy client_id and client_secret
+ 5. Paste into Reddit fields above
+ 6. Set user agent: "stock-tracker:v1.0 (by u/yourname)"
+
+Alternative: System works great without Reddit (9 other FREE sources!)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ QUICK START CHECKLIST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Minimum to get started:
+ ☐ Finnhub API key (REQUIRED)
+ ☐ Alpha Vantage API key (Recommended)
+ ☐ Click "Save Configuration"
+ ☐ Go to "Run Pipeline" tab
+ ☐ Click "Run Main Pipeline"
+ ☐ View dashboard in reports/ folder
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 TIPS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• All APIs are 100% FREE forever - no credit card needed
+• Start with just Finnhub + Alpha Vantage (5 min total)
+• Add others later as you explore features
+• Free tiers have generous limits for personal use
+• No recurring costs - own your data locally
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Need help? Check the full README.md for detailed documentation.
+"""
+
+        text_widget.insert(1.0, guide_content)
+        text_widget.config(state=DISABLED)
+
+        # Close button
+        btn_frame = ttkb.Frame(guide_window)
+        btn_frame.pack(fill=X, padx=20, pady=(0, 20))
+
+        ttkb.Button(
+            btn_frame,
+            text="Close",
+            command=guide_window.destroy,
+            bootstyle="secondary",
+            width=15
+        ).pack(side=RIGHT)
+
+    def create_tooltip(self, widget, text):
+        """Create a tooltip for a widget that appears on hover"""
+        def show_tooltip(event):
+            tooltip = tk.Toplevel()
+            tooltip.wm_overrideredirect(True)
+            tooltip.wm_geometry(f"+{event.x_root+10}+{event.y_root+10}")
+
+            label = tk.Label(
+                tooltip,
+                text=text,
+                background="#333333",
+                foreground="#ffffff",
+                relief=tk.SOLID,
+                borderwidth=1,
+                font=("Helvetica", 9),
+                wraplength=300,
+                justify=tk.LEFT,
+                padx=8,
+                pady=6
+            )
+            label.pack()
+
+            widget._tooltip = tooltip
+
+        def hide_tooltip(event):
+            if hasattr(widget, '_tooltip'):
+                widget._tooltip.destroy()
+                del widget._tooltip
+
+        widget.bind('<Enter>', show_tooltip)
+        widget.bind('<Leave>', hide_tooltip)
 
     def check_output_queue(self):
         """Check output queue and update console"""
