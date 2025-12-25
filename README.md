@@ -393,7 +393,8 @@ The Stock Trader includes a full-featured GUI built with ttkbootstrap for users 
 - **Live Console Output** - See pipeline progress in real-time
 - **Configuration Management** - Save/load settings to `config/config.yaml`
 - **Input Validation** - Prevents invalid configurations
-- **Tooltips** - Helpful descriptions for all settings
+- **📖 API Setup Guide** - Click-to-open popup with step-by-step FREE API key instructions
+- **🎯 Comprehensive Tooltips** - 50+ hover tooltips explaining every configuration option with financial context, recommended values, and trade-offs
 
 ### Installation
 
@@ -433,53 +434,64 @@ python gui.py
 ### Screenshot Features
 
 **API Keys Tab:**
-- Finnhub API key input
-- Alpha Vantage API key input
-- FMP API key input
-- Reddit API credentials (client ID, secret, user agent)
-- FRED API key input
+- **📖 API Setup Guide Button** - Opens comprehensive popup window with:
+  - Step-by-step instructions for all 5 FREE APIs
+  - Exact URLs for registration
+  - What you get from each API (rates, limits, features)
+  - Quick start checklist (get running in 5 minutes)
+  - Tips: 100% FREE forever, no credit card needed
+- Finnhub API key input (with hover tooltip)
+- Alpha Vantage API key input (with hover tooltip)
+- FMP API key input (with hover tooltip)
+- Reddit API credentials: client ID, secret, user agent (with hover tooltips)
+- FRED API key input (with hover tooltip)
 
 **Data Collection Tab:**
-- Alpha Vantage toggle and settings (top_n, articles_per_ticker)
-- YFinance toggle and options (fundamentals, analyst ratings)
-- VADER sentiment toggle
-- Reddit toggle and subreddits
-- Technical analysis settings (lookback days)
-- FRED toggle and indicator selection
-- Congress trades toggle and lookback period
+- Alpha Vantage toggle and settings (top_n, articles_per_ticker) - **All fields include hover tooltips** explaining API usage, limits, and recommendations
+- YFinance toggle and options (fundamentals, analyst ratings) - **Tooltips explain** what data is collected and why it matters
+- VADER sentiment toggle - **Tooltip describes** offline sentiment analysis process
+- Reddit toggle and subreddits - **Tooltips explain** social media tracking and API requirements
+- Technical analysis settings (lookback days) - **Tooltips define** RSI, MACD, Bollinger Bands with financial context
+- FRED toggle and indicator selection - **Tooltips explain** VIX (volatility), CPI (inflation), rates, unemployment, forex
+- Congress trades toggle and lookback period - **Tooltips describe** Congressional trading data and significance
+- **20+ hover tooltips total** - Comprehensive explanations for financial tracking, API tiers, and recommended values
 
 **Paper Trading Tab:**
-- Enable/disable toggle
-- Minimum conviction threshold
-- Base position size
-- Max open positions
-- Hold days limit
-- Stop loss percentage
-- Take profit percentage
-- Backfill days
+- Enable/disable toggle - **Tooltip encourages** 30+ days of paper trading before risking real capital
+- Minimum conviction threshold - **Tooltip explains** conviction scoring (50-100 scale) and filtering
+- Base position size - **Tooltip describes** conviction-weighted sizing formula (1x-2x multiplier)
+- Max open positions - **Tooltip explains** capital allocation and risk management
+- Hold days limit - **Tooltip defines** maximum hold period before auto-exit
+- Stop loss percentage - **Tooltip explains** downside risk protection and exit triggers
+- Take profit percentage - **Tooltip describes** profit target and exit strategy
+- Backfill days - **Tooltip explains** historical trade backfill for performance analysis
+- **9 comprehensive tooltips** - Financial context, position sizing math, risk management strategies
 
 **Backtesting Tab:**
-- Initial capital
-- Position size
-- Max positions
-- Conviction weighted toggle
-- Hold days
-- Stop loss/take profit thresholds
-- Minimum conviction filter
+- Initial capital - **Tooltip explains** starting capital for simulation ($10,000 typical)
+- Position size - **Tooltip describes** base position sizing and conviction weighting
+- Max positions - **Tooltip explains** portfolio concentration and risk limits
+- Conviction weighted toggle - **Tooltip describes** dynamic position sizing based on signal strength
+- Hold days - **Tooltip defines** maximum hold period for backtest trades
+- Stop loss/take profit thresholds - **Tooltips explain** exit strategy and risk/reward ratios
+- Minimum conviction filter - **Tooltip describes** filtering low-quality signals from backtest
+- **7 comprehensive tooltips** - Simulation parameters, capital management, strategy validation
 
 **Thresholds Tab:**
-- Velocity spike settings (mention velocity, composite score)
-- Insider cluster settings (min insiders, lookback days, total value)
-- Combined signal settings
-- Minimum conviction for reporting
+- Velocity spike settings (mention velocity, composite score) - **Tooltips explain** social mention acceleration, 100%+ surge detection
+- Insider cluster settings (min insiders, lookback days, total value) - **Tooltips describe** "smart money" tracking and minimum thresholds
+- Combined signal settings - **Tooltips explain** multi-factor signal requirements and conviction bonuses
+- Minimum conviction for reporting - **Tooltip describes** filtering strategy and recommended values (40-60 range)
+- **7 comprehensive tooltips** - Signal detection thresholds, recommended ranges, trade-offs between sensitivity and precision
 
 **Email Tab:**
-- Enable/disable toggle
-- SMTP server and port
-- Sender email
-- Password (app password for Gmail)
-- Recipients list
-- Test email button
+- Enable/disable toggle - **Tooltip explains** optional email alert system for daily signals
+- SMTP server and port - **Tooltip provides** common SMTP settings (Gmail: smtp.gmail.com:587)
+- Sender email - **Tooltip describes** account used to send alerts
+- Password (app password for Gmail) - **Tooltip includes** instructions for Gmail app password generation (2FA + app password URL)
+- Recipients list - **Tooltip explains** comma-separated email list for alerts
+- Test email button - **Tooltip encourages** testing before enabling automatic alerts
+- **6 comprehensive tooltips** - Email setup guide, Gmail-specific instructions, security best practices
 
 **Utilities Tab:**
 - Type Safety Verification section with "Run Type Checker" button
