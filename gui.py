@@ -29,14 +29,18 @@ class StockTraderGUI:
         self.output_queue = queue.Queue()
         self.pipeline_process = None
 
+        # Queue for utilities output
+        self.util_output_queue = queue.Queue()
+
         # Create main container
         self.create_widgets()
 
         # Load existing config
         self.load_config()
 
-        # Start output queue checker
+        # Start output queue checkers
         self.check_output_queue()
+        self.check_util_output_queue()
 
     def create_widgets(self):
         """Create all GUI widgets"""
@@ -594,7 +598,7 @@ class StockTraderGUI:
     def run_utility(self, script_path, name):
         """Run a utility script and display output"""
         self.util_output.delete(1.0, tk.END)
-        self.util_output.insert(tk.END, f"Running {name}...\n\n")
+        self.util_output_queue.put(f"Running {name}...\n\n")
 
         def run():
             try:
@@ -611,18 +615,17 @@ class StockTraderGUI:
                 )
 
                 for line in process.stdout:
-                    self.util_output.insert(tk.END, line)
-                    self.util_output.see(tk.END)
+                    self.util_output_queue.put(line)
 
                 process.wait()
 
                 if process.returncode == 0:
-                    self.util_output.insert(tk.END, f"\n✅ {name} completed successfully\n")
+                    self.util_output_queue.put(f"\n✅ {name} completed successfully\n")
                 else:
-                    self.util_output.insert(tk.END, f"\n❌ {name} failed with code {process.returncode}\n")
+                    self.util_output_queue.put(f"\n❌ {name} failed with code {process.returncode}\n")
 
             except Exception as e:
-                self.util_output.insert(tk.END, f"\n❌ Error: {str(e)}\n")
+                self.util_output_queue.put(f"\n❌ Error: {str(e)}\n")
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -639,7 +642,7 @@ class StockTraderGUI:
             return
 
         self.util_output.delete(1.0, tk.END)
-        self.util_output.insert(tk.END, f"Running backtest for last {days} days...\n\n")
+        self.util_output_queue.put(f"Running backtest for last {days} days...\n\n")
 
         def run():
             try:
@@ -656,18 +659,17 @@ class StockTraderGUI:
                 )
 
                 for line in process.stdout:
-                    self.util_output.insert(tk.END, line)
-                    self.util_output.see(tk.END)
+                    self.util_output_queue.put(line)
 
                 process.wait()
 
                 if process.returncode == 0:
-                    self.util_output.insert(tk.END, f"\n✅ Backtest completed successfully\n")
+                    self.util_output_queue.put(f"\n✅ Backtest completed successfully\n")
                 else:
-                    self.util_output.insert(tk.END, f"\n❌ Backtest failed with code {process.returncode}\n")
+                    self.util_output_queue.put(f"\n❌ Backtest failed with code {process.returncode}\n")
 
             except Exception as e:
-                self.util_output.insert(tk.END, f"\n❌ Error: {str(e)}\n")
+                self.util_output_queue.put(f"\n❌ Error: {str(e)}\n")
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -1214,6 +1216,19 @@ Need help? Check the full README.md for detailed documentation.
 
         # Schedule next check
         self.root.after(100, self.check_output_queue)
+
+    def check_util_output_queue(self):
+        """Check utilities output queue and update util_output"""
+        try:
+            while True:
+                message = self.util_output_queue.get_nowait()
+                self.util_output.insert(tk.END, message)
+                self.util_output.see(tk.END)
+        except queue.Empty:
+            pass
+
+        # Schedule next check
+        self.root.after(100, self.check_util_output_queue)
 
 
 def main():
