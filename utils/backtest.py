@@ -9,8 +9,14 @@
 import argparse
 import yaml
 import sys
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
+
+# Add project root to Python path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from src.analysis.backtester import Backtester
 

@@ -598,12 +598,16 @@ class StockTraderGUI:
 
         def run():
             try:
+                # Get the directory where gui.py is located (project root)
+                project_root = os.path.dirname(os.path.abspath(__file__))
+
                 process = subprocess.Popen(
                     ["python", script_path],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
-                    bufsize=1
+                    bufsize=1,
+                    cwd=project_root  # Run from project root
                 )
 
                 for line in process.stdout:
@@ -639,12 +643,16 @@ class StockTraderGUI:
 
         def run():
             try:
+                # Get the directory where gui.py is located (project root)
+                project_root = os.path.dirname(os.path.abspath(__file__))
+
                 process = subprocess.Popen(
                     ["python", "utils/backtest.py", "--days", days],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
-                    bufsize=1
+                    bufsize=1,
+                    cwd=project_root  # Run from project root
                 )
 
                 for line in process.stdout:
@@ -967,12 +975,16 @@ class StockTraderGUI:
     def _run_backtest_pipeline_thread(self):
         """Thread function to run backtest from pipeline tab"""
         try:
+            # Get the directory where gui.py is located (project root)
+            project_root = os.path.dirname(os.path.abspath(__file__))
+
             process = subprocess.Popen(
                 ["python", "utils/backtest.py"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                bufsize=1
+                bufsize=1,
+                cwd=project_root  # Run from project root
             )
 
             for line in iter(process.stdout.readline, ''):
