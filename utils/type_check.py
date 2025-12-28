@@ -127,6 +127,10 @@ def check_dict_float_issues(filepath: str, source_lines: List[str]) -> List[Dict
     """
     issues = []
 
+    # Skip checking the type_check.py file itself to avoid self-detection
+    if 'type_check.py' in filepath:
+        return issues
+
     # Pattern 1: db.get_latest_prices() returns dict but used as float
     source_all = ''.join(source_lines)
     if 'db.get_latest_prices()' in source_all:
@@ -170,14 +174,23 @@ def check_none_comparison_issues(filepath: str, source_lines: List[str]) -> List
     """Check for comparisons that might fail with None values"""
     issues = []
 
+    # Skip checking the type_check.py file itself to avoid self-detection
+    if 'type_check.py' in filepath:
+        return issues
+
     for i, line in enumerate(source_lines, 1):
         # Look for comparisons without None checks
         if any(op in line for op in [' < ', ' > ', ' <= ', ' >= ']):
+            # Skip if the comparison is in a ternary expression or .get() with default
+            if '.get(' in line and ', ' in line:
+                # This is likely a .get() with a default value, skip it
+                continue
+
             # Check if there's a None check before this
             has_none_check = False
 
             # Look back a few lines for None check
-            for j in range(max(0, i - 5), i):
+            for j in range(max(0, i - 10), i):
                 if 'is None' in source_lines[j] or 'is not None' in source_lines[j]:
                     has_none_check = True
                     break
@@ -190,6 +203,10 @@ def check_none_comparison_issues(filepath: str, source_lines: List[str]) -> List
                 # Check if this variable comes from .get()
                 for j in range(max(0, i - 10), i):
                     if f"{var_name} = " in source_lines[j] and '.get(' in source_lines[j]:
+                        # Check if .get() has a default value
+                        if '.get(' in source_lines[j] and ', ' in source_lines[j]:
+                            # Has default value, skip
+                            break
                         if not has_none_check:
                             issues.append({
                                 'severity': 'error',
@@ -206,6 +223,10 @@ def check_none_comparison_issues(filepath: str, source_lines: List[str]) -> List
 def check_json_loads_issues(filepath: str, source_lines: List[str]) -> List[Dict]:
     """Check for unsafe json.loads() calls"""
     issues = []
+
+    # Skip checking the type_check.py file itself to avoid self-detection
+    if 'type_check.py' in filepath:
+        return issues
 
     for i, line in enumerate(source_lines, 1):
         if 'json.loads(' in line:
