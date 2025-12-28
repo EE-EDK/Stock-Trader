@@ -330,10 +330,12 @@ class StockTraderGUI:
         self.create_section_header(scrollable_frame, "Reporting", row)
         row += 1
 
-        self.create_checkbox(scrollable_frame, "Report in Dashboard", "paper_trading.report_in_dashboard", row)
+        self.create_checkbox(scrollable_frame, "Report in Dashboard", "paper_trading.report_in_dashboard", row,
+            tooltip="Include paper trading performance section in HTML dashboard. Shows win rate, total P/L, open positions, recent closes. Recommended: enabled for visibility.")
         row += 1
 
-        self.create_labeled_spinbox(scrollable_frame, "Backfill Days", "paper_trading.backfill_days", 0, 365, row)
+        self.create_labeled_spinbox(scrollable_frame, "Backfill Days", "paper_trading.backfill_days", 0, 365, row,
+            tooltip="On first run, create paper trades for historical signals from last N days. 30 days = good starting data. 0 = no backfill. Safe to run multiple times (idempotent).")
 
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
@@ -355,31 +357,39 @@ class StockTraderGUI:
 
         row = 0
 
-        self.create_labeled_spinbox(scrollable_frame, "Initial Capital ($)", "backtesting.initial_capital", 1000, 100000, row)
+        self.create_labeled_spinbox(scrollable_frame, "Initial Capital ($)", "backtesting.initial_capital", 1000, 100000, row,
+            tooltip="Starting capital for backtest simulation. $10,000 typical. Higher = more realistic position sizing. Doesn't affect returns % but affects absolute P/L.")
         row += 1
 
-        self.create_labeled_spinbox(scrollable_frame, "Position Size ($)", "backtesting.position_size", 100, 10000, row)
+        self.create_labeled_spinbox(scrollable_frame, "Position Size ($)", "backtesting.position_size", 100, 10000, row,
+            tooltip="Base position size per trade. Gets multiplied by conviction if 'Conviction Weighted' enabled. $1,000 standard. Lower = more diversification, higher = concentrated bets.")
         row += 1
 
-        self.create_labeled_spinbox(scrollable_frame, "Max Positions", "backtesting.max_positions", 1, 50, row)
+        self.create_labeled_spinbox(scrollable_frame, "Max Positions", "backtesting.max_positions", 1, 50, row,
+            tooltip="Maximum concurrent open positions in backtest. 10 = good diversification. Lower = fewer trades (need stronger signals). Higher = more capital deployed.")
         row += 1
 
-        self.create_checkbox(scrollable_frame, "Conviction Weighted Sizing", "backtesting.conviction_weighted", row)
+        self.create_checkbox(scrollable_frame, "Conviction Weighted Sizing", "backtesting.conviction_weighted", row,
+            tooltip="Scale position size by conviction score. 50 conv = 1x base, 100 conv = 2x base. Recommended: enabled. Puts more capital behind high-conviction signals.")
         row += 1
 
         self.create_section_header(scrollable_frame, "Exit Strategy", row)
         row += 1
 
-        self.create_labeled_spinbox(scrollable_frame, "Hold Days", "backtesting.hold_days", 1, 365, row)
+        self.create_labeled_spinbox(scrollable_frame, "Hold Days", "backtesting.hold_days", 1, 365, row,
+            tooltip="Maximum days to hold position before auto-exit. 30 days standard. Longer = more patience for winners. Shorter = faster turnover. Must match paper trading for comparison.")
         row += 1
 
-        self.create_labeled_spinbox(scrollable_frame, "Stop Loss %", "backtesting.stop_loss_pct", -50, 0, row)
+        self.create_labeled_spinbox(scrollable_frame, "Stop Loss %", "backtesting.stop_loss_pct", -50, 0, row,
+            tooltip="Exit when position loses this %. -10% standard. Tighter (-5%) = less drawdown but more whipsaws. Looser (-15%) = ride out dips but bigger losses possible.")
         row += 1
 
-        self.create_labeled_spinbox(scrollable_frame, "Take Profit %", "backtesting.take_profit_pct", 0, 200, row)
+        self.create_labeled_spinbox(scrollable_frame, "Take Profit %", "backtesting.take_profit_pct", 0, 200, row,
+            tooltip="Exit when position gains this %. 20% standard. Lower (10%) = lock profits early, higher (30%) = let winners run. Match paper trading settings for valid comparison.")
         row += 1
 
-        self.create_labeled_spinbox(scrollable_frame, "Min Conviction", "backtesting.min_conviction", 0, 100, row)
+        self.create_labeled_spinbox(scrollable_frame, "Min Conviction", "backtesting.min_conviction", 0, 100, row,
+            tooltip="Only backtest signals with conviction >= this value. 60+ recommended. Higher = test only quality signals. Lower = test all signals. Affects number of trades in backtest.")
 
         canvas.pack(side="left", fill="both", expand=True)
 
@@ -405,25 +415,31 @@ class StockTraderGUI:
         # Velocity Spike
         self.create_section_header(scrollable_frame, "Velocity Spike", row)
         row += 1
-        self.create_labeled_spinbox(scrollable_frame, "Mention Velocity 24h Min (%)", "thresholds.velocity_spike.mention_vel_24h_min", 0, 1000, row)
+        self.create_labeled_spinbox(scrollable_frame, "Mention Velocity 24h Min (%)", "thresholds.velocity_spike.mention_vel_24h_min", 0, 1000, row,
+            tooltip="Minimum % increase in social mentions over 24 hours to trigger velocity spike signal. 100% = mentions doubled. Higher = stricter, fewer signals. 100-150% recommended.")
         row += 1
-        self.create_labeled_spinbox(scrollable_frame, "Composite Score Min", "thresholds.velocity_spike.composite_score_min", 0, 100, row)
+        self.create_labeled_spinbox(scrollable_frame, "Composite Score Min", "thresholds.velocity_spike.composite_score_min", 0, 100, row,
+            tooltip="Minimum composite velocity score (combines mention trend, sentiment velocity, volume divergence). 60+ recommended. Higher = higher quality velocity signals. 0-100 scale.")
         row += 1
 
         # Insider Cluster
         self.create_section_header(scrollable_frame, "Insider Cluster", row)
         row += 1
-        self.create_labeled_spinbox(scrollable_frame, "Min Insiders", "thresholds.insider_cluster.min_insiders", 1, 10, row)
+        self.create_labeled_spinbox(scrollable_frame, "Min Insiders", "thresholds.insider_cluster.min_insiders", 1, 10, row,
+            tooltip="Minimum number of different insiders buying to trigger cluster signal. 2+ = multiple insiders agree. Higher = stronger signal but fewer triggers. 2-3 recommended.")
         row += 1
-        self.create_labeled_spinbox(scrollable_frame, "Lookback Days", "thresholds.insider_cluster.lookback_days", 1, 90, row)
+        self.create_labeled_spinbox(scrollable_frame, "Lookback Days", "thresholds.insider_cluster.lookback_days", 1, 90, row,
+            tooltip="Days to look back for insider purchases. 14 days = recent insider activity. Longer = more historical context. Shorter = fresher signals. 14-30 days recommended.")
         row += 1
-        self.create_labeled_spinbox(scrollable_frame, "Min Value Total ($)", "thresholds.insider_cluster.min_value_total", 1000, 10000000, row)
+        self.create_labeled_spinbox(scrollable_frame, "Min Value Total ($)", "thresholds.insider_cluster.min_value_total", 1000, 10000000, row,
+            tooltip="Minimum combined dollar value of insider purchases to trigger signal. $100K+ = serious money. Higher = more conviction from insiders. $100K-$500K recommended.")
         row += 1
 
         # Minimum Conviction
         self.create_section_header(scrollable_frame, "Reporting", row)
         row += 1
-        self.create_labeled_spinbox(scrollable_frame, "Minimum Conviction to Report", "thresholds.minimum_conviction", 0, 100, row)
+        self.create_labeled_spinbox(scrollable_frame, "Minimum Conviction to Report", "thresholds.minimum_conviction", 0, 100, row,
+            tooltip="Only show signals in dashboard/email with conviction >= this value. 40+ = all signals. 60+ = quality signals. 70+ = high conviction only. Filters noise from output.")
 
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
@@ -445,22 +461,28 @@ class StockTraderGUI:
 
         row = 0
 
-        self.create_checkbox(scrollable_frame, "Enable Email Reports", "email.enabled", row)
+        self.create_checkbox(scrollable_frame, "Enable Email Reports", "email.enabled", row,
+            tooltip="Send email alerts when new signals are generated. Get notified immediately of trading opportunities. Requires SMTP credentials below. Gmail recommended.")
         row += 1
 
-        self.create_labeled_entry(scrollable_frame, "SMTP Server", "email.smtp_server", "smtp.gmail.com", row)
+        self.create_labeled_entry(scrollable_frame, "SMTP Server", "email.smtp_server", "smtp.gmail.com", row,
+            tooltip="SMTP server for sending emails. Gmail: smtp.gmail.com. Outlook: smtp-mail.outlook.com. Yahoo: smtp.mail.yahoo.com. Port 587 for TLS.")
         row += 1
 
-        self.create_labeled_spinbox(scrollable_frame, "SMTP Port", "email.smtp_port", 1, 65535, row)
+        self.create_labeled_spinbox(scrollable_frame, "SMTP Port", "email.smtp_port", 1, 65535, row,
+            tooltip="SMTP server port. 587 = TLS (recommended, encrypted). 465 = SSL. 25 = unencrypted (not recommended). Gmail/Outlook use 587.")
         row += 1
 
-        self.create_labeled_entry(scrollable_frame, "Sender Email", "email.sender", "your-email@gmail.com", row)
+        self.create_labeled_entry(scrollable_frame, "Sender Email", "email.sender", "your-email@gmail.com", row,
+            tooltip="Email address to send from. Must match credentials below. For Gmail, use your full Gmail address (yourname@gmail.com).")
         row += 1
 
-        self.create_labeled_entry(scrollable_frame, "Password (App Password)", "email.password", "Use Gmail app password", row, show="*")
+        self.create_labeled_entry(scrollable_frame, "Password (App Password)", "email.password", "Use Gmail app password", row, show="*",
+            tooltip="For Gmail: Use App Password, NOT your regular password. Enable 2FA, then generate app password at https://myaccount.google.com/apppasswords. Other providers: use account password.")
         row += 1
 
-        self.create_labeled_entry(scrollable_frame, "Recipients (comma-separated)", "email.recipients", "email1@gmail.com,email2@gmail.com", row)
+        self.create_labeled_entry(scrollable_frame, "Recipients (comma-separated)", "email.recipients", "email1@gmail.com,email2@gmail.com", row,
+            tooltip="Email addresses to send alerts to. Separate multiple recipients with commas. Can include your own email for testing. Example: trader1@gmail.com,trader2@yahoo.com")
 
         canvas.pack(side="left", fill="both", expand=True)
 
@@ -576,12 +598,16 @@ class StockTraderGUI:
 
         def run():
             try:
+                # Get the directory where gui.py is located (project root)
+                project_root = os.path.dirname(os.path.abspath(__file__))
+
                 process = subprocess.Popen(
                     ["python", script_path],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
-                    bufsize=1
+                    bufsize=1,
+                    cwd=project_root  # Run from project root
                 )
 
                 for line in process.stdout:
@@ -617,12 +643,16 @@ class StockTraderGUI:
 
         def run():
             try:
+                # Get the directory where gui.py is located (project root)
+                project_root = os.path.dirname(os.path.abspath(__file__))
+
                 process = subprocess.Popen(
                     ["python", "utils/backtest.py", "--days", days],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
-                    bufsize=1
+                    bufsize=1,
+                    cwd=project_root  # Run from project root
                 )
 
                 for line in process.stdout:
@@ -945,12 +975,16 @@ class StockTraderGUI:
     def _run_backtest_pipeline_thread(self):
         """Thread function to run backtest from pipeline tab"""
         try:
+            # Get the directory where gui.py is located (project root)
+            project_root = os.path.dirname(os.path.abspath(__file__))
+
             process = subprocess.Popen(
                 ["python", "utils/backtest.py"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                bufsize=1
+                bufsize=1,
+                cwd=project_root  # Run from project root
             )
 
             for line in iter(process.stdout.readline, ''):
