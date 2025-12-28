@@ -269,7 +269,7 @@ class TechnicalAnalyzer:
 
         # RSI contribution
         rsi = analysis.get('rsi_14')
-        if rsi:
+        if rsi is not None:
             if rsi < 30:  # Oversold = bullish
                 score += 15
             elif rsi > 70:  # Overbought = bearish
@@ -279,7 +279,7 @@ class TechnicalAnalyzer:
 
         # Momentum contribution
         momentum = analysis.get('momentum_10d')
-        if momentum:
+        if momentum is not None:
             if momentum > 10:  # Strong upward momentum
                 score += 20
             elif momentum > 5:

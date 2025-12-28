@@ -208,7 +208,7 @@ class VelocityCalculator:
                 for i in range(1, len(price_history)):
                     curr_price = price_history[i].get('price', 0)
                     prev_price = price_history[i-1].get('price', 0)
-                    if prev_price > 0:
+                    if prev_price is not None and prev_price > 0:
                         price_changes.append(((curr_price - prev_price) / prev_price) * 100)
 
             # Make sure arrays are same length for divergence

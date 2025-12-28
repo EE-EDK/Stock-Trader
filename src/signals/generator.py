@@ -209,14 +209,14 @@ class SignalGenerator:
                     continue
 
             if (insider.get('trade_type') == 'P' and
-                trade_date and trade_date >= cutoff):
+                trade_date is not None and trade_date >= cutoff):
                 recent_buys.append(insider)
 
         if len(recent_buys) < min_insiders:
             return False
 
-        total_value = sum(buy.get('value', 0) for buy in recent_buys)
-        return total_value >= min_value_total
+        total_value = sum(buy.get('value', 0) or 0 for buy in recent_buys)
+        return total_value is not None and total_value >= min_value_total
 
     def _check_sentiment_flip(self, vel: Dict[str, float]) -> bool:
         """

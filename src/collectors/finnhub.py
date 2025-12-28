@@ -105,7 +105,7 @@ class FinnhubCollector:
 
                 # Calculate percentage change
                 change_pct = 0.0
-                if prev_close and prev_close > 0:
+                if prev_close is not None and prev_close > 0:
                     change_pct = ((current - prev_close) / prev_close) * 100
 
                 results.append({
