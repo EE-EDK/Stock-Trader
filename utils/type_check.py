@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Comprehensive type verification for the Stock Trader project
 Checks for common type-related issues that cause runtime errors
@@ -6,9 +7,16 @@ Checks for common type-related issues that cause runtime errors
 
 import ast
 import os
+import sys
 from pathlib import Path
 from typing import List, Dict, Set, Tuple
 import re
+
+# Fix Windows Unicode issues
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 
 class TypeChecker(ast.NodeVisitor):

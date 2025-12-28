@@ -70,7 +70,7 @@ collection:
     collect_forex: true      # USD/EUR exchange rate
 
   congress:
-    enabled: false           # Enable Congress stock trades tracking (100% FREE!)
+    enabled: true            # Enable Congress stock trades tracking (100% FREE!)
     # Data source: House Stock Watcher API (no API key needed)
     # Tracks stock purchases/sales by US Representatives and Senators
     lookback_days: 90        # Collect trades from last 90 days
@@ -78,7 +78,7 @@ collection:
 # Paper Trading (track mock purchases to validate signals)
 paper_trading:
   enabled: true              # Enable paper trading system
-  min_conviction: 60         # Only trade signals with conviction >= 60
+  min_conviction: 70         # Only trade signals with conviction >= 70 (more selective)
   position_size: 1000        # Base position size in dollars ($1000)
   max_open_positions: 10     # Maximum concurrent positions
 
@@ -104,13 +104,13 @@ backtesting:
   take_profit_pct: 20        # Take profit target
 
   # Filtering
-  min_conviction: 60         # Only backtest signals >= 60 conviction
+  min_conviction: 70         # Only backtest signals >= 70 conviction (more selective)
 
-# Signal thresholds (can be tuned based on backtesting)
+# Signal thresholds (tuned for better quality - based on backtest results)
 thresholds:
   velocity_spike:
-    mention_vel_24h_min: 100     # 100%+ increase in 24h
-    composite_score_min: 60       # Minimum composite score
+    mention_vel_24h_min: 150     # 150%+ increase in 24h (more selective than 100%)
+    composite_score_min: 70       # Minimum composite score (stricter)
   insider_cluster:
     min_insiders: 2               # At least 2 insiders buying
     lookback_days: 14             # Within 14 days
@@ -121,7 +121,7 @@ thresholds:
   combined:
     velocity_score_min: 50        # Lower threshold when combined with insider
     requires_insider: true        # Must have insider activity
-  minimum_conviction: 40          # Don't report signals below this score
+  minimum_conviction: 70          # Only report high-quality signals (was 40)
 
 # Email settings
 email:
