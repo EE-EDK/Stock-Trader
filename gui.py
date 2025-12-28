@@ -614,6 +614,7 @@ class StockTraderGUI:
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
+                    encoding='utf-8',  # Explicitly use UTF-8 to handle emojis on Windows
                     bufsize=1,
                     cwd=project_root  # Run from project root
                 )
@@ -665,6 +666,7 @@ class StockTraderGUI:
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
+                    encoding='utf-8',  # Explicitly use UTF-8 to handle emojis on Windows
                     bufsize=1,
                     cwd=project_root  # Run from project root
                 )
@@ -947,6 +949,7 @@ class StockTraderGUI:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                encoding='utf-8',  # Explicitly use UTF-8 to handle emojis on Windows
                 bufsize=1
             )
 
@@ -996,6 +999,7 @@ class StockTraderGUI:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                encoding='utf-8',  # Explicitly use UTF-8 to handle emojis on Windows
                 bufsize=1,
                 cwd=project_root  # Run from project root
             )
