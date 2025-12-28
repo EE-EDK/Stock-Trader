@@ -597,13 +597,17 @@ class StockTraderGUI:
 
     def run_utility(self, script_path, name):
         """Run a utility script and display output"""
+        print(f"[DEBUG] run_utility called: {name}, {script_path}")  # Debug
         self.util_output.delete(1.0, tk.END)
         self.util_output_queue.put(f"Running {name}...\n\n")
+        print(f"[DEBUG] Queued initial message")  # Debug
 
         def run():
             try:
                 # Get the directory where gui.py is located (project root)
                 project_root = os.path.dirname(os.path.abspath(__file__))
+                print(f"[DEBUG] Project root: {project_root}")  # Debug
+                print(f"[DEBUG] Starting subprocess: python {script_path}")  # Debug
 
                 process = subprocess.Popen(
                     ["python", script_path],
@@ -614,10 +618,12 @@ class StockTraderGUI:
                     cwd=project_root  # Run from project root
                 )
 
+                print(f"[DEBUG] Process started, reading output...")  # Debug
                 for line in process.stdout:
                     self.util_output_queue.put(line)
 
                 process.wait()
+                print(f"[DEBUG] Process finished with code: {process.returncode}")  # Debug
 
                 if process.returncode == 0:
                     self.util_output_queue.put(f"\n✅ {name} completed successfully\n")
@@ -625,9 +631,14 @@ class StockTraderGUI:
                     self.util_output_queue.put(f"\n❌ {name} failed with code {process.returncode}\n")
 
             except Exception as e:
+                print(f"[DEBUG] Exception in run_utility: {e}")  # Debug
+                import traceback
+                traceback.print_exc()  # Debug
                 self.util_output_queue.put(f"\n❌ Error: {str(e)}\n")
 
+        print(f"[DEBUG] Starting background thread")  # Debug
         threading.Thread(target=run, daemon=True).start()
+        print(f"[DEBUG] Thread started")  # Debug
 
     def run_backtest(self):
         """Run backtest with specified days"""
@@ -1222,6 +1233,7 @@ Need help? Check the full README.md for detailed documentation.
         try:
             while True:
                 message = self.util_output_queue.get_nowait()
+                print(f"[DEBUG] Got message from queue: {message[:50]}...")  # Debug
                 self.util_output.insert(tk.END, message)
                 self.util_output.see(tk.END)
         except queue.Empty:
