@@ -128,7 +128,8 @@ def check_dict_float_issues(filepath: str, source_lines: List[str]) -> List[Dict
     issues = []
 
     # Pattern 1: db.get_latest_prices() returns dict but used as float
-    if 'db.get_latest_prices()' in ''.join(source_lines):
+    source_all = ''.join(source_lines)
+    if 'db.get_latest_prices()' in source_all:
         for i, line in enumerate(source_lines, 1):
             if 'db.get_latest_prices()' in line:
                 # Check next few lines for direct math operations
@@ -140,7 +141,7 @@ def check_dict_float_issues(filepath: str, source_lines: List[str]) -> List[Dict
                             'severity': 'error',
                             'lineno': j,
                             'message': 'Potential dict/float confusion: db.get_latest_prices() returns Dict[str, Dict], extract price first',
-                            'suggestion': f"Use: price_data = db.get_latest_prices().get(ticker); price = price_data['price']",
+                            'suggestion': "Use: price_data = db.get_latest_prices().get(ticker); price = price_data['price']",
                             'code': next_line.strip()
                         })
                         break

@@ -26,6 +26,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from src.analysis.backtester import Backtester
+from src.database.models import Database
 
 
 def load_config(config_path: str = "config/config.yaml") -> dict:
@@ -117,6 +118,14 @@ Examples:
     print(f"Database: {db_path}")
     print(f"Period: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
     print(f"Duration: {(end_date - start_date).days} days")
+    print()
+
+    # Ensure database is initialized with all tables
+    print("Ensuring database schema is initialized...")
+    db = Database(db_path)
+    db.initialize()
+    db.close()
+    print("  ✅ Database initialized")
     print()
 
     # Create backtester

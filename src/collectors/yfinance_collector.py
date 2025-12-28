@@ -105,7 +105,7 @@ class YFinanceCollector:
 
                 # Calculate upside potential
                 upside = 0
-                if current_price > 0 and target_mean > 0:
+                if current_price is not None and current_price > 0 and target_mean is not None and target_mean > 0:
                     upside = ((target_mean - current_price) / current_price) * 100
 
                 results.append({
