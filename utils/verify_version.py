@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Version verification script - checks if you have all the bug fixes
 """
 
 import os
+import sys
+
+# Fix Windows Unicode issues
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 print("=" * 70)
 print("STOCK TRADER VERSION VERIFICATION")

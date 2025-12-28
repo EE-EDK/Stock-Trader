@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 @file backtest.py
 @brief CLI tool for backtesting trading signals
@@ -12,6 +13,12 @@ import sys
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
+
+# Fix Windows Unicode issues
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 # Add project root to Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
