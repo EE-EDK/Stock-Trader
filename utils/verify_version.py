@@ -38,9 +38,9 @@ fixes = {
     },
     "Paper trading JSON parsing": {
         "file": "src/trading/paper_trading.py",
-        "line": 266,
+        "line": 271,
         "should_contain": "triggers_json.strip()",
-        "description": "Line 266 should use .strip() to check empty string"
+        "description": "Line 271 should use .strip() to check empty string"
     },
     "FRED initialization": {
         "file": "main.py",

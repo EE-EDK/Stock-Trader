@@ -105,7 +105,7 @@ except Exception as e:
 
 try:
     from src.collectors.fred import FREDCollector
-    fred = FREDCollector(api_key="test_key", config={})
+    fred = FREDCollector(api_key="test_key")
     successes.append("✅ FREDCollector instantiation")
     print("  ✅ FREDCollector instantiation")
 except Exception as e:
@@ -141,7 +141,7 @@ print("\n[TEST 4] Testing signal generation...")
 try:
     from src.signals.generator import SignalGenerator
     from datetime import datetime
-    sg = SignalGenerator(min_sentiment_score=0.5, min_velocity_threshold=1.5)
+    sg = SignalGenerator()
     successes.append("✅ SignalGenerator instantiation")
     print("  ✅ SignalGenerator instantiation")
 except Exception as e:
@@ -152,7 +152,10 @@ except Exception as e:
 print("\n[TEST 5] Testing metrics calculators...")
 try:
     from src.metrics.velocity import VelocityCalculator
-    vc = VelocityCalculator()
+    from src.database.models import Database
+    test_db = Database(':memory:')
+    test_db.initialize()
+    vc = VelocityCalculator(database=test_db)
     successes.append("✅ VelocityCalculator instantiation")
     print("  ✅ VelocityCalculator instantiation")
 except Exception as e:
@@ -161,7 +164,10 @@ except Exception as e:
 
 try:
     from src.metrics.technical import TechnicalAnalyzer
-    ta = TechnicalAnalyzer()
+    from src.database.models import Database
+    test_db = Database(':memory:')
+    test_db.initialize()
+    ta = TechnicalAnalyzer(database=test_db)
     successes.append("✅ TechnicalAnalyzer instantiation")
     print("  ✅ TechnicalAnalyzer instantiation")
 except Exception as e:
@@ -199,19 +205,19 @@ except Exception as e:
 # Test 7: Test paper trading system
 print("\n[TEST 7] Testing paper trading system...")
 try:
-    from src.trading.paper_trading import PaperTradingSystem
+    from src.trading.paper_trading import PaperTradingManager
     from src.database.models import Database
     db = Database('data/test_runtime2.db')
     db.initialize()
-    pts = PaperTradingSystem(db, {'enabled': False, 'initial_capital': 10000})
+    pts = PaperTradingManager(db, {'enabled': False, 'initial_capital': 10000})
     db.close()
     if os.path.exists('data/test_runtime2.db'):
         os.remove('data/test_runtime2.db')
-    successes.append("✅ PaperTradingSystem instantiation")
-    print("  ✅ PaperTradingSystem instantiation")
+    successes.append("✅ PaperTradingManager instantiation")
+    print("  ✅ PaperTradingManager instantiation")
 except Exception as e:
-    errors.append(f"❌ PaperTradingSystem: {e}")
-    print(f"  ❌ PaperTradingSystem: {e}")
+    errors.append(f"❌ PaperTradingManager: {e}")
+    print(f"  ❌ PaperTradingManager: {e}")
 
 # Test 8: Test backtester
 print("\n[TEST 8] Testing backtester...")
