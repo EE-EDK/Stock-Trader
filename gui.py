@@ -19,7 +19,7 @@ class StockTraderGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Stock Trader - Configuration & Control Panel")
-        self.root.geometry("1200x800")
+        self.root.geometry("1200x1200")
 
         # Config file path
         self.config_path = "config/config.yaml"
