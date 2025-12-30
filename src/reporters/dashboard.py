@@ -16,12 +16,16 @@ class DashboardGenerator:
     @details Creates beautiful, interactive HTML reports viewable in any browser
     """
 
-    def __init__(self, output_dir: str = "reports"):
+    def __init__(self, output_dir: str = "reports", project_root: str = None):
         """
         @brief Initialize dashboard generator
-        @param output_dir Directory to save HTML reports
+        @param output_dir Directory to save HTML reports (relative to project_root if provided)
+        @param project_root Project root directory (optional, uses current dir if not provided)
         """
-        self.output_dir = Path(output_dir)
+        if project_root:
+            self.output_dir = Path(project_root) / output_dir
+        else:
+            self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
 
     def generate(self,
