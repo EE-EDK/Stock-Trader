@@ -8,6 +8,7 @@
 
 import logging
 import sys
+import os
 from datetime import datetime
 from pathlib import Path
 import yaml
@@ -26,18 +27,20 @@ from src.reporters.dashboard import DashboardGenerator
 from src.trading.paper_trading import PaperTradingManager
 
 # Setup logging first (before other imports that may need it)
-def setup_logging(log_level: str = 'INFO'):
+def setup_logging(log_level: str = 'INFO', project_root: str = '.'):
     """
     @brief Configure logging for the application
     @param log_level Logging level (DEBUG, INFO, WARNING, ERROR)
+    @param project_root Project root directory for logs
     """
-    Path("logs").mkdir(exist_ok=True)
+    logs_dir = os.path.join(project_root, "logs")
+    Path(logs_dir).mkdir(exist_ok=True)
 
     logging.basicConfig(
         level=getattr(logging, log_level.upper()),
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler('logs/pipeline.log'),
+            logging.FileHandler(os.path.join(logs_dir, 'pipeline.log')),
             logging.StreamHandler(sys.stdout)
         ]
     )
@@ -557,6 +560,63 @@ def run_pipeline(config: dict, skip_email: bool = False):
     return signals
 
 
+def get_project_root():
+    """Get project root folder - prompt if running as exe and not set"""
+    # If running as exe, prompt for project root
+    if getattr(sys, 'frozen', False):
+        # Try to load from settings file in AppData
+        if sys.platform == 'win32':
+            appdata = os.environ.get('APPDATA', os.path.expanduser('~'))
+            settings_dir = os.path.join(appdata, 'StockTrader')
+        else:
+            settings_dir = os.path.expanduser('~/.stocktrader')
+
+        settings_file = os.path.join(settings_dir, 'settings.yaml')
+
+        if os.path.exists(settings_file):
+            try:
+                with open(settings_file, 'r') as f:
+                    settings = yaml.safe_load(f) or {}
+                    project_root = settings.get('project_root')
+                    if project_root and os.path.isdir(project_root):
+                        return project_root
+            except:
+                pass
+
+        # Need to prompt - use tkinter dialog
+        try:
+            import tkinter as tk
+            from tkinter import filedialog, messagebox
+
+            root = tk.Tk()
+            root.withdraw()
+
+            messagebox.showinfo(
+                "Select Stock Trader Folder",
+                "Please select your Stock-Trader folder containing:\n"
+                "• config/\n• data/\n• logs/\n• src/\n• utils/"
+            )
+
+            folder = filedialog.askdirectory(
+                title="Select Stock-Trader Folder",
+                mustexist=True
+            )
+
+            root.destroy()
+
+            if folder:
+                return folder
+        except:
+            pass
+
+        print("ERROR: Could not determine project root folder")
+        print("Please run with --project-root <path> argument")
+        sys.exit(1)
+    else:
+        # Running as script - use script directory
+        return os.path.dirname(os.path.abspath(__file__))
+
+
 def main():
     """
     @brief Main entry point for the application
@@ -564,6 +624,10 @@ def main():
     parser = argparse.ArgumentParser(
         description='Sentiment Velocity Tracker - Trading Signal Pipeline',
         formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        '--project-root',
+        help='Path to Stock-Trader project root folder'
     )
     parser.add_argument(
         '--config',
@@ -589,16 +653,31 @@ def main():
 
     args = parser.parse_args()
 
-    # Setup logging
-    setup_logging(args.log_level)
+    # Get project root (from args or auto-detect)
+    project_root = args.project_root if args.project_root else get_project_root()
+
+    # Change working directory to project root
+    os.chdir(project_root)
+
+    # Setup logging with project root
+    setup_logging(args.log_level, project_root)
 
     # Create necessary directories
-    Path("logs").mkdir(exist_ok=True)
-    Path("data").mkdir(exist_ok=True)
+    Path(os.path.join(project_root, "logs")).mkdir(exist_ok=True)
+    Path(os.path.join(project_root, "data")).mkdir(exist_ok=True)
+
+    logger.info("=" * 60)
+    logger.info("Sentiment Velocity Tracker - Pipeline Starting")
+    logger.info(f"Project Root: {project_root}")
+    logger.info(f"Timestamp: {datetime.now().isoformat()}")
+    logger.info("=" * 60)
 
     try:
+        # Build config path relative to project root
+        config_path = args.config if os.path.isabs(args.config) else os.path.join(project_root, args.config)
+
         # Load configuration
-        config = load_config(args.config)
+        config = load_config(config_path)
 
         # Initialize database only
         if args.init_db:
