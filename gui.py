@@ -4,7 +4,7 @@ Stock Trader GUI - Modern interface for configuration and pipeline execution
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext
+from tkinter import ttk, messagebox, scrolledtext, filedialog
 import ttkbootstrap as ttkb
 from ttkbootstrap.constants import *
 import yaml
@@ -25,12 +25,19 @@ class StockTraderGUI:
         self.config_path = "config/config.yaml"
         self.config = {}
 
+        # GUI settings file path (for utils folder location)
+        self.settings_path = ".gui_settings.yaml"
+        self.settings = {}
+
         # Queue for pipeline output
         self.output_queue = queue.Queue()
         self.pipeline_process = None
 
         # Queue for utilities output
         self.util_output_queue = queue.Queue()
+
+        # Load GUI settings
+        self.load_settings()
 
         # Create main container
         self.create_widgets()
@@ -499,12 +506,33 @@ class StockTraderGUI:
         container = ttkb.Frame(tab)
         container.pack(fill=BOTH, expand=YES, padx=20, pady=20)
 
-        # Title
+        # Title with button frame
+        title_frame = ttkb.Frame(container)
+        title_frame.pack(fill=X, pady=(0, 20))
+
         ttkb.Label(
-            container,
+            title_frame,
             text="Development & Testing Utilities",
             font=("Helvetica", 16, "bold")
-        ).pack(anchor=W, pady=(0, 20))
+        ).pack(side=LEFT)
+
+        # Utils folder path button
+        ttkb.Button(
+            title_frame,
+            text="📁 Set Utils Folder Location",
+            command=self.set_utils_folder,
+            bootstyle="info-outline",
+            width=25
+        ).pack(side=RIGHT, padx=5)
+
+        # Display current utils folder path
+        self.utils_path_label = ttkb.Label(
+            container,
+            text=f"Utils folder: {self.get_utils_folder()}",
+            font=("Helvetica", 9, "italic"),
+            foreground="#7f8c8d"
+        )
+        self.utils_path_label.pack(anchor=W, pady=(0, 10))
 
         # Type Verification section
         type_frame = ttkb.LabelFrame(container, text="Type Safety Verification", padding=15)
@@ -606,11 +634,23 @@ class StockTraderGUI:
             try:
                 # Get the directory where gui.py is located (project root)
                 project_root = os.path.dirname(os.path.abspath(__file__))
+
+                # Use custom utils folder if set
+                utils_folder = self.get_utils_folder()
+                script_filename = os.path.basename(script_path)
+                full_script_path = os.path.join(utils_folder, script_filename)
+
+                # Check if script exists
+                if not os.path.exists(full_script_path):
+                    self.util_output_queue.put(f"❌ Error: Script not found at {full_script_path}\n")
+                    self.util_output_queue.put(f"Please set the correct utils folder location.\n")
+                    return
+
                 print(f"[DEBUG] Project root: {project_root}")  # Debug
-                print(f"[DEBUG] Starting subprocess: python {script_path}")  # Debug
+                print(f"[DEBUG] Starting subprocess: python {full_script_path}")  # Debug
 
                 process = subprocess.Popen(
-                    ["python", script_path],
+                    ["python", full_script_path],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
@@ -661,8 +701,18 @@ class StockTraderGUI:
                 # Get the directory where gui.py is located (project root)
                 project_root = os.path.dirname(os.path.abspath(__file__))
 
+                # Use custom utils folder if set
+                utils_folder = self.get_utils_folder()
+                backtest_script = os.path.join(utils_folder, "backtest.py")
+
+                # Check if script exists
+                if not os.path.exists(backtest_script):
+                    self.util_output_queue.put(f"❌ Error: backtest.py not found at {backtest_script}\n")
+                    self.util_output_queue.put(f"Please set the correct utils folder location.\n")
+                    return
+
                 process = subprocess.Popen(
-                    ["python", "utils/backtest.py", "--days", days],
+                    ["python", backtest_script, "--days", days],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
@@ -925,6 +975,59 @@ class StockTraderGUI:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save config: {e}")
             self.log_to_console(f"✗ Error saving config: {e}\n")
+
+    def load_settings(self):
+        """Load GUI settings from YAML file"""
+        try:
+            if os.path.exists(self.settings_path):
+                with open(self.settings_path, 'r') as f:
+                    self.settings = yaml.safe_load(f) or {}
+        except Exception as e:
+            print(f"[DEBUG] Failed to load settings: {e}")
+            self.settings = {}
+
+    def save_settings(self):
+        """Save GUI settings to YAML file"""
+        try:
+            with open(self.settings_path, 'w') as f:
+                yaml.dump(self.settings, f, default_flow_style=False)
+        except Exception as e:
+            print(f"[DEBUG] Failed to save settings: {e}")
+
+    def get_utils_folder(self):
+        """Get the utils folder path from settings or use default"""
+        default_utils = "utils"
+        utils_folder = self.settings.get('utils_folder', default_utils)
+
+        # Convert to absolute path if relative
+        if not os.path.isabs(utils_folder):
+            project_root = os.path.dirname(os.path.abspath(__file__))
+            utils_folder = os.path.join(project_root, utils_folder)
+
+        return utils_folder
+
+    def set_utils_folder(self):
+        """Open dialog to set utils folder location"""
+        current_folder = self.get_utils_folder()
+
+        # Open folder selection dialog
+        folder = filedialog.askdirectory(
+            title="Select Utils Folder Location",
+            initialdir=current_folder
+        )
+
+        if folder:
+            # Save to settings
+            self.settings['utils_folder'] = folder
+            self.save_settings()
+
+            # Update label
+            self.utils_path_label.config(text=f"Utils folder: {folder}")
+
+            messagebox.showinfo(
+                "Success",
+                f"Utils folder location updated to:\n{folder}\n\nThis setting will be remembered."
+            )
 
     def run_pipeline(self):
         """Run the main pipeline in a separate thread"""
