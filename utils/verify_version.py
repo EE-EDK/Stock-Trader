@@ -20,15 +20,15 @@ print("=" * 70)
 fixes = {
     "Paper trading price extraction fix": {
         "file": "main.py",
-        "line": 391,
+        "line": 478,
         "should_contain": "price_data['price']",
-        "description": "Line 391 should extract price from dict"
+        "description": "Line 478 should extract price from dict"
     },
     "Dashboard variable initialization": {
         "file": "main.py",
-        "line": 131,
+        "line": 234,
         "should_contain": "macro_indicators = {}",
-        "description": "Lines 130-133 should initialize optional variables"
+        "description": "Line 234 should initialize optional variables"
     },
     "Signal generator NoneType check": {
         "file": "src/signals/generator.py",
@@ -44,9 +44,9 @@ fixes = {
     },
     "FRED initialization": {
         "file": "main.py",
-        "line": 268,
+        "line": 199,
         "should_not_contain": "config=config",
-        "description": "Line 268 should NOT pass config parameter to FREDCollector"
+        "description": "Line 199 should NOT pass config parameter to FREDCollector"
     }
 }
 
