@@ -65,3 +65,6 @@ outputs/
 *.csv
 *.html
 type_check_report.txt
+
+# GUI settings (user-specific)
+.gui_settings.yaml
