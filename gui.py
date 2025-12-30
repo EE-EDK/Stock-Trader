@@ -12,6 +12,7 @@ import subprocess
 import threading
 import queue
 import os
+import sys
 from pathlib import Path
 
 
@@ -21,13 +22,36 @@ class StockTraderGUI:
         self.root.title("Stock Trader - Configuration & Control Panel")
         self.root.geometry("1200x800")
 
-        # Config file path
-        self.config_path = "config/config.yaml"
-        self.config = {}
-
-        # GUI settings file path (for utils folder location)
-        self.settings_path = ".gui_settings.yaml"
+        # GUI settings file path (for project root location)
+        self.settings_path = self._get_settings_path()
         self.settings = {}
+
+        # Load GUI settings
+        self.load_settings()
+
+        # Get or prompt for project root folder
+        self.project_root = self.get_project_root()
+        if not self.project_root:
+            messagebox.showerror(
+                "Error",
+                "Stock Trader folder not selected. Application will exit."
+            )
+            sys.exit(1)
+
+        # Validate project root structure
+        if not self.validate_project_structure(self.project_root):
+            if not messagebox.askyesno(
+                "Warning",
+                "The selected folder doesn't appear to be a Stock Trader directory.\n"
+                "Some folders (config, data, logs, src) are missing.\n\n"
+                "Do you want to create them automatically?"
+            ):
+                sys.exit(1)
+            self.create_project_structure(self.project_root)
+
+        # Config file path (relative to project root)
+        self.config_path = os.path.join(self.project_root, "config", "config.yaml")
+        self.config = {}
 
         # Queue for pipeline output
         self.output_queue = queue.Queue()
@@ -35,9 +59,6 @@ class StockTraderGUI:
 
         # Queue for utilities output
         self.util_output_queue = queue.Queue()
-
-        # Load GUI settings
-        self.load_settings()
 
         # Create main container
         self.create_widgets()
@@ -506,33 +527,12 @@ class StockTraderGUI:
         container = ttkb.Frame(tab)
         container.pack(fill=BOTH, expand=YES, padx=20, pady=20)
 
-        # Title with button frame
-        title_frame = ttkb.Frame(container)
-        title_frame.pack(fill=X, pady=(0, 20))
-
+        # Title
         ttkb.Label(
-            title_frame,
+            container,
             text="Development & Testing Utilities",
             font=("Helvetica", 16, "bold")
-        ).pack(side=LEFT)
-
-        # Utils folder path button
-        ttkb.Button(
-            title_frame,
-            text="📁 Set Utils Folder Location",
-            command=self.set_utils_folder,
-            bootstyle="info-outline",
-            width=25
-        ).pack(side=RIGHT, padx=5)
-
-        # Display current utils folder path
-        self.utils_path_label = ttkb.Label(
-            container,
-            text=f"Utils folder: {self.get_utils_folder()}",
-            font=("Helvetica", 9, "italic"),
-            foreground="#7f8c8d"
-        )
-        self.utils_path_label.pack(anchor=W, pady=(0, 10))
+        ).pack(anchor=W, pady=(0, 20))
 
         # Type Verification section
         type_frame = ttkb.LabelFrame(container, text="Type Safety Verification", padding=15)
@@ -632,21 +632,17 @@ class StockTraderGUI:
 
         def run():
             try:
-                # Get the directory where gui.py is located (project root)
-                project_root = os.path.dirname(os.path.abspath(__file__))
-
-                # Use custom utils folder if set
-                utils_folder = self.get_utils_folder()
+                # Get script path relative to project root
                 script_filename = os.path.basename(script_path)
-                full_script_path = os.path.join(utils_folder, script_filename)
+                full_script_path = os.path.join(self.project_root, "utils", script_filename)
 
                 # Check if script exists
                 if not os.path.exists(full_script_path):
                     self.util_output_queue.put(f"❌ Error: Script not found at {full_script_path}\n")
-                    self.util_output_queue.put(f"Please set the correct utils folder location.\n")
+                    self.util_output_queue.put(f"Please ensure utils/ folder exists in project root.\n")
                     return
 
-                print(f"[DEBUG] Project root: {project_root}")  # Debug
+                print(f"[DEBUG] Project root: {self.project_root}")  # Debug
                 print(f"[DEBUG] Starting subprocess: python {full_script_path}")  # Debug
 
                 process = subprocess.Popen(
@@ -656,7 +652,7 @@ class StockTraderGUI:
                     text=True,
                     encoding='utf-8',  # Explicitly use UTF-8 to handle emojis on Windows
                     bufsize=1,
-                    cwd=project_root  # Run from project root
+                    cwd=self.project_root  # Run from project root
                 )
 
                 print(f"[DEBUG] Process started, reading output...")  # Debug
@@ -698,17 +694,13 @@ class StockTraderGUI:
 
         def run():
             try:
-                # Get the directory where gui.py is located (project root)
-                project_root = os.path.dirname(os.path.abspath(__file__))
-
-                # Use custom utils folder if set
-                utils_folder = self.get_utils_folder()
-                backtest_script = os.path.join(utils_folder, "backtest.py")
+                # Get backtest script path from project root
+                backtest_script = os.path.join(self.project_root, "utils", "backtest.py")
 
                 # Check if script exists
                 if not os.path.exists(backtest_script):
                     self.util_output_queue.put(f"❌ Error: backtest.py not found at {backtest_script}\n")
-                    self.util_output_queue.put(f"Please set the correct utils folder location.\n")
+                    self.util_output_queue.put(f"Please ensure utils/ folder exists in project root.\n")
                     return
 
                 process = subprocess.Popen(
@@ -718,7 +710,7 @@ class StockTraderGUI:
                     text=True,
                     encoding='utf-8',  # Explicitly use UTF-8 to handle emojis on Windows
                     bufsize=1,
-                    cwd=project_root  # Run from project root
+                    cwd=self.project_root  # Run from project root
                 )
 
                 for line in process.stdout:
@@ -964,7 +956,7 @@ class StockTraderGUI:
                 self.set_nested_value(config, key, value)
 
             # Ensure config directory exists
-            Path("config").mkdir(exist_ok=True)
+            Path(os.path.join(self.project_root, "config")).mkdir(exist_ok=True)
 
             # Save to file
             with open(self.config_path, 'w') as f:
@@ -989,45 +981,88 @@ class StockTraderGUI:
     def save_settings(self):
         """Save GUI settings to YAML file"""
         try:
+            # Ensure directory exists for settings file
+            settings_dir = os.path.dirname(self.settings_path)
+            if settings_dir:
+                os.makedirs(settings_dir, exist_ok=True)
             with open(self.settings_path, 'w') as f:
                 yaml.dump(self.settings, f, default_flow_style=False)
         except Exception as e:
             print(f"[DEBUG] Failed to save settings: {e}")
 
-    def get_utils_folder(self):
-        """Get the utils folder path from settings or use default"""
-        default_utils = "utils"
-        utils_folder = self.settings.get('utils_folder', default_utils)
+    def _get_settings_path(self):
+        """Get settings file path - use AppData for exe builds, local for dev"""
+        if getattr(sys, 'frozen', False):
+            # Running as exe - use AppData
+            if sys.platform == 'win32':
+                appdata = os.environ.get('APPDATA', os.path.expanduser('~'))
+                settings_dir = os.path.join(appdata, 'StockTrader')
+            else:
+                settings_dir = os.path.expanduser('~/.stocktrader')
 
-        # Convert to absolute path if relative
-        if not os.path.isabs(utils_folder):
-            project_root = os.path.dirname(os.path.abspath(__file__))
-            utils_folder = os.path.join(project_root, utils_folder)
+            os.makedirs(settings_dir, exist_ok=True)
+            return os.path.join(settings_dir, 'settings.yaml')
+        else:
+            # Running as script - use local directory
+            return '.gui_settings.yaml'
 
-        return utils_folder
+    def get_project_root(self):
+        """Get project root folder - prompt if not set"""
+        # Check if already set in settings
+        project_root = self.settings.get('project_root')
 
-    def set_utils_folder(self):
-        """Open dialog to set utils folder location"""
-        current_folder = self.get_utils_folder()
+        if project_root and os.path.isdir(project_root):
+            return project_root
 
-        # Open folder selection dialog
+        # Try to auto-detect if running as script
+        if not getattr(sys, 'frozen', False):
+            # Running as script - use script directory
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            if self.validate_project_structure(script_dir):
+                self.settings['project_root'] = script_dir
+                self.save_settings()
+                return script_dir
+
+        # Prompt user to select folder
+        messagebox.showinfo(
+            "Select Stock Trader Folder",
+            "Please select your Stock-Trader folder.\n\n"
+            "This folder should contain:\n"
+            "• config/\n"
+            "• data/\n"
+            "• logs/\n"
+            "• reports/\n"
+            "• src/\n"
+            "• utils/\n\n"
+            "This setting will be saved and remembered."
+        )
+
         folder = filedialog.askdirectory(
-            title="Select Utils Folder Location",
-            initialdir=current_folder
+            title="Select Stock-Trader Folder",
+            mustexist=True
         )
 
         if folder:
-            # Save to settings
-            self.settings['utils_folder'] = folder
+            self.settings['project_root'] = folder
             self.save_settings()
+            return folder
 
-            # Update label
-            self.utils_path_label.config(text=f"Utils folder: {folder}")
+        return None
 
-            messagebox.showinfo(
-                "Success",
-                f"Utils folder location updated to:\n{folder}\n\nThis setting will be remembered."
-            )
+    def validate_project_structure(self, folder):
+        """Validate that the folder has expected Stock Trader structure"""
+        required_items = ['config', 'src']
+        for item in required_items:
+            if not os.path.exists(os.path.join(folder, item)):
+                return False
+        return True
+
+    def create_project_structure(self, folder):
+        """Create necessary folders in project root"""
+        folders = ['config', 'data', 'logs', 'reports', 'src', 'utils']
+        for folder_name in folders:
+            os.makedirs(os.path.join(folder, folder_name), exist_ok=True)
+
 
     def run_pipeline(self):
         """Run the main pipeline in a separate thread"""
@@ -1047,13 +1082,15 @@ class StockTraderGUI:
     def _run_pipeline_thread(self):
         """Thread function to run pipeline"""
         try:
+            main_script = os.path.join(self.project_root, "main.py")
             self.pipeline_process = subprocess.Popen(
-                ["python", "main.py"],
+                ["python", main_script, "--project-root", self.project_root],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
                 encoding='utf-8',  # Explicitly use UTF-8 to handle emojis on Windows
-                bufsize=1
+                bufsize=1,
+                cwd=self.project_root
             )
 
             # Read output line by line
@@ -1094,17 +1131,16 @@ class StockTraderGUI:
     def _run_backtest_pipeline_thread(self):
         """Thread function to run backtest from pipeline tab"""
         try:
-            # Get the directory where gui.py is located (project root)
-            project_root = os.path.dirname(os.path.abspath(__file__))
+            backtest_script = os.path.join(self.project_root, "utils", "backtest.py")
 
             process = subprocess.Popen(
-                ["python", "utils/backtest.py"],
+                ["python", backtest_script],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
                 encoding='utf-8',  # Explicitly use UTF-8 to handle emojis on Windows
                 bufsize=1,
-                cwd=project_root  # Run from project root
+                cwd=self.project_root  # Run from project root
             )
 
             for line in iter(process.stdout.readline, ''):
