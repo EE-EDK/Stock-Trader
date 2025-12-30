@@ -520,7 +520,7 @@ def run_pipeline(config: dict, skip_email: bool = False):
         if paper_trading.enabled:
             paper_trading_stats = paper_trading.get_performance_summary()
 
-        dashboard = DashboardGenerator(output_dir="reports")
+        dashboard = DashboardGenerator(output_dir="reports", project_root=project_root)
         dashboard_path = dashboard.generate(
             signals=signals,
             velocity_data=velocity_data,
