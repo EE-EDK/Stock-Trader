@@ -13,6 +13,15 @@ import json
 
 logger = logging.getLogger(__name__)
 
+# Try to import yfinance and pandas for on-the-fly historical data
+try:
+    import yfinance as yf
+    import pandas as pd
+    YFINANCE_AVAILABLE = True
+except ImportError:
+    YFINANCE_AVAILABLE = False
+    logger.warning("yfinance/pandas not available - on-the-fly signal generation disabled")
+
 
 @dataclass
 class BacktestTrade:
@@ -216,6 +225,15 @@ class Backtester:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
+        # First check if there's ANY data in the database for this period
+        cursor.execute("""
+            SELECT COUNT(*) FROM signals
+            WHERE DATE(created_at) BETWEEN DATE(?) AND DATE(?)
+        """, (start_date, end_date))
+
+        total_signals = cursor.fetchone()[0]
+
+        # Query for signals meeting conviction threshold
         cursor.execute("""
             SELECT ticker, conviction_score, triggers, price_at_signal, created_at
             FROM signals
@@ -240,8 +258,200 @@ class Backtester:
             })
 
         conn.close()
-        logger.info(f"Found {len(signals)} historical signals from {start_date} to {end_date}")
+
+        if total_signals == 0:
+            logger.warning(f"No signals found in backtest period")
+            logger.info("Attempting to generate signals on-the-fly from historical data...")
+
+            # Try to generate signals on-the-fly
+            signals = self._generate_historical_signals(start_date, end_date)
+
+            if not signals:
+                logger.warning("Could not generate signals - no historical data available")
+                logger.warning("The backtest requires either:")
+                logger.warning("1. Pre-existing signals from running the main pipeline, OR")
+                logger.warning("2. Historical price data to generate signals on-the-fly")
+        elif len(signals) < total_signals:
+            logger.info(f"Found {len(signals)} signals (filtered from {total_signals} total) with conviction >= {self.min_conviction}")
+        else:
+            logger.info(f"Found {len(signals)} historical signals from {start_date} to {end_date}")
+
         return signals
+
+    def _generate_historical_signals(self, start_date: datetime, end_date: datetime) -> List[Dict]:
+        """
+        @brief Generate signals on-the-fly from historical price data
+        @param start_date Start of backtest period
+        @param end_date End of backtest period
+        @return List of signal dictionaries
+        """
+        if not YFINANCE_AVAILABLE:
+            logger.warning("yfinance not installed - cannot generate historical signals")
+            logger.warning("Install with: pip install yfinance")
+            return []
+
+        logger.info("Fetching historical data and generating signals...")
+
+        # Popular tickers to test - can be expanded or made configurable
+        tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'META', 'NVDA', 'AMD',
+                   'SPY', 'QQQ', 'DIA', 'IWM']
+
+        signals = []
+
+        # Generate signals for each ticker
+        for ticker in tickers:
+            try:
+                # Fetch historical data (get extra days for technical indicators)
+                stock = yf.Ticker(ticker)
+                hist = stock.history(start=start_date - timedelta(days=60), end=end_date + timedelta(days=30))
+
+                if hist.empty:
+                    continue
+
+                # Store historical prices in database for trade simulation
+                self._store_historical_prices(ticker, hist)
+
+                # Generate signals based on simple technical analysis
+                ticker_signals = self._analyze_historical_data(ticker, hist, start_date, end_date)
+                signals.extend(ticker_signals)
+
+            except Exception as e:
+                logger.debug(f"Failed to fetch data for {ticker}: {e}")
+                continue
+
+        logger.info(f"Generated {len(signals)} signals from historical data")
+        return signals
+
+    def _store_historical_prices(self, ticker: str, hist):
+        """
+        @brief Store historical prices in database for trade simulation
+        @param ticker Stock ticker symbol
+        @param hist Historical price dataframe from yfinance
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            # Check if prices table exists, if not create it
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS prices (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ticker TEXT NOT NULL,
+                    price REAL,
+                    collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # Insert historical prices
+            for date, row in hist.iterrows():
+                cursor.execute("""
+                    INSERT OR IGNORE INTO prices (ticker, price, collected_at)
+                    VALUES (?, ?, ?)
+                """, (ticker, float(row['Close']), date.strftime('%Y-%m-%d %H:%M:%S')))
+
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.debug(f"Failed to store prices for {ticker}: {e}")
+
+    def _analyze_historical_data(self, ticker: str, hist, start_date: datetime, end_date: datetime) -> List[Dict]:
+        """
+        @brief Analyze historical price data to generate signals
+        @param ticker Stock ticker symbol
+        @param hist Historical price dataframe from yfinance
+        @param start_date Start of signal generation period
+        @param end_date End of signal generation period
+        @return List of signal dictionaries
+        """
+        signals = []
+
+        # Calculate simple indicators
+        hist['SMA_20'] = hist['Close'].rolling(window=20).mean()
+        hist['SMA_50'] = hist['Close'].rolling(window=50).mean()
+        hist['RSI'] = self._calculate_rsi(hist['Close'], 14)
+
+        # Look for signals in the date range
+        for date in hist.index:
+            if date.date() < start_date.date() or date.date() > end_date.date():
+                continue
+
+            triggers = []
+            conviction = 0.0
+
+            try:
+                close = hist.loc[date, 'Close']
+                sma_20 = hist.loc[date, 'SMA_20']
+                sma_50 = hist.loc[date, 'SMA_50']
+                rsi = hist.loc[date, 'RSI']
+
+                # Skip if indicators not ready
+                if any(pd.isna([sma_20, sma_50, rsi])):
+                    continue
+
+                # Signal 1: Golden cross (SMA 20 crosses above SMA 50)
+                prev_idx = hist.index.get_loc(date) - 1
+                if prev_idx >= 0:
+                    prev_date = hist.index[prev_idx]
+                    prev_sma_20 = hist.loc[prev_date, 'SMA_20']
+                    prev_sma_50 = hist.loc[prev_date, 'SMA_50']
+
+                    if prev_sma_20 < prev_sma_50 and sma_20 > sma_50:
+                        triggers.append('golden_cross')
+                        conviction += 30
+
+                # Signal 2: RSI oversold (< 30)
+                if rsi < 30:
+                    triggers.append('rsi_oversold')
+                    conviction += 25
+
+                # Signal 3: Price above both SMAs (bullish)
+                if close > sma_20 and close > sma_50:
+                    triggers.append('price_above_smas')
+                    conviction += 20
+
+                # Signal 4: Strong momentum (price up > 5% in last 5 days)
+                lookback_idx = max(0, hist.index.get_loc(date) - 5)
+                if lookback_idx < hist.index.get_loc(date):
+                    lookback_date = hist.index[lookback_idx]
+                    lookback_close = hist.loc[lookback_date, 'Close']
+                    pct_change = ((close - lookback_close) / lookback_close) * 100
+
+                    if pct_change > 5:
+                        triggers.append('strong_momentum')
+                        conviction += 15
+
+                # Generate signal if conviction meets minimum
+                if triggers and conviction >= self.min_conviction:
+                    signals.append({
+                        'ticker': ticker,
+                        'conviction': int(conviction),
+                        'triggers': triggers,
+                        'price': float(close),
+                        'date': date.to_pydatetime()
+                    })
+
+            except (KeyError, IndexError) as e:
+                continue
+
+        return signals
+
+    def _calculate_rsi(self, prices, period=14):
+        """
+        @brief Calculate Relative Strength Index
+        @param prices Price series
+        @param period RSI period (default 14)
+        @return RSI series
+        """
+        try:
+            import pandas as pd
+            delta = prices.diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+            rs = gain / loss
+            rsi = 100 - (100 / (1 + rs))
+            return rsi
+        except Exception:
+            return pd.Series([50] * len(prices), index=prices.index)
 
     def calculate_sharpe_ratio(self, returns: List[float], risk_free_rate: float = 0.02) -> float:
         """
