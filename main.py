@@ -525,6 +525,10 @@ def run_pipeline(config: dict, skip_email: bool = False):
         if paper_trading.enabled:
             paper_trading_stats = paper_trading.get_performance_summary()
 
+        # Determine project root for dashboard
+        import os
+        project_root = os.path.dirname(os.path.abspath(__file__))
+
         dashboard = DashboardGenerator(output_dir="reports", project_root=project_root)
         dashboard_path = dashboard.generate(
             signals=signals,
