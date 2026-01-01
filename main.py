@@ -439,9 +439,10 @@ def run_pipeline(config: dict, skip_email: bool = False):
             sentiment_data[ticker] = vader_sentiment[ticker]
 
     signals = []
+    all_signals = []
     try:
         gen = SignalGenerator(thresholds=config.get('thresholds', {}))
-        signals = gen.generate_signals(
+        all_signals = gen.generate_signals(
             velocity_data=velocity_data,
             insider_data=db.get_recent_insiders(days=14),
             price_data=db.get_latest_prices(),
@@ -450,15 +451,19 @@ def run_pipeline(config: dict, skip_email: bool = False):
             reddit_data=reddit_data             # NEW!
         )
 
-        # Filter by minimum conviction
+        # Insert ALL signals into database for historical analysis
+        if all_signals:
+            db.insert_signals(all_signals)
+            logger.info(f"  [OK] Inserted {len(all_signals)} signals into database")
+
+        # Filter by minimum conviction for reporting/trading
         min_conviction = config.get('thresholds', {}).get('minimum_conviction', 40)
-        signals = gen.filter_by_conviction(signals, min_conviction=min_conviction)
+        signals = gen.filter_by_conviction(all_signals, min_conviction=min_conviction)
 
         if signals:
-            db.insert_signals(signals)
-            logger.info(f"  [OK] Generated {len(signals)} signals above {min_conviction} conviction")
+            logger.info(f"  [OK] {len(signals)} signals meet {min_conviction} conviction threshold")
         else:
-            logger.info("  [INFO] No signals met conviction threshold")
+            logger.info("  [INFO] No signals met conviction threshold for trading")
     except Exception as e:
         logger.error(f"  [ERROR] Signal generation failed: {e}")
 

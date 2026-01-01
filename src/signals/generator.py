@@ -69,7 +69,8 @@ class SignalGenerator:
                          price_data: Dict[str, Dict[str, Any]],
                          technical_data: Optional[Dict[str, Dict[str, Any]]] = None,
                          sentiment_data: Optional[Dict[str, Dict[str, Any]]] = None,
-                         reddit_data: Optional[Dict[str, Dict[str, Any]]] = None) -> List[Signal]:
+                         reddit_data: Optional[Dict[str, Dict[str, Any]]] = None,
+                         signal_date: Optional[datetime] = None) -> List[Signal]:
         """
         @brief Main signal generation logic with FREE data sources
         @param velocity_data Dictionary mapping ticker to velocity metrics
@@ -78,6 +79,7 @@ class SignalGenerator:
         @param technical_data Dictionary mapping ticker to technical analysis (RSI, MACD, etc.)
         @param sentiment_data Dictionary mapping ticker to news sentiment (Alpha Vantage/VADER)
         @param reddit_data Dictionary mapping ticker to Reddit mentions/sentiment
+        @param signal_date Optional datetime for historical signal generation (default: now)
         @return List of Signal objects sorted by conviction score (descending)
         """
         signals = []
@@ -161,7 +163,7 @@ class SignalGenerator:
                     price_at_signal=price.get('price', 0.0),
                     triggers=triggers,
                     notes=self._generate_notes(ticker, vel, insiders, triggers, tech, sentiment, reddit),
-                    created_at=datetime.now()
+                    created_at=signal_date if signal_date else datetime.now()
                 ))
 
         # Sort by conviction descending
