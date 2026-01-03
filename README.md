@@ -308,7 +308,7 @@ firefox reports/dashboard_*.html
 
 ## 📊 What You Get
 
-### 11 FREE Data Sources
+### 10 FREE Data Sources
 
 | Source | Data | API Calls/Day | Cost | Setup Time |
 |--------|------|---------------|------|------------|
@@ -319,12 +319,13 @@ firefox reports/dashboard_*.html
 | **Reddit (PRAW)** | Social mentions | ~100/min | FREE | 2 min |
 | **OpenInsider** | Insider trades | Unlimited | FREE | 0 min |
 | **ApeWisdom** | Reddit stock mentions | Unlimited | FREE | 0 min |
-| **FMP** | Earnings, estimates | 250 | FREE | 2 min |
 | **FRED** | Macro indicators (VIX, rates) | 120/min | FREE | 2 min |
 | **Congress Trades** | Congressional stock trades | Unlimited | FREE | 0 min |
 | **Technical** | RSI, MACD, Bollinger | Unlimited | FREE | 0 min |
 
 **Total: $0/month forever**
+
+> **Note:** FMP (Financial Modeling Prep) collector code exists but is not currently integrated into the pipeline. YFinance provides similar fundamental data.
 
 ### 8 Signal Types
 
@@ -353,7 +354,7 @@ firefox reports/dashboard_*.html
 
 ## 🎯 Features
 
-- ✅ **Multi-source analysis** - Combines 11 different FREE data sources
+- ✅ **Multi-source analysis** - Combines 10 different FREE data sources
 - ✅ **Conviction scoring** - Ranks signals 0-100 based on strength
 - ✅ **HTML dashboards** - Beautiful visual reports
 - ✅ **Email alerts** - Optional email notifications
@@ -386,7 +387,7 @@ Stock-Trader/
 │   │   ├── yfinance_collector.py   # Yahoo Finance data
 │   │   ├── vader_sentiment.py      # Local sentiment
 │   │   ├── reddit_collector.py     # Reddit data
-│   │   ├── fmp.py                  # Financial Modeling Prep
+│   │   ├── fmp.py                  # Financial Modeling Prep (not integrated)
 │   │   ├── finnhub.py              # Finnhub prices
 │   │   ├── apewisdom.py            # Reddit mentions
 │   │   ├── openinsider.py          # Insider trades
@@ -490,18 +491,15 @@ Stock-Trader/
 
 **Alternative:** The system works great without Reddit data - you still have 9 other FREE data sources!
 
-#### 1.4 Financial Modeling Prep (OPTIONAL - 2 minutes)
+#### 1.4 Financial Modeling Prep (OPTIONAL - Not Currently Integrated)
 
-**What you get:** Earnings calendar, analyst estimates, SEC filings, 250 calls/day
+**Note:** FMP collector exists but is not integrated into the main pipeline. YFinance provides similar fundamental data.
 
+If you want to use FMP in the future:
 1. Visit: https://site.financialmodelingprep.com/developer/docs/pricing
-2. Sign up for FREE tier
-3. Copy your API key
-4. Add to config:
-   ```yaml
-   api_keys:
-     fmp: "YOUR_FMP_KEY"
-   ```
+2. Sign up for FREE tier (250 calls/day)
+3. Collector code available at `src/collectors/fmp.py`
+4. Would require integration into `main.py` pipeline
 
 ### Step 2: Install Dependencies
 
@@ -707,14 +705,13 @@ python gui.py
 
 **API Keys Tab:**
 - **📖 API Setup Guide Button** - Opens comprehensive popup window with:
-  - Step-by-step instructions for all 5 FREE APIs
+  - Step-by-step instructions for all FREE APIs
   - Exact URLs for registration
   - What you get from each API (rates, limits, features)
   - Quick start checklist (get running in 5 minutes)
   - Tips: 100% FREE forever, no credit card needed
 - Finnhub API key input (with hover tooltip)
 - Alpha Vantage API key input (with hover tooltip)
-- FMP API key input (with hover tooltip)
 - Reddit API credentials: client ID, secret, user agent (with hover tooltips)
 - FRED API key input (with hover tooltip)
 
@@ -1581,7 +1578,6 @@ api_keys:
 
   # OPTIONAL (all FREE!)
   alphavantage: "YOUR_ALPHAVANTAGE_KEY"
-  fmp: "YOUR_FMP_KEY"
   reddit:
     client_id: "YOUR_CLIENT_ID"
     client_secret: "YOUR_SECRET"
@@ -1953,7 +1949,7 @@ The 154 warnings found by the type checker are mostly intentional `.get()` usage
 | ApeWisdom Collector | 5 | 79% | ✅ All passing |
 | Finnhub Collector | 5 | 76% | ✅ All passing |
 | OpenInsider Collector | 5 | 74% | ✅ All passing |
-| FMP Collector | 4 | 61% | ✅ All passing |
+| FMP Collector | 4 | 61% | ⚠️ Tests pass but not integrated |
 | Velocity Calculator | 4 | 92% | ✅ All passing |
 | **Total** | **238** | **50%** | **✅ 238 passing** |
 
@@ -2054,7 +2050,7 @@ MIT License - See LICENSE file for details
 ## 🙏 Acknowledgments
 
 **FREE Data Providers:**
-- Finnhub, Alpha Vantage, Yahoo Finance, Reddit, OpenInsider, ApeWisdom, Financial Modeling Prep
+- Finnhub, Alpha Vantage, Yahoo Finance, Reddit, OpenInsider, ApeWisdom, FRED, House Stock Watcher
 
 **Python Libraries:**
 - pandas, numpy, vaderSentiment, praw, requests, beautifulsoup4, matplotlib
@@ -2114,7 +2110,7 @@ MIT License - See LICENSE file for details
   - Configurable lookback period (default 90 days)
   - Programmatic access via Database methods
   - 33 comprehensive unit tests with 96% coverage
-- Updated dashboard footer to include all 11 FREE data sources
+- Updated dashboard footer to include all 10 FREE data sources
 - Total test coverage: 238 tests (50% code coverage)
 - Complete documentation with usage examples and disclaimers
 - Database additions: congress_trades table, congress_ticker_activity view
@@ -2159,7 +2155,7 @@ MIT License - See LICENSE file for details
 - Initial release
 - Core pipeline implementation
 - ApeWisdom, OpenInsider, Finnhub collectors
-- Alpha Vantage, YFinance, VADER, Reddit, FMP integration
+- Alpha Vantage, YFinance, VADER, Reddit integration
 - Technical analysis engine (RSI, MACD, Bollinger Bands)
 - Velocity metrics calculator
 - Signal generator with multi-factor scoring (8 signal types)
