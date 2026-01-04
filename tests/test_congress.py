@@ -273,7 +273,7 @@ class TestNormalizeHouseTrade:
         assert result['amount_from'] == 15001
         assert result['amount_to'] == 50000
         assert result['owner'] == 'self'
-        assert result['source'] == 'housestockwatcher'
+        assert result['source'] == 'fmp'  # Financial Modeling Prep API
 
     def test_normalize_minimal_trade(self):
         """Test normalizing trade with minimal data"""
@@ -431,7 +431,7 @@ class TestEdgeCases:
 
         # Should have defaults
         assert result['chamber'] == 'house'
-        assert result['source'] == 'housestockwatcher'
+        assert result['source'] == 'fmp'  # Financial Modeling Prep API
 
     def test_special_characters_in_name(self):
         """Test handling special characters in representative name"""

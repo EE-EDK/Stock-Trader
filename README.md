@@ -130,7 +130,7 @@ Topics covered:
 │  │ • Technical analysis (Step 2b)          │               │
 │  │ • Sentiment (AlphaVantage/VADER)        │               │
 │  │ • Reddit mentions (PRAW)                │               │
-│  │ • Congress trades (House Stock Watcher) │               │
+│  │ • Congress trades (FMP API)             │               │
 │  └──────────────────────────────────────────┘               │
 │                         │                                    │
 │                         ▼                                    │
@@ -320,12 +320,10 @@ firefox reports/dashboard_*.html
 | **OpenInsider** | Insider trades | Unlimited | FREE | 0 min |
 | **ApeWisdom** | Reddit stock mentions | Unlimited | FREE | 0 min |
 | **FRED** | Macro indicators (VIX, rates) | 120/min | FREE | 2 min |
-| **Congress Trades** | Congressional stock trades | Unlimited | FREE | 0 min |
+| **Congress Trades (FMP)** | Congressional stock trades | 250/day | FREE | 2 min |
 | **Technical** | RSI, MACD, Bollinger | Unlimited | FREE | 0 min |
 
 **Total: $0/month forever**
-
-> **Note:** FMP (Financial Modeling Prep) collector code exists but is not currently integrated into the pipeline. YFinance provides similar fundamental data.
 
 ### 8 Signal Types
 
@@ -491,15 +489,21 @@ Stock-Trader/
 
 **Alternative:** The system works great without Reddit data - you still have 9 other FREE data sources!
 
-#### 1.4 Financial Modeling Prep (OPTIONAL - Not Currently Integrated)
+#### 1.4 Financial Modeling Prep (RECOMMENDED - Congress Trades)
 
-**Note:** FMP collector exists but is not integrated into the main pipeline. YFinance provides similar fundamental data.
+**What you get:** Congressional stock trades (House + Senate), 250 API calls/day
 
-If you want to use FMP in the future:
 1. Visit: https://site.financialmodelingprep.com/developer/docs/pricing
-2. Sign up for FREE tier (250 calls/day)
-3. Collector code available at `src/collectors/fmp.py`
-4. Would require integration into `main.py` pipeline
+2. Sign up for the **FREE** tier (no credit card needed)
+3. Verify your email and get your API key
+4. Add to config:
+   ```yaml
+   api_keys:
+     fmp: "YOUR_FMP_KEY"
+   collection:
+     congress:
+       enabled: true
+   ```
 
 ### Step 2: Install Dependencies
 
@@ -1344,9 +1348,9 @@ backtesting:
 
 ## 🏛️ Congress Stock Trades Tracking
 
-**Track stock purchases and sales by US Congress members - 100% FREE, no API key needed!**
+**Track stock purchases and sales by US Congress members - FREE API with 250 calls/day**
 
-The Congress trades feature monitors financial disclosures from US Representatives and Senators to identify trading patterns and potential investment opportunities. This data is completely free and requires no API key.
+The Congress trades feature monitors financial disclosures from US Representatives and Senators to identify trading patterns and potential investment opportunities using the Financial Modeling Prep (FMP) API.
 
 ### Why Track Congress Trades?
 
@@ -1358,11 +1362,12 @@ Studies have shown that Congress members' stock trades can outperform the market
 
 ### Data Source
 
-- **Provider**: [House Stock Watcher](https://housestockwatcher.com/api)
-- **Cost**: 100% FREE (no API key required)
+- **Provider**: [Financial Modeling Prep (FMP)](https://financialmodelingprep.com)
+- **Cost**: 100% FREE tier available (250 API calls/day)
+- **Endpoints**: House disclosure + Senate trading
 - **Coverage**: US House of Representatives + US Senate
 - **Update Frequency**: Daily
-- **Data Points**: Representative name, party, ticker, transaction type, amount range, filing date
+- **Data Points**: Representative name, ticker, transaction type, amount range, filing date, disclosure date
 
 ### How It Works
 
@@ -1373,16 +1378,26 @@ Studies have shown that Congress members' stock trades can outperform the market
 
 ### Setup
 
-Enable in `config/config.yaml`:
+#### Step 1: Get Your FREE FMP API Key (2 minutes)
+
+1. Visit: https://site.financialmodelingprep.com/developer/docs/pricing
+2. Sign up for the **FREE** tier (250 calls/day)
+3. Verify your email
+4. Copy your API key from the dashboard
+
+#### Step 2: Configure
+
+Add to `config/config.yaml`:
 
 ```yaml
+api_keys:
+  fmp: "YOUR_FMP_API_KEY"  # Add your FMP key
+
 collection:
   congress:
     enabled: true           # Enable Congress trades tracking
     lookback_days: 90       # Collect trades from last 90 days
 ```
-
-**That's it!** No API key needed. The collector will automatically fetch data from the House Stock Watcher API.
 
 ### Usage Example
 
@@ -1558,7 +1573,8 @@ if activity and activity['buy_count'] > activity['sell_count'] * 2:
 
 ### Resources
 
-- **House Stock Watcher**: https://housestockwatcher.com
+- **Financial Modeling Prep**: https://financialmodelingprep.com
+- **FMP API Documentation**: https://site.financialmodelingprep.com/developer/docs
 - **Capitol Trades**: https://www.capitoltrades.com
 - **Official House Disclosures**: https://disclosures-clerk.house.gov
 - **Official Senate Disclosures**: https://efdsearch.senate.gov
@@ -1578,6 +1594,7 @@ api_keys:
 
   # OPTIONAL (all FREE!)
   alphavantage: "YOUR_ALPHAVANTAGE_KEY"
+  fmp: "YOUR_FMP_KEY"                  # For Congress trades
   reddit:
     client_id: "YOUR_CLIENT_ID"
     client_secret: "YOUR_SECRET"
@@ -2050,7 +2067,7 @@ MIT License - See LICENSE file for details
 ## 🙏 Acknowledgments
 
 **FREE Data Providers:**
-- Finnhub, Alpha Vantage, Yahoo Finance, Reddit, OpenInsider, ApeWisdom, FRED, House Stock Watcher
+- Finnhub, Alpha Vantage, Yahoo Finance, Reddit, OpenInsider, ApeWisdom, FRED, Financial Modeling Prep
 
 **Python Libraries:**
 - pandas, numpy, vaderSentiment, praw, requests, beautifulsoup4, matplotlib
@@ -2065,6 +2082,7 @@ MIT License - See LICENSE file for details
 ### Helpful Resources
 - **Finnhub Documentation:** https://finnhub.io/docs/api
 - **Alpha Vantage Documentation:** https://www.alphavantage.co/documentation/
+- **FMP API Documentation:** https://site.financialmodelingprep.com/developer/docs
 - **Reddit API (PRAW):** https://praw.readthedocs.io/
 - **ApeWisdom:** https://apewisdom.io/
 - **OpenInsider:** http://openinsider.com/

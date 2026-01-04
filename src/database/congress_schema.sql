@@ -1,6 +1,6 @@
 -- Congress Stock Trades Schema
 -- Tracks stock trades made by US Congress members (House + Senate)
--- Data sources: House Stock Watcher API (FREE), Finnhub Congress API (FREE)
+-- Data source: Financial Modeling Prep (FMP) API - FREE tier (250 calls/day)
 
 CREATE TABLE IF NOT EXISTS congress_trades (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS congress_trades (
     asset_type TEXT,  -- stock, options, bond, etc
 
     -- Metadata
-    source TEXT DEFAULT 'housestockwatcher',
+    source TEXT DEFAULT 'fmp',  -- Financial Modeling Prep API
     collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     -- Prevent duplicates
