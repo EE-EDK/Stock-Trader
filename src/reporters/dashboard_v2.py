@@ -71,8 +71,8 @@ class ModernDashboardGenerator:
         {signals_html}
         {activity_html}
         {technical_html}
-        {self._generate_footer()}
     </div>
+    {self._generate_footer()}
 </body>
 </html>"""
 
@@ -638,8 +638,15 @@ class ModernDashboardGenerator:
             tech = technical_data.get(signal.ticker, {})
             sent = sentiment_data.get(signal.ticker, {})
 
-            rsi = tech.get('rsi', 'N/A')
-            trend = tech.get('trend', 'Unknown')
+            rsi = tech.get('rsi_14', 'N/A')
+            # Determine trend from momentum
+            momentum = tech.get('momentum_10d', 0)
+            if momentum > 5:
+                trend = 'Up'
+            elif momentum < -5:
+                trend = 'Down'
+            else:
+                trend = 'Neutral'
             sentiment_score = sent.get('avg_sentiment', 0)
 
             signal_cards += f"""<div class="signal-card">
@@ -739,10 +746,17 @@ class ModernDashboardGenerator:
                 neu_pct = (neutral_count / total) * 100
                 neg_pct = (negative_count / total) * 100
 
+                # Build sentiment bar with only non-zero categories
+                sentiment_parts = []
+                if positive_count > 0:
+                    sentiment_parts.append(f'<div class="sentiment-positive" style="width: {pos_pct}%;">{positive_count} Bullish</div>')
+                if neutral_count > 0:
+                    sentiment_parts.append(f'<div class="sentiment-neutral" style="width: {neu_pct}%;">{neutral_count} Neutral</div>')
+                if negative_count > 0:
+                    sentiment_parts.append(f'<div class="sentiment-negative" style="width: {neg_pct}%;">{negative_count} Bearish</div>')
+
                 sentiment_html = f"""<div class="sentiment-bar">
-                    <div class="sentiment-positive" style="width: {pos_pct}%;">{positive_count} Bullish</div>
-                    <div class="sentiment-neutral" style="width: {neu_pct}%;">{neutral_count} Neutral</div>
-                    <div class="sentiment-negative" style="width: {neg_pct}%;">{negative_count} Bearish</div>
+                    {''.join(sentiment_parts)}
                 </div>"""
             else:
                 sentiment_html = '<p style="color: var(--light-text); text-align: center;">No sentiment data available</p>'
@@ -765,11 +779,13 @@ class ModernDashboardGenerator:
         if not technical_data:
             return ""
 
-        # Get summary stats
-        oversold = sum(1 for t in technical_data.values() if t.get('rsi', 50) < 30)
-        overbought = sum(1 for t in technical_data.values() if t.get('rsi', 50) > 70)
-        uptrend = sum(1 for t in technical_data.values() if t.get('trend', '').lower() == 'up')
-        downtrend = sum(1 for t in technical_data.values() if t.get('trend', '').lower() == 'down')
+        # Get summary stats (using correct field names from TechnicalAnalyzer)
+        oversold = sum(1 for t in technical_data.values() if t.get('rsi_14', 50) < 30)
+        overbought = sum(1 for t in technical_data.values() if t.get('rsi_14', 50) > 70)
+
+        # Determine trend from momentum
+        uptrend = sum(1 for t in technical_data.values() if t.get('momentum_10d', 0) > 5)
+        downtrend = sum(1 for t in technical_data.values() if t.get('momentum_10d', 0) < -5)
 
         return f"""<div class="section">
             <h2 class="section-title">Technical Overview</h2>
