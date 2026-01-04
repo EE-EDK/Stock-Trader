@@ -369,7 +369,7 @@ class DashboardGenerator:
                                signals: List[Any],
                                velocity_data: Dict,
                                technical_data: Dict,
-                               sentiment_data: Dict,
+                               sentiment_data: Dict) -> str:
         """Generate HTML for signal cards"""
         if not signals:
             return "<p>No signals generated</p>"
