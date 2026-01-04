@@ -90,6 +90,7 @@ class VaderSentimentAnalyzer:
         @param company_name Company name for better search results
         @param max_headlines Maximum number of headlines to scrape
         @return List of headline strings
+        @note Google News frequently changes structure - may need selector updates
         """
         search_query = company_name if company_name else ticker
         url = f"https://news.google.com/search?q={search_query}+stock"
@@ -104,11 +105,33 @@ class VaderSentimentAnalyzer:
             soup = BeautifulSoup(response.content, 'html.parser')
             headlines = []
 
-            # Extract headlines (Google News structure)
-            for article in soup.find_all('article')[:max_headlines]:
-                headline_tag = article.find('a', class_='gPFEn')
-                if headline_tag:
-                    headlines.append(headline_tag.get_text())
+            # Try multiple selectors as Google News structure changes frequently
+            # Method 1: Try finding article elements with links
+            articles = soup.find_all('article')
+            if articles:
+                for article in articles[:max_headlines]:
+                    # Try different link classes
+                    for link_class in ['gPFEn', 'JtKRv', 'VDXfz']:
+                        headline_tag = article.find('a', class_=link_class)
+                        if headline_tag and headline_tag.get_text().strip():
+                            headlines.append(headline_tag.get_text().strip())
+                            break
+                    # If no class works, try any link in article
+                    if not headline_tag:
+                        any_link = article.find('a')
+                        if any_link and any_link.get_text().strip():
+                            headlines.append(any_link.get_text().strip())
+
+            # Method 2: If no articles, try h3/h4 tags (fallback)
+            if not headlines:
+                for tag_name in ['h3', 'h4']:
+                    tags = soup.find_all(tag_name)
+                    for tag in tags[:max_headlines]:
+                        text = tag.get_text().strip()
+                        if text and len(text) > 10:  # Filter out short strings
+                            headlines.append(text)
+                    if headlines:
+                        break
 
             logger.info(f"Scraped {len(headlines)} headlines for {ticker}")
             return headlines
@@ -123,6 +146,7 @@ class VaderSentimentAnalyzer:
         @param ticker Stock ticker symbol
         @param max_headlines Maximum number of headlines to scrape
         @return List of headline strings
+        @note Yahoo Finance structure changes frequently - using flexible selectors
         """
         url = f"https://finance.yahoo.com/quote/{ticker}"
 
@@ -136,9 +160,42 @@ class VaderSentimentAnalyzer:
             soup = BeautifulSoup(response.content, 'html.parser')
             headlines = []
 
-            # Extract headlines from Yahoo Finance news section
-            for h3 in soup.find_all('h3', class_='Mb(5px)')[:max_headlines]:
-                headlines.append(h3.get_text())
+            # Try multiple methods to extract headlines
+            # Method 1: Try specific news section classes
+            for h3_class in ['Mb(5px)', 'clamp']:
+                h3_tags = soup.find_all('h3', class_=h3_class)
+                if h3_tags:
+                    for h3 in h3_tags[:max_headlines]:
+                        text = h3.get_text().strip()
+                        if text and len(text) > 10:
+                            headlines.append(text)
+                    break
+
+            # Method 2: If method 1 failed, try all h3 tags and filter by content
+            if not headlines:
+                all_h3 = soup.find_all('h3')
+                for h3 in all_h3[:max_headlines * 2]:  # Check more since we're filtering
+                    text = h3.get_text().strip()
+                    # Filter out navigation/UI elements (too short or common UI text)
+                    if (text and
+                        len(text) > 15 and
+                        len(text) < 200 and
+                        'News' not in text and
+                        'Yahoo' not in text and
+                        'Finance' not in text):
+                        headlines.append(text)
+                        if len(headlines) >= max_headlines:
+                            break
+
+            # Method 3: Try news stream items
+            if not headlines:
+                news_items = soup.find_all('li', class_='stream-item')
+                for item in news_items[:max_headlines]:
+                    h3 = item.find('h3')
+                    if h3:
+                        text = h3.get_text().strip()
+                        if text:
+                            headlines.append(text)
 
             logger.info(f"Scraped {len(headlines)} headlines from Yahoo Finance for {ticker}")
             return headlines

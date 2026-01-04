@@ -1,7 +1,7 @@
 """
 @file congress.py
 @brief Collector for US Congress stock trading data
-@details FREE data sources: House Stock Watcher API (no key needed), Finnhub Congressional Trading API
+@details Uses Financial Modeling Prep (FMP) API - Free tier available
 """
 
 import requests
@@ -17,13 +17,12 @@ class CongressTradesCollector:
     """
     @class CongressTradesCollector
     @brief Collects stock trading data from US Congress members
-    @details Uses multiple FREE sources:
-             - House Stock Watcher API (https://housestockwatcher.com/api) - No API key required
-             - Finnhub Congressional Trading API - Uses existing Finnhub key
+    @details Uses Financial Modeling Prep API (https://financialmodelingprep.com)
+             - Free tier: 250 requests/day
+             - Endpoints: senate-disclosure, senate-trading, house-disclosure
     """
 
-    HOUSE_API_URL = "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json"
-    FINNHUB_CONGRESS_URL = "https://finnhub.io/api/v1/stock/congressional-trading"
+    FMP_BASE_URL = "https://financialmodelingprep.com/api/v4"
 
     def __init__(self, config: dict):
         """
@@ -34,8 +33,8 @@ class CongressTradesCollector:
         self.enabled = self.config.get('enabled', False)
         self.lookback_days = self.config.get('lookback_days', 90)
 
-        # Finnhub API key (optional, for enhanced data)
-        self.finnhub_key = config.get('api_keys', {}).get('finnhub')
+        # FMP API key
+        self.fmp_key = config.get('api_keys', {}).get('fmp')
 
         self.session = requests.Session()
         self.session.headers.update({
@@ -44,112 +43,162 @@ class CongressTradesCollector:
 
     def collect_house_trades(self) -> List[Dict]:
         """
-        @brief Collect House of Representatives trades from House Stock Watcher
+        @brief Collect House of Representatives trades from FMP API
         @return List of trade dictionaries
         """
-        if not self.enabled:
+        if not self.enabled or not self.fmp_key:
+            logger.info("Congress trades collection disabled or FMP API key not configured")
             return []
 
         try:
-            logger.info("Fetching House trades from House Stock Watcher...")
-            response = self.session.get(self.HOUSE_API_URL, timeout=30)
+            logger.info("Fetching House trades from Financial Modeling Prep...")
+            url = f"{self.FMP_BASE_URL}/house-disclosure"
+            params = {'apikey': self.fmp_key}
+
+            response = self.session.get(url, params=params, timeout=30)
             response.raise_for_status()
 
             all_trades = response.json()
+
+            if not isinstance(all_trades, list):
+                logger.warning(f"Unexpected FMP response format: {type(all_trades)}")
+                return []
 
             # Filter to recent trades
             cutoff_date = datetime.now() - timedelta(days=self.lookback_days)
             recent_trades = []
 
             for trade in all_trades:
-                transaction_date_str = self._parse_date(trade.get('transaction_date'))
+                transaction_date_str = trade.get('transactionDate')
                 if not transaction_date_str:
                     continue
 
-                # Convert to datetime for comparison
-                transaction_date = datetime.strptime(transaction_date_str, '%Y-%m-%d')
+                # Parse transaction date
+                try:
+                    transaction_date = datetime.strptime(transaction_date_str, '%Y-%m-%d')
+                except ValueError:
+                    continue
 
                 if transaction_date >= cutoff_date:
-                    recent_trades.append(self._normalize_house_trade(trade))
+                    normalized = self._normalize_fmp_trade(trade, 'house')
+                    if normalized['ticker']:  # Only add if we have a ticker
+                        recent_trades.append(normalized)
 
             logger.info(f"Collected {len(recent_trades)} recent House trades (last {self.lookback_days} days)")
             return recent_trades
 
         except Exception as e:
-            logger.error(f"Failed to collect House trades: {e}")
+            logger.error(f"Failed to collect House trades from FMP: {e}")
             return []
 
-    def collect_finnhub_congress_trades(self, symbol: Optional[str] = None) -> List[Dict]:
+    def collect_senate_trades(self) -> List[Dict]:
         """
-        @brief Collect Congress trades from Finnhub API
-        @param symbol Optional stock symbol to filter
+        @brief Collect Senate trades from FMP API
         @return List of trade dictionaries
         """
-        if not self.enabled or not self.finnhub_key:
+        if not self.enabled or not self.fmp_key:
             return []
 
         try:
-            # Note: Finnhub's congress API requires a symbol parameter
-            # We'll skip this for now unless we have specific symbols to query
-            # This is a premium feature anyway
-            logger.info("Finnhub congressional trading requires premium tier, skipping")
-            return []
+            logger.info("Fetching Senate trades from Financial Modeling Prep...")
+            url = f"{self.FMP_BASE_URL}/senate-trading"
+            params = {'apikey': self.fmp_key}
+
+            response = self.session.get(url, params=params, timeout=30)
+            response.raise_for_status()
+
+            all_trades = response.json()
+
+            if not isinstance(all_trades, list):
+                logger.warning(f"Unexpected FMP response format: {type(all_trades)}")
+                return []
+
+            # Filter to recent trades
+            cutoff_date = datetime.now() - timedelta(days=self.lookback_days)
+            recent_trades = []
+
+            for trade in all_trades:
+                transaction_date_str = trade.get('transactionDate')
+                if not transaction_date_str:
+                    continue
+
+                try:
+                    transaction_date = datetime.strptime(transaction_date_str, '%Y-%m-%d')
+                except ValueError:
+                    continue
+
+                if transaction_date >= cutoff_date:
+                    normalized = self._normalize_fmp_trade(trade, 'senate')
+                    if normalized['ticker']:
+                        recent_trades.append(normalized)
+
+            logger.info(f"Collected {len(recent_trades)} recent Senate trades (last {self.lookback_days} days)")
+            return recent_trades
 
         except Exception as e:
-            logger.error(f"Failed to collect Finnhub Congress trades: {e}")
+            logger.error(f"Failed to collect Senate trades from FMP: {e}")
             return []
 
     def collect_all_trades(self) -> List[Dict]:
         """
-        @brief Collect trades from all available sources
+        @brief Collect trades from all available sources (House and Senate)
         @return Combined list of trade dictionaries
         """
         if not self.enabled:
             logger.info("Congress trades collection is disabled")
             return []
 
+        if not self.fmp_key or self.fmp_key == 'YOUR_FMP_KEY':
+            logger.info("FMP API key not configured - skipping Congress trades")
+            return []
+
         all_trades = []
 
-        # Collect from House Stock Watcher (primary FREE source)
+        # Collect from both House and Senate
         house_trades = self.collect_house_trades()
         all_trades.extend(house_trades)
 
-        logger.info(f"Total Congress trades collected: {len(all_trades)}")
+        senate_trades = self.collect_senate_trades()
+        all_trades.extend(senate_trades)
+
+        logger.info(f"Total Congress trades collected: {len(all_trades)} (House: {len(house_trades)}, Senate: {len(senate_trades)})")
         return all_trades
 
-    def _normalize_house_trade(self, trade: Dict) -> Dict:
+    def _normalize_fmp_trade(self, trade: Dict, chamber: str) -> Dict:
         """
-        @brief Normalize House Stock Watcher trade format to standard format
-        @param trade Raw trade data from House Stock Watcher
+        @brief Normalize FMP trade format to standard format
+        @param trade Raw trade data from FMP API
+        @param chamber 'house' or 'senate'
         @return Normalized trade dictionary
         """
-        # Extract ticker from disclosure_url or asset field
-        ticker = self._extract_ticker(trade)
+        # Extract ticker symbol
+        ticker = trade.get('symbol', '').upper()
 
-        # Parse amount range
-        amount_from, amount_to = self._parse_amount_range(trade.get('amount', ''))
+        # Parse amount
+        amount_str = trade.get('amount', '')
+        amount_from, amount_to = self._parse_amount_range(amount_str)
 
         # Normalize transaction type
         transaction_type = self._normalize_transaction_type(trade.get('type', ''))
 
         return {
-            'representative_name': trade.get('representative', ''),
-            'party': trade.get('party', ''),
-            'chamber': 'house',
-            'state': trade.get('state', ''),
+            'representative_name': trade.get('firstName', '') + ' ' + trade.get('lastName', ''),
+            'party': '',  # FMP doesn't provide party info
+            'chamber': chamber,
+            'state': '',  # FMP doesn't provide state info
             'district': trade.get('district', ''),
             'ticker': ticker,
-            'asset_name': trade.get('asset_description', ''),
+            'asset_name': trade.get('assetDescription', ''),
             'transaction_type': transaction_type,
-            'transaction_date': self._parse_date(trade.get('transaction_date')),
-            'filing_date': self._parse_date(trade.get('disclosure_date')),
-            'disclosure_date': self._parse_date(trade.get('disclosure_date')),
+            'transaction_date': trade.get('transactionDate'),
+            'filing_date': trade.get('disclosureDate', trade.get('transactionDate')),
+            'disclosure_date': trade.get('disclosureDate', trade.get('transactionDate')),
             'amount_from': amount_from,
             'amount_to': amount_to,
             'owner': trade.get('owner', 'self'),
-            'position': '',
-            'asset_type': trade.get('asset_type', 'stock'),
-            'source': 'housestockwatcher'
+            'position': trade.get('position', ''),
+            'asset_type': trade.get('assetType', 'stock'),
+            'source': 'fmp'
         }
 
     def _extract_ticker(self, trade: Dict) -> str:
