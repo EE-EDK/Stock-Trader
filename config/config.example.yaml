@@ -70,9 +70,10 @@ collection:
     collect_forex: true      # USD/EUR exchange rate
 
   congress:
-    enabled: true            # Enable Congress stock trades tracking (100% FREE!)
-    # Data source: House Stock Watcher API (no API key needed)
+    enabled: true            # Enable Congress stock trades tracking (FREE tier: 250 calls/day)
+    # Data source: Financial Modeling Prep (FMP) API
     # Tracks stock purchases/sales by US Representatives and Senators
+    # Requires FMP API key (see api_keys.fmp above)
     lookback_days: 90        # Collect trades from last 90 days
 
 # Paper Trading (track mock purchases to validate signals)

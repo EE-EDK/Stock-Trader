@@ -588,7 +588,7 @@ class Database:
                     trade.get('owner'),
                     trade.get('position'),
                     trade.get('asset_type'),
-                    trade.get('source', 'housestockwatcher')
+                    trade.get('source', 'fmp')  # Financial Modeling Prep API
                 ))
                 inserted += 1
             except sqlite3.IntegrityError:

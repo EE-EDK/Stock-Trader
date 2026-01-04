@@ -738,7 +738,7 @@ class DashboardGenerator:
             <h2>🏛️ Congress Stock Trades (Last 90 Days)</h2>
             <p class="congress-description">
                 Recent stock purchases and sales by US Congress members.
-                Data from House Stock Watcher (100% FREE, no API key needed).
+                Data from Financial Modeling Prep (FMP) API - 100% FREE tier (250 calls/day).
             </p>
 
             <style>
