@@ -8,14 +8,7 @@ api_keys:
 
   # OPTIONAL BUT RECOMMENDED (all FREE!)
   alphavantage: "YOUR_ALPHAVANTAGE_KEY"    # https://www.alphavantage.co/support/#api-key (FREE: 100 calls/day for sentiment)
-  fmp: "YOUR_FMP_KEY"                      # https://site.financialmodelingprep.com/developer/docs/pricing (FREE: 250 calls/day)
 
-  # Reddit API (FREE - instant approval)
-  # Get at: https://www.reddit.com/prefs/apps (create app -> get client_id & secret)
-  reddit:
-    client_id: "YOUR_REDDIT_CLIENT_ID"
-    client_secret: "YOUR_REDDIT_SECRET"
-    user_agent: "stock-tracker:v1.0 (by u/yourusername)"
 
   # LEGACY (optional)
   fred: "YOUR_FRED_KEY"                    # https://fred.stlouisfed.org/docs/api/api_key.html
@@ -51,9 +44,6 @@ collection:
     enabled: true            # Enable local VADER sentiment (no API calls!)
     scrape_headlines: true   # Scrape Google News + Yahoo Finance headlines
 
-  reddit:
-    enabled: false           # Set to true if you have Reddit API credentials
-    subreddits: ["wallstreetbets", "stocks", "investing"]
     lookback_hours: 24       # How far back to analyze posts
 
   technical_analysis:
@@ -68,13 +58,6 @@ collection:
     collect_unemployment: true  # Unemployment rate
     collect_inflation: true  # CPI (inflation)
     collect_forex: true      # USD/EUR exchange rate
-
-  congress:
-    enabled: true            # Enable Congress stock trades tracking (FREE tier: 250 calls/day)
-    # Data source: Financial Modeling Prep (FMP) API
-    # Tracks stock purchases/sales by US Representatives and Senators
-    # Requires FMP API key (see api_keys.fmp above)
-    lookback_days: 90        # Collect trades from last 90 days
 
 # Paper Trading (track mock purchases to validate signals)
 paper_trading:

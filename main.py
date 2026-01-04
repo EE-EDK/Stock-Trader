@@ -68,9 +68,6 @@ except ImportError:
     VADER_AVAILABLE = False
 
 try:
-    from src.collectors.reddit_collector import RedditCollector
-    REDDIT_AVAILABLE = True
-except ImportError:
     REDDIT_AVAILABLE = False
 
 try:
@@ -79,11 +76,8 @@ try:
 except ImportError:
     FRED_AVAILABLE = False
 
-try:
-    from src.collectors.congress import CongressTradesCollector
-    CONGRESS_AVAILABLE = True
-except ImportError:
-    CONGRESS_AVAILABLE = False
+# Congress trades collector removed - no longer supported
+CONGRESS_AVAILABLE = False
 
 
 def load_config(config_path: str = "config/config.yaml") -> dict:
@@ -233,7 +227,6 @@ def run_pipeline(config: dict, skip_email: bool = False):
     # Initialize optional data collection variables (Phase 3)
     macro_indicators = {}
     market_assessment = {}
-    congress_trades = []
 
     # ========== Step 1: Collect Data IN PARALLEL ==========
     logger.info("Step 1: Collecting data from sources (PARALLEL MODE)...")
@@ -349,41 +342,7 @@ def run_pipeline(config: dict, skip_email: bool = False):
                 else:
                     logger.info("  [SKIP] FRED: API key not configured")
     
-    # Reddit data (optional, sequential)
-    reddit_data = {}
-    if REDDIT_AVAILABLE and config.get('collection', {}).get('reddit', {}).get('enabled', False):
-        try:
-            reddit_config = config['api_keys'].get('reddit', {})
-            if reddit_config.get('client_id') and reddit_config['client_id'] != 'YOUR_REDDIT_CLIENT_ID':
-                reddit = RedditCollector(
-                    client_id=reddit_config['client_id'],
-                    client_secret=reddit_config['client_secret'],
-                    user_agent=reddit_config['user_agent']
-                )
-                mentions_reddit = reddit.collect_ticker_mentions(
-                    hours=config.get('collection', {}).get('reddit', {}).get('lookback_hours', 24)
-                )
-                reddit_data = {m['ticker']: m for m in mentions_reddit}
-                logger.info(f"  [OK] Reddit: {len(mentions_reddit)} ticker mentions")
-            else:
-                logger.info("  [SKIP] Reddit: API credentials not configured")
-        except Exception as e:
-            logger.error(f"  [ERROR] Reddit failed: {e}")
     
-    # Congress Stock Trades (optional, sequential)
-    congress_trades = []
-    if CONGRESS_AVAILABLE and config.get('collection', {}).get('congress', {}).get('enabled', False):
-        try:
-            congress = CongressTradesCollector(config)
-            congress_trades = congress.collect_all_trades()
-            if congress_trades:
-                db.insert_congress_trades(congress_trades)
-                logger.info(f"  [OK] Congress Trades: {len(congress_trades)} trades")
-            else:
-                logger.info("  [INFO] Congress Trades: No recent trades")
-        except Exception as e:
-            logger.error(f"  [ERROR] Congress Trades failed: {e}")
-
     # ========== Update Paper Trading Positions ==========
     if paper_trading.enabled:
         logger.info("Updating paper trading positions with current prices...")
@@ -448,7 +407,6 @@ def run_pipeline(config: dict, skip_email: bool = False):
             price_data=db.get_latest_prices(),
             technical_data=technical_data,      # NEW!
             sentiment_data=sentiment_data,      # NEW!
-            reddit_data=reddit_data             # NEW!
         )
 
         # Insert ALL signals into database for historical analysis
@@ -535,11 +493,9 @@ def run_pipeline(config: dict, skip_email: bool = False):
             velocity_data=velocity_data,
             technical_data=technical_data,
             sentiment_data=sentiment_data,
-            reddit_data=reddit_data,
             paper_trading_stats=paper_trading_stats,
             macro_indicators=macro_indicators,
-            market_assessment=market_assessment,
-            congress_trades=congress_trades
+            market_assessment=market_assessment
         )
         logger.info(f"  [OK] Dashboard saved to: {dashboard_path}")
         logger.info(f"  [TIP] Open {dashboard_path} in your browser to view results!")

@@ -179,70 +179,6 @@ def test_openinsider():
     except Exception as e:
         print(f"      ✗ Error: {e}")
 
-def test_congress():
-    """Test Congress trades collector with FMP API"""
-    print("\n" + "="*60)
-    print("TESTING CONGRESS TRADES COLLECTOR (FMP)")
-    print("="*60)
-
-    config = load_config()
-    fmp_key = config.get('api_keys', {}).get('fmp')
-
-    if not fmp_key or fmp_key == 'YOUR_FMP_KEY':
-        print("\n      ✗ FMP API key not configured in config.yaml")
-        print("      Add your FMP key to api_keys.fmp in config/config.yaml")
-        return
-
-    print(f"\n[1/2] Testing House Disclosure API...")
-    url = "https://financialmodelingprep.com/api/v4/house-disclosure"
-    print(f"      URL: {url}")
-
-    try:
-        response = requests.get(url, params={'apikey': fmp_key}, timeout=30)
-        print(f"      Status code: {response.status_code}")
-
-        if response.status_code == 200:
-            data = response.json()
-            if isinstance(data, list):
-                print(f"      ✓ Success! {len(data)} House trades available")
-                if data:
-                    first = data[0]
-                    ticker = first.get('symbol', 'N/A')
-                    name = f"{first.get('firstName', '')} {first.get('lastName', '')}"
-                    print(f"      Sample: {name.strip()} - {ticker}")
-            else:
-                print(f"      ✗ Unexpected response format: {type(data)}")
-        else:
-            print(f"      ✗ HTTP {response.status_code}: {response.text[:200]}")
-
-    except Exception as e:
-        print(f"      ✗ Error: {e}")
-
-    print(f"\n[2/2] Testing Senate Trading API...")
-    url = "https://financialmodelingprep.com/api/v4/senate-trading"
-    print(f"      URL: {url}")
-
-    try:
-        response = requests.get(url, params={'apikey': fmp_key}, timeout=30)
-        print(f"      Status code: {response.status_code}")
-
-        if response.status_code == 200:
-            data = response.json()
-            if isinstance(data, list):
-                print(f"      ✓ Success! {len(data)} Senate trades available")
-                if data:
-                    first = data[0]
-                    ticker = first.get('symbol', 'N/A')
-                    name = f"{first.get('firstName', '')} {first.get('lastName', '')}"
-                    print(f"      Sample: {name.strip()} - {ticker}")
-            else:
-                print(f"      ✗ Unexpected response format: {type(data)}")
-        else:
-            print(f"      ✗ HTTP {response.status_code}: {response.text[:200]}")
-
-    except Exception as e:
-        print(f"      ✗ Error: {e}")
-
 def test_fred():
     """Test FRED collector"""
     print("\n" + "="*60)
@@ -341,7 +277,6 @@ def main():
 
     test_vader_sentiment()
     test_openinsider()
-    test_congress()
     test_fred()
     test_data_flow()
 
@@ -353,7 +288,6 @@ def main():
     print("  2. Check if web scraping selectors need updating")
     print("  3. Verify API keys are configured correctly")
     print("  4. Consider increasing FRED lookback days for monthly indicators")
-    print("  5. Look for alternative Congress trades data source if 403 persists")
     print("\n")
 
 if __name__ == "__main__":

@@ -37,9 +37,7 @@ modules_to_test = [
     ('src.collectors.fmp', 'FMP collector'),
     ('src.collectors.yfinance_collector', 'YFinance collector'),
     ('src.collectors.vader_sentiment', 'VADER sentiment'),
-    ('src.collectors.reddit_collector', 'Reddit collector'),
     ('src.collectors.fred', 'FRED collector'),
-    ('src.collectors.congress', 'Congress collector'),
     ('src.database.models', 'Database models'),
     ('src.database.queries', 'Database queries'),
     ('src.metrics.velocity', 'Velocity metrics'),
@@ -95,13 +93,7 @@ except Exception as e:
     print(f"  ❌ FinnhubCollector: {e}")
 
 try:
-    from src.collectors.congress import CongressTradesCollector
-    congress = CongressTradesCollector({'collection': {'congress': {'enabled': True, 'lookback_days': 90}}})
-    successes.append("✅ CongressTradesCollector instantiation")
-    print("  ✅ CongressTradesCollector instantiation")
 except Exception as e:
-    errors.append(f"❌ CongressTradesCollector: {e}")
-    print(f"  ❌ CongressTradesCollector: {e}")
 
 try:
     from src.collectors.fred import FREDCollector
@@ -188,7 +180,6 @@ try:
     params = list(sig.parameters.keys())
     required_params = ['signals', 'velocity_data', 'technical_data', 'sentiment_data',
                        'reddit_data', 'paper_trading_stats', 'macro_indicators',
-                       'market_assessment', 'congress_trades']
 
     missing = [p for p in required_params if p not in params]
     if missing:
