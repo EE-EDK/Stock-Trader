@@ -171,7 +171,10 @@ class FREDCollector:
         for indicator_name, indicator_info in self.INDICATORS.items():
             series_id = indicator_info['series_id']
 
-            observation = self.get_latest_observation(series_id)
+            # Monthly indicators need longer lookback period (60 days instead of 30)
+            # UNRATE and CPIAUCSL are published monthly, not daily
+            days_back = 60 if indicator_name in ['UNEMPLOYMENT', 'INFLATION'] else 30
+            observation = self.get_latest_observation(series_id, days_back=days_back)
 
             if observation:
                 results[indicator_name] = {
