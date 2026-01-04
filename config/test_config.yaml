@@ -4,8 +4,6 @@
 api_keys:
   finnhub: "test_key_finnhub_123"
   alphavantage: "test_key_av_123"
-  fmp: "test_key_fmp_123"
-    user_agent: "test:v1.0"
   fred: "test_fred_key"
 
 database:
@@ -30,7 +28,6 @@ collection:
     collect_fundamentals: true
     collect_analyst_ratings: true
   vader_sentiment:
-    enabled: false  # Disabled for test
     enabled: false  # Disabled for test
 
 signals:
