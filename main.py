@@ -23,7 +23,7 @@ from src.metrics.velocity import VelocityCalculator
 from src.metrics.technical import TechnicalAnalyzer
 from src.signals.generator import SignalGenerator
 from src.reporters.email import EmailReporter
-from src.reporters.dashboard import DashboardGenerator
+from src.reporters.dashboard_v2 import ModernDashboardGenerator as DashboardGenerator
 from src.trading.paper_trading import PaperTradingManager
 
 # Setup logging first (before other imports that may need it)
