@@ -67,8 +67,8 @@ try:
 except ImportError:
     VADER_AVAILABLE = False
 
-try:
-    REDDIT_AVAILABLE = False
+# Reddit collector removed - no longer supported
+REDDIT_AVAILABLE = False
 
 try:
     from src.collectors.fred import FREDCollector

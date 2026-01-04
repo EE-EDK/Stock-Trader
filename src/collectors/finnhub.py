@@ -168,7 +168,7 @@ class FinnhubCollector:
 
     def collect_social_sentiment(self, ticker: str) -> Optional[Dict]:
         """
-        @brief Fetch social media sentiment (social media) for a ticker
+        @brief Fetch social media sentiment for a ticker
         @param ticker Stock ticker symbol
         @return Dictionary with social sentiment or None
         @note This endpoint may have limited data for free tier
@@ -178,9 +178,14 @@ class FinnhubCollector:
         if not data:
             return None
 
-        # Extract Reddit data if available
-                'twitter_mentions': twitter_data[0].get('mention', 0) if twitter_data else 0,
-                'twitter_score': twitter_data[0].get('score', 0) if twitter_data else 0,
+        # Extract Twitter data if available
+        twitter_data = data.get('twitter', [])
+
+        if twitter_data:
+            return {
+                'ticker': ticker,
+                'twitter_mentions': twitter_data[0].get('mention', 0),
+                'twitter_score': twitter_data[0].get('score', 0),
                 'collected_at': datetime.now()
             }
 
