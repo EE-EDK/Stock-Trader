@@ -344,7 +344,7 @@ class DashboardGenerator:
 
         <div class="signals">
             <h2>🎯 Top Trading Signals</h2>
-            {self._generate_signals_html(signals, velocity_data, technical_data, sentiment_data) reddit_data)}
+            {self._generate_signals_html(signals, velocity_data, technical_data, sentiment_data)}
         </div>
 
         <div class="footer">
@@ -369,7 +369,7 @@ class DashboardGenerator:
                                signals: List[Any],
                                velocity_data: Dict,
                                technical_data: Dict,
-                               sentiment_data: Dict,
+                               sentiment_data: Dict) -> str:
         """Generate HTML for signal cards"""
         if not signals:
             return "<p>No signals generated</p>"

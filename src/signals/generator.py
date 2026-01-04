@@ -230,7 +230,7 @@ class SignalGenerator:
                        insiders: List[Dict[str, Any]],
                        triggers: List[str],
                        tech: Optional[Dict[str, Any]] = None,
-                       sentiment: Optional[Dict[str, Any]] = None,
+                       sentiment: Optional[Dict[str, Any]] = None) -> str:
         """
         @brief Generate human-readable notes for the signal
         @param ticker Stock ticker symbol

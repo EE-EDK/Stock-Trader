@@ -93,9 +93,6 @@ except Exception as e:
     print(f"  ❌ FinnhubCollector: {e}")
 
 try:
-except Exception as e:
-
-try:
     from src.collectors.fred import FREDCollector
     fred = FREDCollector(api_key="test_key")
     successes.append("✅ FREDCollector instantiation")
