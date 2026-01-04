@@ -30,20 +30,16 @@ class ModernDashboardGenerator:
                 velocity_data: Dict[str, Dict],
                 technical_data: Dict[str, Dict] = None,
                 sentiment_data: Dict[str, Dict] = None,
-                reddit_data: Dict[str, Dict] = None,
                 paper_trading_stats: Dict = None,
                 macro_indicators: Dict = None,
-                market_assessment: Dict = None,
-                congress_trades: List[Dict] = None) -> str:
+                market_assessment: Dict = None) -> str:
         """Generate complete modern HTML dashboard"""
 
         technical_data = technical_data or {}
         sentiment_data = sentiment_data or {}
-        reddit_data = reddit_data or {}
         paper_trading_stats = paper_trading_stats or {}
         macro_indicators = macro_indicators or {}
         market_assessment = market_assessment or {}
-        congress_trades = congress_trades or []
 
         # Calculate market health score (0-100)
         market_score = self._calculate_market_score(market_assessment, macro_indicators)
@@ -52,7 +48,7 @@ class ModernDashboardGenerator:
         header_html = self._generate_header(market_score, market_assessment)
         overview_html = self._generate_overview_stats(signals, velocity_data, paper_trading_stats)
         signals_html = self._generate_signals_section(signals, velocity_data, technical_data, sentiment_data)
-        activity_html = self._generate_activity_section(congress_trades, velocity_data, sentiment_data)
+        activity_html = self._generate_sentiment_section(sentiment_data)
         technical_html = self._generate_technical_section(technical_data)
 
         html = f"""<!DOCTYPE html>
@@ -693,47 +689,8 @@ class ModernDashboardGenerator:
 
         return f'<div class="mini-chart">{bars_html}</div>'
 
-    def _generate_activity_section(self, congress_trades: List[Dict], velocity_data: Dict, sentiment_data: Dict) -> str:
-        """Generate insider & congress activity section"""
-        if not congress_trades:
-            congress_html = '<p style="color: var(--light-text); text-align: center; padding: 20px;">No recent congressional trades</p>'
-        else:
-            # Get top 10 recent trades
-            recent_trades = sorted(congress_trades, key=lambda t: t.get('transaction_date', ''), reverse=True)[:10]
-
-            rows_html = ""
-            for trade in recent_trades:
-                ticker = trade.get('ticker', 'N/A')
-                member = trade.get('representative_name', 'Unknown')
-                tx_type = trade.get('transaction_type', 'unknown')
-                tx_date = trade.get('transaction_date', 'N/A')
-                amount_from = trade.get('amount_from', 0) or 0
-                amount_to = trade.get('amount_to', 0) or 0
-                amount_mid = (amount_from + amount_to) / 2 if amount_from and amount_to else 0
-
-                type_color = 'var(--success)' if tx_type == 'purchase' else 'var(--coral)'
-
-                rows_html += f"""<tr>
-                    <td style="color: {type_color}; font-weight: 600;">{tx_date}</td>
-                    <td><strong>{ticker}</strong></td>
-                    <td>{member[:25]}</td>
-                    <td style="color: {type_color}; text-transform: uppercase; font-size: 11px; letter-spacing: 1px;">{tx_type}</td>
-                    <td style="text-align: right;">${amount_mid:,.0f}</td>
-                </tr>"""
-
-            congress_html = f"""<table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Ticker</th>
-                        <th>Member</th>
-                        <th>Type</th>
-                        <th style="text-align: right;">Amount</th>
-                    </tr>
-                </thead>
-                <tbody>{rows_html}</tbody>
-            </table>"""
-
+    def _generate_sentiment_section(self, sentiment_data: Dict) -> str:
+        """Generate market sentiment section"""
         # Sentiment overview
         if sentiment_data:
             positive_count = sum(1 for s in sentiment_data.values() if s.get('avg_sentiment', 0) > 0.1)
@@ -763,15 +720,9 @@ class ModernDashboardGenerator:
         else:
             sentiment_html = '<p style="color: var(--light-text); text-align: center;">No sentiment data available</p>'
 
-        return f"""<div class="grid-2">
-            <div class="section">
-                <h2 class="section-title">🏛️ Congress Trades</h2>
-                {congress_html}
-            </div>
-            <div class="section">
-                <h2 class="section-title">📊 Market Sentiment</h2>
-                {sentiment_html}
-            </div>
+        return f"""<div class="section">
+            <h2 class="section-title">📊 Market Sentiment</h2>
+            {sentiment_html}
         </div>"""
 
     def _generate_technical_section(self, technical_data: Dict) -> str:
