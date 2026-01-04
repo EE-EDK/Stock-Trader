@@ -176,7 +176,7 @@ try:
     sig = inspect.signature(dashboard.generate)
     params = list(sig.parameters.keys())
     required_params = ['signals', 'velocity_data', 'technical_data', 'sentiment_data',
-                       'paper_trading_stats', 'macro_indicators',
+                       'paper_trading_stats', 'macro_indicators', 'market_assessment']
 
     missing = [p for p in required_params if p not in params]
     if missing:
