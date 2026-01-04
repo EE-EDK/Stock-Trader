@@ -5,9 +5,6 @@ api_keys:
   finnhub: "test_key_finnhub_123"
   alphavantage: "test_key_av_123"
   fmp: "test_key_fmp_123"
-  reddit:
-    client_id: "test_client_id"
-    client_secret: "test_secret"
     user_agent: "test:v1.0"
   fred: "test_fred_key"
 
@@ -34,13 +31,7 @@ collection:
     collect_analyst_ratings: true
   vader_sentiment:
     enabled: false  # Disabled for test
-  reddit:
     enabled: false  # Disabled for test
-  fred:
-    enabled: false  # Disabled for test
-  congress:
-    enabled: false  # Disabled for test
-    lookback_days: 30
 
 signals:
   min_sentiment_score: 0.5

@@ -33,31 +33,25 @@ class DashboardGenerator:
                 velocity_data: Dict[str, Dict],
                 technical_data: Dict[str, Dict] = None,
                 sentiment_data: Dict[str, Dict] = None,
-                reddit_data: Dict[str, Dict] = None,
                 paper_trading_stats: Dict = None,
                 macro_indicators: Dict = None,
-                market_assessment: Dict = None,
-                congress_trades: List[Dict] = None) -> str:
+                market_assessment: Dict = None) -> str:
         """
         @brief Generate complete HTML dashboard
         @param signals List of Signal objects
         @param velocity_data Velocity metrics
         @param technical_data Technical analysis data
         @param sentiment_data Sentiment analysis data
-        @param reddit_data Reddit mention data
         @param paper_trading_stats Paper trading performance statistics
         @param macro_indicators FRED macro economic indicators
         @param market_assessment Market risk assessment from FRED data
-        @param congress_trades Recent Congress stock trading activity
         @return Path to generated HTML file
         """
         technical_data = technical_data or {}
         sentiment_data = sentiment_data or {}
-        reddit_data = reddit_data or {}
         paper_trading_stats = paper_trading_stats or {}
         macro_indicators = macro_indicators or {}
         market_assessment = market_assessment or {}
-        congress_trades = congress_trades or []
 
         html = f"""
 <!DOCTYPE html>
@@ -348,16 +342,14 @@ class DashboardGenerator:
 
         {self._generate_paper_trading_html(paper_trading_stats)}
 
-        {self._generate_congress_trades_html(congress_trades)}
-
         <div class="signals">
             <h2>🎯 Top Trading Signals</h2>
-            {self._generate_signals_html(signals, velocity_data, technical_data, sentiment_data, reddit_data)}
+            {self._generate_signals_html(signals, velocity_data, technical_data, sentiment_data) reddit_data)}
         </div>
 
         <div class="footer">
             <p>Stock Trader - Powered by FREE data sources</p>
-            <p>Alpha Vantage • YFinance • VADER • Reddit • Technical Analysis • FRED • Congress Trades</p>
+            <p>Alpha Vantage • YFinance • VADER • Technical Analysis • FRED</p>
         </div>
     </div>
 </body>
@@ -378,7 +370,6 @@ class DashboardGenerator:
                                velocity_data: Dict,
                                technical_data: Dict,
                                sentiment_data: Dict,
-                               reddit_data: Dict) -> str:
         """Generate HTML for signal cards"""
         if not signals:
             return "<p>No signals generated</p>"
@@ -728,216 +719,3 @@ class DashboardGenerator:
 
         return html
 
-    def _generate_congress_trades_html(self, trades: List[Dict]) -> str:
-        """Generate Congress trades section HTML"""
-        if not trades or len(trades) == 0:
-            return ""
-
-        html = """
-        <div class="congress-section">
-            <h2>🏛️ Congress Stock Trades (Last 90 Days)</h2>
-            <p class="congress-description">
-                Recent stock purchases and sales by US Congress members.
-                Data from Financial Modeling Prep (FMP) API - 100% FREE tier (250 calls/day).
-            </p>
-
-            <style>
-                .congress-section {
-                    background: white;
-                    border-radius: 10px;
-                    padding: 20px;
-                    margin: 20px 0;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                }
-
-                .congress-description {
-                    color: #666;
-                    margin-bottom: 20px;
-                    font-size: 14px;
-                }
-
-                .congress-stats {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                    gap: 15px;
-                    margin-bottom: 20px;
-                }
-
-                .congress-stat-card {
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                    padding: 15px;
-                    border-radius: 8px;
-                    text-align: center;
-                }
-
-                .congress-stat-value {
-                    font-size: 28px;
-                    font-weight: bold;
-                    margin: 10px 0;
-                }
-
-                .congress-stat-label {
-                    font-size: 14px;
-                    opacity: 0.9;
-                }
-
-                .congress-trades-table {
-                    overflow-x: auto;
-                }
-
-                .congress-trades-table table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    font-size: 13px;
-                }
-
-                .congress-trades-table th {
-                    background: #f5f5f5;
-                    padding: 12px 8px;
-                    text-align: left;
-                    border-bottom: 2px solid #ddd;
-                    font-weight: 600;
-                }
-
-                .congress-trades-table td {
-                    padding: 10px 8px;
-                    border-bottom: 1px solid #eee;
-                }
-
-                .congress-trades-table tr:hover {
-                    background: #f9f9f9;
-                }
-
-                .trade-buy {
-                    color: #00b894;
-                    font-weight: bold;
-                }
-
-                .trade-sell {
-                    color: #d63031;
-                    font-weight: bold;
-                }
-
-                .trade-exchange {
-                    color: #fdcb6e;
-                    font-weight: bold;
-                }
-
-                .party-badge {
-                    display: inline-block;
-                    padding: 2px 8px;
-                    border-radius: 12px;
-                    font-size: 11px;
-                    font-weight: bold;
-                }
-
-                .party-D {
-                    background: #4a90e2;
-                    color: white;
-                }
-
-                .party-R {
-                    background: #e74c3c;
-                    color: white;
-                }
-
-                .party-I {
-                    background: #95a5a6;
-                    color: white;
-                }
-
-                .amount-range {
-                    color: #666;
-                    font-size: 12px;
-                }
-            </style>
-        """
-
-        # Calculate statistics
-        total_trades = len(trades)
-        buy_count = sum(1 for t in trades if t.get('transaction_type') == 'purchase')
-        sell_count = sum(1 for t in trades if t.get('transaction_type') == 'sale')
-        unique_members = len(set(t.get('representative_name') for t in trades))
-
-        html += f"""
-            <div class="congress-stats">
-                <div class="congress-stat-card">
-                    <div class="congress-stat-label">Total Trades</div>
-                    <div class="congress-stat-value">{total_trades}</div>
-                </div>
-                <div class="congress-stat-card">
-                    <div class="congress-stat-label">Purchases</div>
-                    <div class="congress-stat-value">{buy_count}</div>
-                </div>
-                <div class="congress-stat-card">
-                    <div class="congress-stat-label">Sales</div>
-                    <div class="congress-stat-value">{sell_count}</div>
-                </div>
-                <div class="congress-stat-card">
-                    <div class="congress-stat-label">Members</div>
-                    <div class="congress-stat-value">{unique_members}</div>
-                </div>
-            </div>
-
-            <div class="congress-trades-table">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Member</th>
-                            <th>Party</th>
-                            <th>Ticker</th>
-                            <th>Type</th>
-                            <th>Amount</th>
-                            <th>Owner</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        """
-
-        # Show recent trades (limit to 50 for dashboard)
-        trades_list = trades if isinstance(trades, list) else []
-        for trade in trades_list[:50]:
-            rep_name = trade.get('representative_name', 'Unknown')
-            party = trade.get('party', '').upper() or 'I'
-            ticker = trade.get('ticker', '--')
-            transaction_type = trade.get('transaction_type', 'unknown')
-            transaction_date = trade.get('transaction_date', '')
-            owner = trade.get('owner', 'self')
-
-            # Format amount range
-            amount_from = trade.get('amount_from')
-            amount_to = trade.get('amount_to')
-            if amount_from and amount_to:
-                if amount_from == amount_to:
-                    amount_str = f"${amount_from:,.0f}"
-                else:
-                    amount_str = f"${amount_from:,.0f} - ${amount_to:,.0f}"
-            else:
-                amount_str = "Undisclosed"
-
-            # Type styling
-            type_class = f"trade-{transaction_type}"
-            type_display = transaction_type.upper()
-
-            html += f"""
-                        <tr>
-                            <td>{transaction_date}</td>
-                            <td>{rep_name}</td>
-                            <td><span class="party-badge party-{party}">{party}</span></td>
-                            <td><strong>{ticker}</strong></td>
-                            <td class="{type_class}">{type_display}</td>
-                            <td class="amount-range">{amount_str}</td>
-                            <td>{owner}</td>
-                        </tr>
-            """
-
-        html += """
-                    </tbody>
-                </table>
-            </div>
-        </div>
-        """
-
-        return html

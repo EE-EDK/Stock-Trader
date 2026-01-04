@@ -1,7 +1,7 @@
 """
 @file apewisdom.py
 @brief ApeWisdom social mention data collector
-@details Collects stock mention data from ApeWisdom API tracking Reddit and social media
+@details Collects stock mention data from ApeWisdom API tracking social media
 """
 
 import requests
@@ -16,7 +16,7 @@ class ApeWisdomCollector:
     """
     @class ApeWisdomCollector
     @brief Collector for social mention data from ApeWisdom
-    @details Fetches trending stock mentions from Reddit and other social platforms
+    @details Fetches trending stock mentions from social media platforms
     """
 
     BASE_URL = "https://apewisdom.io/api/v1.0"

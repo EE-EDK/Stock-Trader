@@ -69,7 +69,6 @@ class SignalGenerator:
                          price_data: Dict[str, Dict[str, Any]],
                          technical_data: Optional[Dict[str, Dict[str, Any]]] = None,
                          sentiment_data: Optional[Dict[str, Dict[str, Any]]] = None,
-                         reddit_data: Optional[Dict[str, Dict[str, Any]]] = None,
                          signal_date: Optional[datetime] = None) -> List[Signal]:
         """
         @brief Main signal generation logic with FREE data sources
@@ -78,7 +77,6 @@ class SignalGenerator:
         @param price_data Dictionary mapping ticker to current price info
         @param technical_data Dictionary mapping ticker to technical analysis (RSI, MACD, etc.)
         @param sentiment_data Dictionary mapping ticker to news sentiment (Alpha Vantage/VADER)
-        @param reddit_data Dictionary mapping ticker to Reddit mentions/sentiment
         @param signal_date Optional datetime for historical signal generation (default: now)
         @return List of Signal objects sorted by conviction score (descending)
         """
@@ -87,7 +85,6 @@ class SignalGenerator:
         # Default to empty dicts if not provided
         technical_data = technical_data or {}
         sentiment_data = sentiment_data or {}
-        reddit_data = reddit_data or {}
 
         for ticker in velocity_data.keys():
             vel = velocity_data[ticker]
@@ -95,7 +92,6 @@ class SignalGenerator:
             price = price_data.get(ticker, {})
             tech = technical_data.get(ticker, {})
             sentiment = sentiment_data.get(ticker, {})
-            reddit = reddit_data.get(ticker, {})
 
             triggers = []
             conviction = 0.0
@@ -135,9 +131,6 @@ class SignalGenerator:
                 triggers.append('news_sentiment_bullish')
                 conviction += 15
 
-            # NEW: Reddit viral signal
-            if reddit and self._check_reddit_viral(reddit):
-                triggers.append('reddit_viral')
                 conviction += 10
 
             # Add technical score contribution (0-100 scale)
@@ -238,7 +231,6 @@ class SignalGenerator:
                        triggers: List[str],
                        tech: Optional[Dict[str, Any]] = None,
                        sentiment: Optional[Dict[str, Any]] = None,
-                       reddit: Optional[Dict[str, Any]] = None) -> str:
         """
         @brief Generate human-readable notes for the signal
         @param ticker Stock ticker symbol
@@ -247,7 +239,6 @@ class SignalGenerator:
         @param triggers List of trigger types
         @param tech Technical analysis data
         @param sentiment Sentiment analysis data
-        @param reddit Reddit data
         @return Formatted note string
         """
         notes = []
@@ -280,9 +271,6 @@ class SignalGenerator:
             score = sentiment.get('sentiment_score', 0)
             notes.append(f"News bullish ({score:.2f})")
 
-        if 'reddit_viral' in triggers and reddit:
-            mentions = reddit.get('mention_count', 0)
-            notes.append(f"Reddit viral ({mentions} mentions)")
 
         # Add composite score
         comp_score = vel.get('composite_score', 0)
@@ -325,16 +313,6 @@ class SignalGenerator:
 
         return score > 0.15 or 'bullish' in label.lower() or 'positive' in label.lower()
 
-    def _check_reddit_viral(self, reddit: Dict[str, Any]) -> bool:
-        """
-        @brief Check if ticker is going viral on Reddit
-        @param reddit Reddit data dictionary
-        @return True if mention count is high
-        """
-        mention_count = reddit.get('mention_count', 0)
-        if mention_count is None:
-            return False
-        return mention_count >= 10  # 10+ mentions indicates viral potential
 
     def filter_by_conviction(self, signals: List[Signal], min_conviction: float = 40) -> List[Signal]:
         """
