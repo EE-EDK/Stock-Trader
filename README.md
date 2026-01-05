@@ -264,7 +264,15 @@ firefox reports/dashboard_*.html
 
 - ✅ **Multi-source analysis** - Combines 8 different FREE data sources
 - ✅ **Conviction scoring** - Ranks signals 0-100 based on strength
-- ✅ **HTML dashboards** - Beautiful visual reports
+- ✅ **Enhanced HTML dashboards** - Interactive visual reports with 8 analytics sections:
+  - 📊 Top Movers (24h velocity gainers, insider activity, social buzz, sentiment shifts)
+  - 💼 Insider Trading Panel (detailed trades table, buy/sell ratio charts)
+  - 📈 Technical Analysis Deep Dive (RSI distribution, MACD signals, volume analysis)
+  - 🎯 Historical Performance (signal success rates, equity curve, P/L tracking)
+  - 💬 Sentiment Breakdown (multi-source comparison, divergence alerts)
+  - 🌍 Macro Trends (VIX & Treasury 30-day charts, economic indicators)
+  - 🔥 Social Media Insights (viral scores, emerging tickers, top mentions)
+  - 📉 Interactive Charts (Chart.js powered visualizations)
 - ✅ **Email alerts** - Optional email notifications
 - ✅ **Technical analysis** - Professional-grade indicators
 - ✅ **Sentiment analysis** - News + social media
@@ -275,7 +283,7 @@ firefox reports/dashboard_*.html
 - ✅ **100% FREE** - Zero recurring costs
 - ✅ **Local database** - Your data stays on your machine
 - ✅ **Automated** - Set and forget with cron
-- ✅ **240+ unit tests** - Comprehensive test coverage
+- ✅ **280+ unit tests** - Comprehensive test coverage
 
 ---
 
@@ -882,6 +890,43 @@ MIT License - See LICENSE file for details
   - ✅ All utility scripts (test_runtime, type_check, verify_version, backtest)
 - All tests passing, all verifiers green ✅
 
+### v1.3.0 (2026-01-05) - Enhanced Dashboard Analytics
+- **Comprehensive Dashboard Overhaul** - 7 new analytics sections with interactive visualizations
+  - 📊 Top Movers Section - 4-column grid showing velocity gainers, insider activity, social mentions, sentiment shifts
+  - 💼 Insider Trading Panel - Detailed trades table with buy/sell ratio doughnut chart
+  - 📈 Technical Analysis Deep Dive - RSI distribution bar chart, MACD signals table, volume spike detection
+  - 🎯 Historical Performance - Signal type success rates, equity curve line chart, P/L tracking
+  - 💬 Sentiment Breakdown - Multi-source sentiment pie chart, divergence alerts table
+  - 🌍 Macro Trends - 30-day VIX and Treasury 10Y line charts with trend indicators
+  - 🔥 Social Media Insights - Top mentions table, emerging tickers badges, viral score tracking
+- **Database Analytics Layer** - 10 new optimized query methods
+  - get_top_velocity_gainers() - Top composite score tickers in timeframe
+  - get_recent_insider_trades_detailed() - Detailed insider transaction history
+  - get_insider_buy_sell_ratio() - Aggregated buy/sell sentiment
+  - get_top_social_mentions() - Most discussed tickers with viral scores
+  - get_sentiment_shifts() - Significant sentiment changes detection
+  - get_signal_performance_by_type() - Win rates and P/L by signal type
+  - get_paper_trading_equity_curve() - Cumulative P/L over time
+  - get_emerging_tickers() - New entrants to top mentions
+  - get_macro_indicator_history() - Time series for VIX, Treasury, etc.
+- **Interactive Chart.js Integration** - Dynamic, responsive charts throughout dashboard
+  - Line charts for equity curves and macro trends
+  - Bar charts for RSI distribution and volume analysis
+  - Doughnut/pie charts for ratio and sentiment breakdown
+  - Professional navy/leather color scheme with high-contrast data visualization
+- **Enhanced CSS Framework** - New component styles for professional presentation
+  - 4-column grid layout (.grid-4) for compact data display
+  - Card components with hover effects and shadows
+  - Badge system for positive/negative/neutral indicators
+  - Emerging ticker badges with NEW labels
+  - Responsive design for mobile/tablet viewing
+- **Comprehensive Test Suite** - 80+ new tests across 2 test files
+  - tests/test_database_models.py - All analytics query methods (40+ tests)
+  - tests/test_dashboard.py - Dashboard generation and sections (40+ tests)
+  - Edge case handling and error conditions
+  - Mock database fixtures and sample data generators
+- Total test count increased to 280+ tests
+- Backward compatible - Dashboard works with or without database parameter
 
 ### v1.2.0 (2025-12-21) - Phase 2 Complete
 - **Backtesting Module** - Complete historical validation system
