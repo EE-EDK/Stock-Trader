@@ -13,235 +13,175 @@
 
 ## 📊 System Architecture
 
+### Pipeline Overview
+
+```mermaid
+graph TB
+    subgraph "1️⃣ DATA COLLECTION (Parallel Execution)"
+        A1[ApeWisdom<br/>Top 100 Tickers<br/>FREE]
+        A2[OpenInsider<br/>Insider Trades<br/>FREE]
+        A3[Finnhub<br/>Prices & Sentiment<br/>60 calls/min]
+        A4[Alpha Vantage<br/>News Sentiment<br/>100 calls/day]
+        A5[YFinance<br/>Fundamentals<br/>Unlimited]
+        A6[VADER<br/>Local Sentiment<br/>Offline AI]
+        A7[FRED<br/>Macro Indicators<br/>120/min]
+
+        A1 --> DB1[(SQLite Database<br/>data/sentiment.db)]
+        A2 --> DB1
+        A3 --> DB1
+        A4 --> DB1
+        A5 --> DB1
+        A6 --> DB1
+        A7 --> DB1
+    end
+
+    subgraph "2️⃣ METRICS CALCULATION"
+        DB1 --> B1[Velocity Calculator<br/>• 24h velocity<br/>• 7-day trends<br/>• Sentiment velocity<br/>• Composite score 0-100]
+        DB1 --> B2[Technical Analyzer<br/>• RSI 14-period<br/>• MACD signals<br/>• Bollinger Bands<br/>• SMA/EMA 20,50<br/>• Technical score 0-100]
+
+        B1 --> DB2[(Database Updates<br/>velocity table)]
+        B2 --> DB2
+    end
+
+    subgraph "3️⃣ SIGNAL GENERATION"
+        DB2 --> C1[Signal Generator<br/>8 Signal Types:<br/>1. Velocity Spike +30<br/>2. Insider Cluster +40<br/>3. Sentiment Flip +20<br/>4. Technical Breakout +25<br/>5. RSI Oversold +15<br/>6. Golden Cross +20<br/>7. News Sentiment +15]
+
+        C1 --> C2[Conviction Scoring<br/>Base + Bonuses<br/>Capped at 100]
+        C2 --> C3[Filter ≥ 40 conviction]
+        C3 --> DB3[(Database<br/>signals table)]
+    end
+
+    subgraph "4️⃣ PAPER TRADING (Optional)"
+        DB3 --> D1{Enabled?}
+        D1 -->|Yes| D2[Create Mock Positions<br/>Size by conviction<br/>Set stop loss/targets]
+        D2 --> D3[Daily Updates<br/>Track P/L<br/>Check exits]
+        D3 --> DB4[(Database<br/>paper_trades<br/>snapshots)]
+        D1 -->|No| E1
+    end
+
+    subgraph "5️⃣ REPORTING"
+        DB4 --> E1[Dashboard Generator<br/>HTML Report]
+        DB3 --> E1
+        E1 --> E2[HTML Dashboard<br/>reports/dashboard_*.html]
+
+        DB3 --> E3[Email Reporter<br/>Optional Alerts]
+    end
+
+    style A1 fill:#e1f5ff
+    style A2 fill:#e1f5ff
+    style A3 fill:#fff4e1
+    style A4 fill:#fff4e1
+    style A5 fill:#fff4e1
+    style A6 fill:#fff4e1
+    style A7 fill:#fff4e1
+    style DB1 fill:#f0f0f0
+    style DB2 fill:#f0f0f0
+    style DB3 fill:#f0f0f0
+    style DB4 fill:#f0f0f0
+    style C2 fill:#ffe1e1
+    style E2 fill:#e1ffe1
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     STOCK TRADER PIPELINE                        │
-│                    Complete Data Flow Map                        │
-└─────────────────────────────────────────────────────────────────┘
 
-1️⃣ DATA COLLECTION (Step 1 & 1b - PARALLEL EXECUTION)
-┌──────────────────────────────────────────────────────────────┐
-│                                                              │
-│  FREE Data Sources (No API Key Required):                   │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐            │
-│  │ ApeWisdom  │  │OpenInsider │  │            │            │
-│  │ Top 100    │  │Insider Buys│  │  Trades    │            │
-│  │  Tickers   │  │ Clusters   │  │  (FREE!)   │            │
-│  └─────┬──────┘  └─────┬──────┘  └─────┬──────┘            │
-│        │               │               │                    │
-│        └───────────────┼───────────────┘                    │
-│                        ▼                                     │
-│              ┌──────────────────┐                           │
-│              │  SQLite Database │                           │
-│              │  (data/          │                           │
-│              │   sentiment.db)  │                           │
-│              └────────┬─────────┘                           │
-│                       │                                      │
-│  API-Based Sources (FREE API Keys):                         │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐            │
-│  │ Finnhub    │  │AlphaVantage│  │YFinance    │            │
-│  │ Prices &   │  │News Sentiment  │Fundamentals│            │
-│  │ Sentiment  │  │100 calls/day│  │ Unlimited  │            │
-│  └─────┬──────┘  └─────┬──────┘  └─────┬──────┘            │
-│        │               │               │                    │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐            │
-│  │  VADER     │  │            │  │   FRED     │            │
-│  │ Sentiment  │  │  Mentions  │  │   Macro    │            │
-│  │(Offline AI)│  │            │  │ Indicators │            │
-│  └─────┬──────┘  └─────┬──────┘  └─────┬──────┘            │
-│        │               │               │                    │
-│        └───────────────┼───────────────┘                    │
-│                        ▼                                     │
-│              ┌──────────────────┐                           │
-│              │ Database Storage │                           │
-│              │ (mentions, prices,                           │
-│              │  insiders, macro,│                           │
-│              └────────┬─────────┘                           │
-└──────────────────────┼──────────────────────────────────────┘
-                       │
-                       ▼
-2️⃣ METRICS CALCULATION (Step 2 & 2b)
-┌──────────────────────────────────────────────────────────────┐
-│                                                              │
-│  ┌─────────────────────┐     ┌─────────────────────┐        │
-│  │ Velocity Calculator │     │Technical Analyzer   │        │
-│  │ (velocity.py)       │     │ (technical.py)      │        │
-│  ├─────────────────────┤     ├─────────────────────┤        │
-│  │ • 24h velocity      │     │ • RSI (14-period)   │        │
-│  │ • 7-day trends      │     │ • MACD signals      │        │
-│  │ • Sentiment velocity│     │ • Bollinger Bands   │        │
-│  │ • Divergence score  │     │ • SMA/EMA (20,50)   │        │
-│  │ • Composite score   │     │ • Support/Resistance│        │
-│  │   (weighted 0-100)  │     │ • Trend detection   │        │
-│  └──────────┬──────────┘     │ • Volume analysis   │        │
-│             │                │ • Technical score   │        │
-│             │                │   (0-100)           │        │
-│             │                └──────────┬──────────┘        │
-│             │                           │                   │
-│             └───────────┬───────────────┘                   │
-│                         ▼                                    │
-│              ┌──────────────────┐                           │
-│              │ Database Updates │                           │
-│              │ (velocity table) │                           │
-│              └────────┬─────────┘                           │
-└──────────────────────┼──────────────────────────────────────┘
-                       │
-                       ▼
-3️⃣ SIGNAL GENERATION (Step 3)
-┌──────────────────────────────────────────────────────────────┐
-│                                                              │
-│  Signal Generator (generator.py)                            │
-│  ┌──────────────────────────────────────────┐               │
-│  │ Combines ALL data sources:              │               │
-│  │ • Velocity metrics (from Step 2)        │               │
-│  │ • Insider trades (OpenInsider)          │               │
-│  │ • Price data (Finnhub)                  │               │
-│  │ • Technical analysis (Step 2b)          │               │
-│  │ • Sentiment (AlphaVantage/VADER)        │               │
-│  └──────────────────────────────────────────┘               │
-│                         │                                    │
-│                         ▼                                    │
-│  8 Signal Types Generated:                                  │
-│  ┌────────────────────────────────────────────────────┐     │
-│  │ 1. Velocity Spike     (+30 base conviction)       │     │
-│  │ 2. Insider Cluster    (+40 base conviction)       │     │
-│  │ 3. Sentiment Flip     (+20 base conviction)       │     │
-│  │ 4. Technical Breakout (+25 base conviction)       │     │
-│  │ 5. RSI Oversold       (+15 base conviction)       │     │
-│  │ 6. Golden Cross       (+20 base conviction)       │     │
-│  │ 7. News Sentiment     (+15 base conviction)       │     │
-│  └────────────────────────────────────────────────────┘     │
-│                         │                                    │
-│                         ▼                                    │
-│  Conviction Scoring:                                        │
-│  ┌────────────────────────────────────────────────────┐     │
-│  │ Base Score: Sum of triggered signals               │     │
-│  │ Bonuses:                                           │     │
-│  │  • Multi-factor (2+ signals): +15                  │     │
-│  │  • Technical score: 0-20                           │     │
-│  │  • Composite velocity: 0-30                        │     │
-│  │ Final: Capped at 100                               │     │
-│  └────────────────────────────────────────────────────┘     │
-│                         │                                    │
-│                         ▼                                    │
-│  Filter by minimum conviction (default: 40)                 │
-│  ┌────────────────────────────────────────────────────┐     │
-│  │ Only signals ≥ threshold are kept                  │     │
-│  │ Ranked by conviction score (highest first)         │     │
-│  └──────────────────────┬─────────────────────────────┘     │
-│                         │                                    │
-│                         ▼                                    │
-│              ┌──────────────────┐                           │
-│              │ Database Storage │                           │
-│              │ (signals table)  │                           │
-│              └────────┬─────────┘                           │
-└──────────────────────┼──────────────────────────────────────┘
-                       │
-                       ▼
-4️⃣ PAPER TRADING (Optional - If Enabled)
-┌──────────────────────────────────────────────────────────────┐
-│                                                              │
-│  Paper Trading Manager (paper_trading.py)                   │
-│  ┌──────────────────────────────────────────┐               │
-│  │ For each signal ≥ min_conviction:       │               │
-│  │ 1. Create mock position                 │               │
-│  │ 2. Calculate position size:             │               │
-│  │    size = base × (1 + (conviction-50)/50)              │
-│  │    (Higher conviction = larger position)│               │
-│  │ 3. Set stop loss & take profit targets  │               │
-│  └──────────────────────────────────────────┘               │
-│                         │                                    │
-│                         ▼                                    │
-│  Daily Updates:                                             │
-│  ┌──────────────────────────────────────────┐               │
-│  │ • Fetch current prices                   │               │
-│  │ • Calculate unrealized P/L               │               │
-│  │ • Check exit conditions:                 │               │
-│  │   - Stop loss hit (-10% default)         │               │
-│  │   - Take profit hit (+20% default)       │               │
-│  │   - Time limit (30 days default)         │               │
-│  │ • Close positions if triggered           │               │
-│  └──────────────────────────────────────────┘               │
-│                         │                                    │
-│                         ▼                                    │
-│  Performance Metrics:                                       │
-│  ┌──────────────────────────────────────────┐               │
-│  │ • Win rate (% profitable)                │               │
-│  │ • Average return                         │               │
-│  │ • Total P/L                              │               │
-│  │ • Best/worst trades                      │               │
-│  │ • Open positions status                  │               │
-│  └──────────────────────┬───────────────────┘               │
-│                         │                                    │
-│                         ▼                                    │
-│              ┌──────────────────┐                           │
-│              │ Database Storage │                           │
-│              │(paper_trades,    │                           │
-│              │ snapshots tables)│                           │
-│              └────────┬─────────┘                           │
-└──────────────────────┼──────────────────────────────────────┘
-                       │
-                       ▼
-5️⃣ REPORTING (Step 4 & 4b)
-┌──────────────────────────────────────────────────────────────┐
-│                                                              │
-│  ┌─────────────────────┐     ┌─────────────────────┐        │
-│  │ Email Reporter      │     │Dashboard Generator  │        │
-│  │ (email.py)          │     │ (dashboard.py)      │        │
-│  ├─────────────────────┤     ├─────────────────────┤        │
-│  │ Optional alerts:    │     │ HTML Report:        │        │
-│  │ • Top signals       │     │ • Market conditions │        │
-│  │ • Watchlist         │     │ • Signal cards      │        │
-│  │ • Charts (optional) │     │ • Technical data    │        │
-│  │                     │     │ • Sentiment scores  │        │
-│  │ • App passwords     │     │ • Paper trading P/L │        │
-│  └─────────────────────┘     │ • Macro indicators  │        │
-│                              │ • Responsive design │        │
-│                              └─────────┬───────────┘        │
-│                                        │                     │
-│                                        ▼                     │
-│                              ┌─────────────────┐            │
-│                              │ HTML Dashboard  │            │
-│                              │ reports/        │            │
-│                              │ dashboard_*.html│            │
-│                              └─────────────────┘            │
-└──────────────────────────────────────────────────────────────┘
+### Database Schema
 
-📁 DATABASE SCHEMA
-┌──────────────────────────────────────────────────────────────┐
-│ SQLite Database (data/sentiment.db)                         │
-│                                                              │
-│ Core Tables:                                                │
-│  • mentions - Social media mention counts over time         │
-│  • insiders - Insider trading transactions                  │
-│  • prices - Price and sentiment data (Finnhub)              │
-│  • velocity - Calculated velocity metrics                   │
-│  • signals - Generated trading signals                      │
-│                                                              │
-│ Paper Trading:                                              │
-│  • paper_trades - Mock positions (entry, exit, P/L)         │
-│  • paper_trade_snapshots - Daily price snapshots            │
-│                                                              │
-│ Macro Indicators:                                           │
-│  • macro_indicators - FRED economic data (VIX, rates, etc.) │
-│  • market_assessments - Risk level assessments              │
-└──────────────────────────────────────────────────────────────┘
+```mermaid
+erDiagram
+    MENTIONS {
+        int id PK
+        string ticker
+        int mention_count
+        int upvotes
+        datetime collected_at
+    }
 
-⚙️ EXECUTION MODES
-┌──────────────────────────────────────────────────────────────┐
-│                                                              │
-│ 1. Command Line:                                            │
-│    python main.py                                           │
-│    └─> Runs full pipeline, outputs to terminal             │
-│                                                              │
-│ 2. GUI Mode:                                                │
-│    python gui.py                                            │
-│    └─> Visual configuration + live console output          │
-│                                                              │
-│ 3. Automated (Cron):                                        │
-│    0 9 * * * cd /path && python main.py                     │
-│    └─> Daily automated runs, logs to file                  │
-└──────────────────────────────────────────────────────────────┘
+    INSIDERS {
+        int id PK
+        string ticker
+        string insider_name
+        string trade_type
+        int shares
+        float value
+        date trade_date
+    }
+
+    PRICES {
+        int id PK
+        string ticker
+        float price
+        float volume
+        float sentiment_score
+        datetime collected_at
+    }
+
+    VELOCITY {
+        int id PK
+        string ticker
+        float mention_velocity_24h
+        float price_velocity_24h
+        float sentiment_velocity
+        float composite_score
+        datetime calculated_at
+    }
+
+    SIGNALS {
+        int id PK
+        string ticker
+        string signal_type
+        float conviction_score
+        float price_at_signal
+        string triggers
+        string notes
+        datetime created_at
+    }
+
+    PAPER_TRADES {
+        int id PK
+        int signal_id FK
+        string ticker
+        string action
+        float entry_price
+        int shares
+        float stop_loss
+        float target_price
+        datetime entry_date
+        datetime exit_date
+        float exit_price
+        float pnl
+    }
+
+    MACRO_INDICATORS {
+        int id PK
+        string indicator_name
+        float value
+        date date
+    }
+
+    MARKET_ASSESSMENTS {
+        int id PK
+        string risk_level
+        string analysis
+        datetime created_at
+    }
+
+    SIGNALS ||--o| PAPER_TRADES : "generates"
+```
+
+### Execution Modes
+
+```mermaid
+graph LR
+    A[Stock Trader] --> B[Command Line<br/>python main.py]
+    A --> C[GUI Mode<br/>python gui.py]
+    A --> D[Automated Cron<br/>0 9 * * *]
+
+    B --> E[Terminal Output<br/>+ HTML Dashboard]
+    C --> F[Visual Config<br/>+ Live Console]
+    D --> G[Scheduled Runs<br/>+ Logs]
+
+    style A fill:#4a90e2,color:#fff
+    style B fill:#e1f5ff
+    style C fill:#e1f5ff
+    style D fill:#e1f5ff
 ```
 
 ---
