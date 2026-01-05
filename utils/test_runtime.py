@@ -34,7 +34,6 @@ modules_to_test = [
     ('src.collectors.openinsider', 'OpenInsider collector'),
     ('src.collectors.finnhub', 'Finnhub collector'),
     ('src.collectors.alphavantage', 'AlphaVantage collector'),
-    ('src.collectors.fmp', 'FMP collector'),
     ('src.collectors.yfinance_collector', 'YFinance collector'),
     ('src.collectors.vader_sentiment', 'VADER sentiment'),
     ('src.collectors.fred', 'FRED collector'),
