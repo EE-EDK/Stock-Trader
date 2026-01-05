@@ -93,9 +93,6 @@ except Exception as e:
     print(f"  ❌ FinnhubCollector: {e}")
 
 try:
-except Exception as e:
-
-try:
     from src.collectors.fred import FREDCollector
     fred = FREDCollector(api_key="test_key")
     successes.append("✅ FREDCollector instantiation")
@@ -179,7 +176,7 @@ try:
     sig = inspect.signature(dashboard.generate)
     params = list(sig.parameters.keys())
     required_params = ['signals', 'velocity_data', 'technical_data', 'sentiment_data',
-                       'reddit_data', 'paper_trading_stats', 'macro_indicators',
+                       'paper_trading_stats', 'macro_indicators', 'market_assessment']
 
     missing = [p for p in required_params if p not in params]
     if missing:

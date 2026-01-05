@@ -178,7 +178,6 @@ class DashboardGenerator:
         .trigger.insider {{ background: #74b9ff; color: #0984e3; }}
         .trigger.sentiment {{ background: #a29bfe; color: #6c5ce7; }}
         .trigger.technical {{ background: #55efc4; color: #00b894; }}
-        .trigger.reddit {{ background: #fab1a0; color: #e17055; }}
         .notes {{
             color: #666;
             line-height: 1.6;
@@ -344,7 +343,7 @@ class DashboardGenerator:
 
         <div class="signals">
             <h2>🎯 Top Trading Signals</h2>
-            {self._generate_signals_html(signals, velocity_data, technical_data, sentiment_data) reddit_data)}
+            {self._generate_signals_html(signals, velocity_data, technical_data, sentiment_data)}
         </div>
 
         <div class="footer">
@@ -369,7 +368,7 @@ class DashboardGenerator:
                                signals: List[Any],
                                velocity_data: Dict,
                                technical_data: Dict,
-                               sentiment_data: Dict,
+                               sentiment_data: Dict) -> str:
         """Generate HTML for signal cards"""
         if not signals:
             return "<p>No signals generated</p>"
@@ -381,7 +380,6 @@ class DashboardGenerator:
             vel = velocity_data.get(ticker, {})
             tech = technical_data.get(ticker, {})
             sent = sentiment_data.get(ticker, {})
-            reddit = reddit_data.get(ticker, {})
 
             # Generate trigger badges with proper styling
             trigger_badges = ""
@@ -418,16 +416,6 @@ class DashboardGenerator:
                 </div>
                 """
 
-            # Reddit details
-            reddit_info = ""
-            if reddit:
-                mentions = reddit.get('mention_count', 0)
-                reddit_info = f"""
-                <div style="margin-top: 5px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
-                    <strong>Reddit:</strong> {mentions} mentions in last 24h
-                </div>
-                """
-
             # Price display - check if price exists
             price_display = ""
             if signal.price_at_signal is not None:
@@ -449,7 +437,6 @@ class DashboardGenerator:
                 {price_display}
                 {tech_info}
                 {sent_info}
-                {reddit_info}
             </div>
             """
 
@@ -465,8 +452,6 @@ class DashboardGenerator:
             return 'sentiment'
         elif 'technical' in trigger or 'rsi' in trigger or 'golden' in trigger or 'breakout' in trigger:
             return 'technical'
-        elif 'reddit' in trigger:
-            return 'reddit'
         return ''
 
     def _format_trigger(self, trigger: str) -> str:

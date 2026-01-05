@@ -11,37 +11,7 @@
 
 ---
 
-## 🎓 Beginner Resources
-
-### 📘 Complete Setup Guide (PDF)
-**New to the project?** Download our comprehensive beginner guide:
-
-**[📥 Download Beginner Project Setup Guide (PDF)](./Beginner-Project-Setup.pdf)**
-
-This guide includes:
-- Step-by-step installation instructions with screenshots
-- Detailed API key setup walkthrough
-- Configuration examples for beginners
-- Common troubleshooting tips
-- First run tutorial
-
-### 🎥 Video Tutorial
-**Prefer learning by watching?** Check out our complete explanation video:
-
-**[▶️ Watch Project Explanation Video](./Explanation-Video.mp4)**
-
-Topics covered:
-- Project overview and architecture
-- Live setup demonstration
-- Running your first pipeline
-- Understanding the dashboard
-- Interpreting signals
-
-### 📊 Project Flow Map
-
-![Project Flow Map](./Project-FlowMap.jpeg)
-
-**Visual overview of the complete data pipeline:**
+## 📊 System Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -252,7 +222,7 @@ Topics covered:
 │  • paper_trades - Mock positions (entry, exit, P/L)         │
 │  • paper_trade_snapshots - Daily price snapshots            │
 │                                                              │
-│ Macro & Political:                                          │
+│ Macro Indicators:                                           │
 │  • macro_indicators - FRED economic data (VIX, rates, etc.) │
 │  • market_assessments - Risk level assessments              │
 └──────────────────────────────────────────────────────────────┘
@@ -342,7 +312,7 @@ firefox reports/dashboard_*.html
 
 ## 🎯 Features
 
-- ✅ **Multi-source analysis** - Combines 10 different FREE data sources
+- ✅ **Multi-source analysis** - Combines 8 different FREE data sources
 - ✅ **Conviction scoring** - Ranks signals 0-100 based on strength
 - ✅ **HTML dashboards** - Beautiful visual reports
 - ✅ **Email alerts** - Optional email notifications
@@ -858,7 +828,6 @@ pytest tests/ -v -m "not integration"
 - **API Keys:** Never commit `config/config.yaml` (use `.gitignore`)
 - **Database:** Local SQLite - your data stays on your machine
 - **Email:** Use app-specific passwords for Gmail
-- **Reddit:** Read-only access, no personal data collected
 
 ---
 
@@ -915,10 +884,10 @@ MIT License - See LICENSE file for details
 ## 🙏 Acknowledgments
 
 **FREE Data Providers:**
-- Finnhub, Alpha Vantage, Yahoo Finance, Social Media, OpenInsider, ApeWisdom, FRED, Financial Modeling Prep
+- Finnhub, Alpha Vantage, Yahoo Finance, Social Media, OpenInsider, ApeWisdom, FRED
 
 **Python Libraries:**
-- pandas, numpy, vaderSentiment, praw, requests, beautifulsoup4, matplotlib
+- pandas, numpy, vaderSentiment, requests, beautifulsoup4, matplotlib
 
 ---
 
