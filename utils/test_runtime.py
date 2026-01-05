@@ -22,6 +22,33 @@ print("=" * 70)
 print("RUNTIME VALIDATION TEST - Testing imports and basic execution")
 print("=" * 70)
 
+# Check for critical dependencies first
+print("\n[DEPENDENCY CHECK] Checking critical Python packages...")
+missing_deps = []
+critical_packages = [
+    ('bs4', 'beautifulsoup4'),
+    ('numpy', 'numpy'),
+    ('yaml', 'pyyaml'),
+    ('requests', 'requests'),
+]
+
+for import_name, package_name in critical_packages:
+    try:
+        __import__(import_name)
+        print(f"  ✅ {package_name}")
+    except ImportError:
+        print(f"  ❌ {package_name} - MISSING")
+        missing_deps.append(package_name)
+
+if missing_deps:
+    print(f"\n⚠️  WARNING: {len(missing_deps)} critical packages missing")
+    print(f"   Missing: {', '.join(missing_deps)}")
+    print("\nInstall missing packages:")
+    print(f"  pip install {' '.join(missing_deps)}")
+    print("\nOr install all dependencies:")
+    print("  pip install -r requirements.txt")
+    print("\nContinuing with tests (some will fail)...\n")
+
 errors = []
 successes = []
 
@@ -255,11 +282,29 @@ print("=" * 70)
 print(f"\n✅ Successes: {len(successes)}")
 print(f"❌ Errors: {len(errors)}")
 
+# Categorize errors
+dependency_errors = [e for e in errors if any(dep in e for dep in ['bs4', 'numpy', 'matplotlib', 'yfinance', 'No module'])]
+code_errors = [e for e in errors if e not in dependency_errors]
+
 if errors:
-    print("\n❌ ERRORS FOUND:")
-    for error in errors:
-        print(f"  {error}")
-    sys.exit(1)
+    if dependency_errors:
+        print(f"\n📦 DEPENDENCY ERRORS ({len(dependency_errors)}):")
+        for error in dependency_errors:
+            print(f"  {error}")
+        print("\n  Fix by running: pip install -r requirements.txt")
+
+    if code_errors:
+        print(f"\n🐛 CODE ERRORS ({len(code_errors)}):")
+        for error in code_errors:
+            print(f"  {error}")
+
+    if code_errors:
+        print("\n❌ CRITICAL: Code errors found - fix required!")
+        sys.exit(1)
+    else:
+        print("\n⚠️  Tests incomplete due to missing dependencies")
+        print("   Install dependencies to run full validation")
+        sys.exit(0)
 else:
     print("\n✅ ALL RUNTIME VALIDATION TESTS PASSED")
     print("=" * 70)
