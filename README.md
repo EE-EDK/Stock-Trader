@@ -11,37 +11,7 @@
 
 ---
 
-## 🎓 Beginner Resources
-
-### 📘 Complete Setup Guide (PDF)
-**New to the project?** Download our comprehensive beginner guide:
-
-**[📥 Download Beginner Project Setup Guide (PDF)](./Beginner-Project-Setup.pdf)**
-
-This guide includes:
-- Step-by-step installation instructions with screenshots
-- Detailed API key setup walkthrough
-- Configuration examples for beginners
-- Common troubleshooting tips
-- First run tutorial
-
-### 🎥 Video Tutorial
-**Prefer learning by watching?** Check out our complete explanation video:
-
-**[▶️ Watch Project Explanation Video](./Explanation-Video.mp4)**
-
-Topics covered:
-- Project overview and architecture
-- Live setup demonstration
-- Running your first pipeline
-- Understanding the dashboard
-- Interpreting signals
-
-### 📊 Project Flow Map
-
-![Project Flow Map](./Project-FlowMap.jpeg)
-
-**Visual overview of the complete data pipeline:**
+## 📊 System Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
