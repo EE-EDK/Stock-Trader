@@ -495,7 +495,8 @@ def run_pipeline(config: dict, skip_email: bool = False):
             sentiment_data=sentiment_data,
             paper_trading_stats=paper_trading_stats,
             macro_indicators=macro_indicators,
-            market_assessment=market_assessment
+            market_assessment=market_assessment,
+            db=db
         )
         logger.info(f"  [OK] Dashboard saved to: {dashboard_path}")
         logger.info(f"  [TIP] Open {dashboard_path} in your browser to view results!")

@@ -535,3 +535,276 @@ class Database:
             'recommendations': json.loads(row[5]) if row[5] else []
         }
 
+    def get_top_velocity_gainers(self, limit: int = 10, hours: int = 24) -> List[Dict[str, Any]]:
+        """Get top velocity gainers in the last N hours"""
+        conn = self.connect()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT ticker, mention_velocity_24h, price_velocity_24h,
+                   sentiment_velocity, composite_score, calculated_at
+            FROM velocity
+            WHERE calculated_at >= datetime('now', '-' || ? || ' hours')
+            ORDER BY composite_score DESC
+            LIMIT ?
+        """, (hours, limit))
+
+        results = []
+        for row in cursor.fetchall():
+            results.append({
+                'ticker': row[0],
+                'mention_velocity_24h': row[1],
+                'price_velocity_24h': row[2],
+                'sentiment_velocity': row[3],
+                'composite_score': row[4],
+                'calculated_at': row[5]
+            })
+        return results
+
+    def get_recent_insider_trades_detailed(self, days: int = 30, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get recent insider trades with full details"""
+        conn = self.connect()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT ticker, insider_name, trade_type, shares, value, trade_date, filing_date
+            FROM insiders
+            WHERE trade_date >= date('now', '-' || ? || ' days')
+            ORDER BY value DESC
+            LIMIT ?
+        """, (days, limit))
+
+        results = []
+        for row in cursor.fetchall():
+            results.append({
+                'ticker': row[0],
+                'insider_name': row[1],
+                'trade_type': row[2],
+                'shares': row[3],
+                'value': row[4],
+                'trade_date': row[5],
+                'filing_date': row[6]
+            })
+        return results
+
+    def get_insider_buy_sell_ratio(self, days: int = 30) -> Dict[str, int]:
+        """Get count of insider buys vs sells"""
+        conn = self.connect()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT trade_type, COUNT(*) as count
+            FROM insiders
+            WHERE trade_date >= date('now', '-' || ? || ' days')
+            GROUP BY trade_type
+        """, (days,))
+
+        result = {'buy': 0, 'sell': 0}
+        for row in cursor.fetchall():
+            trade_type = row[0].lower() if row[0] else 'unknown'
+            if 'buy' in trade_type or 'purchase' in trade_type:
+                result['buy'] = row[1]
+            elif 'sell' in trade_type or 'sale' in trade_type:
+                result['sell'] = row[1]
+        return result
+
+    def get_top_social_mentions(self, limit: int = 10, hours: int = 24) -> List[Dict[str, Any]]:
+        """Get top mentioned tickers on social media"""
+        conn = self.connect()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT ticker, mention_count, upvotes,
+                   mention_count * (1 + upvotes/100.0) as viral_score,
+                   collected_at
+            FROM mentions
+            WHERE collected_at >= datetime('now', '-' || ? || ' hours')
+            ORDER BY viral_score DESC
+            LIMIT ?
+        """, (hours, limit))
+
+        results = []
+        for row in cursor.fetchall():
+            results.append({
+                'ticker': row[0],
+                'mention_count': row[1],
+                'upvotes': row[2],
+                'viral_score': row[3],
+                'collected_at': row[4]
+            })
+        return results
+
+    def get_sentiment_shifts(self, min_change: float = 0.3, days: int = 7) -> List[Dict[str, Any]]:
+        """Get tickers with significant sentiment changes"""
+        conn = self.connect()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT v.ticker, v.sentiment_velocity,
+                   p1.sentiment_score as current_sentiment,
+                   p2.sentiment_score as previous_sentiment,
+                   (p1.sentiment_score - p2.sentiment_score) as sentiment_change
+            FROM velocity v
+            LEFT JOIN prices p1 ON v.ticker = p1.ticker
+                AND p1.collected_at = (SELECT MAX(collected_at) FROM prices WHERE ticker = v.ticker)
+            LEFT JOIN prices p2 ON v.ticker = p2.ticker
+                AND p2.collected_at = (SELECT MAX(collected_at) FROM prices WHERE ticker = v.ticker
+                    AND collected_at < datetime('now', '-' || ? || ' days'))
+            WHERE ABS(v.sentiment_velocity) >= ?
+            ORDER BY ABS(v.sentiment_velocity) DESC
+            LIMIT 20
+        """, (days, min_change))
+
+        results = []
+        for row in cursor.fetchall():
+            if row[0]:  # Ensure ticker exists
+                results.append({
+                    'ticker': row[0],
+                    'sentiment_velocity': row[1],
+                    'current_sentiment': row[2] if row[2] is not None else 0,
+                    'previous_sentiment': row[3] if row[3] is not None else 0,
+                    'sentiment_change': row[4] if row[4] is not None else 0
+                })
+        return results
+
+    def get_macro_indicator_history(self, indicator: str, days: int = 30) -> List[Dict[str, Any]]:
+        """Get historical values for a macro indicator"""
+        conn = self.connect()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT indicator_name, value, date
+            FROM macro_indicators
+            WHERE indicator_name = ?
+              AND date >= date('now', '-' || ? || ' days')
+            ORDER BY date ASC
+        """, (indicator, days))
+
+        results = []
+        for row in cursor.fetchall():
+            results.append({
+                'indicator': row[0],
+                'value': row[1],
+                'date': row[2]
+            })
+        return results
+
+    def get_signal_performance_by_type(self) -> List[Dict[str, Any]]:
+        """Get aggregated performance stats by signal type"""
+        conn = self.connect()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT s.signal_type,
+                   COUNT(DISTINCT s.id) as signal_count,
+                   AVG(s.conviction_score) as avg_conviction,
+                   COUNT(DISTINCT pt.id) as trades_executed,
+                   SUM(CASE WHEN pt.pnl > 0 THEN 1 ELSE 0 END) as wins,
+                   SUM(CASE WHEN pt.pnl <= 0 AND pt.pnl IS NOT NULL THEN 1 ELSE 0 END) as losses,
+                   AVG(pt.pnl) as avg_pnl,
+                   MAX(pt.pnl) as best_trade,
+                   MIN(pt.pnl) as worst_trade
+            FROM signals s
+            LEFT JOIN paper_trades pt ON s.id = pt.signal_id AND pt.exit_date IS NOT NULL
+            WHERE s.created_at >= datetime('now', '-90 days')
+            GROUP BY s.signal_type
+            ORDER BY signal_count DESC
+        """)
+
+        results = []
+        for row in cursor.fetchall():
+            wins = row[4] or 0
+            losses = row[5] or 0
+            total_closed = wins + losses
+            win_rate = (wins / total_closed * 100) if total_closed > 0 else 0
+
+            results.append({
+                'signal_type': row[0],
+                'signal_count': row[1],
+                'avg_conviction': row[2],
+                'trades_executed': row[3] or 0,
+                'wins': wins,
+                'losses': losses,
+                'win_rate': win_rate,
+                'avg_pnl': row[6] or 0,
+                'best_trade': row[7] or 0,
+                'worst_trade': row[8] or 0
+            })
+        return results
+
+    def get_paper_trading_equity_curve(self, days: int = 90) -> List[Dict[str, Any]]:
+        """Get daily equity curve for paper trading"""
+        conn = self.connect()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT date(snapshot_date) as trade_date,
+                   SUM(unrealized_pnl) as daily_unrealized,
+                   COUNT(DISTINCT trade_id) as open_positions
+            FROM paper_trade_snapshots
+            WHERE snapshot_date >= datetime('now', '-' || ? || ' days')
+            GROUP BY date(snapshot_date)
+            ORDER BY trade_date ASC
+        """, (days,))
+
+        equity_curve = []
+        cumulative_realized = 0
+
+        for row in cursor.fetchall():
+            equity_curve.append({
+                'date': row[0],
+                'unrealized_pnl': row[1] or 0,
+                'open_positions': row[2],
+                'total_equity': cumulative_realized + (row[1] or 0)
+            })
+
+        # Add realized P/L
+        cursor.execute("""
+            SELECT date(exit_date) as trade_date, SUM(pnl) as realized_pnl
+            FROM paper_trades
+            WHERE exit_date IS NOT NULL
+              AND exit_date >= datetime('now', '-' || ? || ' days')
+            GROUP BY date(exit_date)
+            ORDER BY trade_date ASC
+        """, (days,))
+
+        realized_by_date = {row[0]: row[1] for row in cursor.fetchall()}
+
+        # Combine realized and unrealized
+        for point in equity_curve:
+            if point['date'] in realized_by_date:
+                cumulative_realized += realized_by_date[point['date']]
+            point['total_equity'] = cumulative_realized + point['unrealized_pnl']
+            point['realized_pnl'] = cumulative_realized
+
+        return equity_curve
+
+    def get_emerging_tickers(self, hours: int = 24, min_mentions: int = 5) -> List[Dict[str, Any]]:
+        """Get tickers that recently entered the top mentions"""
+        conn = self.connect()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT m1.ticker, m1.mention_count, m1.collected_at
+            FROM mentions m1
+            WHERE m1.collected_at >= datetime('now', '-' || ? || ' hours')
+              AND m1.mention_count >= ?
+              AND NOT EXISTS (
+                  SELECT 1 FROM mentions m2
+                  WHERE m2.ticker = m1.ticker
+                    AND m2.collected_at < datetime('now', '-' || ? || ' hours')
+                    AND m2.collected_at >= datetime('now', '-' || ? || ' hours')
+              )
+            ORDER BY m1.mention_count DESC
+            LIMIT 10
+        """, (hours, min_mentions, hours, hours * 2))
+
+        results = []
+        for row in cursor.fetchall():
+            results.append({
+                'ticker': row[0],
+                'mention_count': row[1],
+                'first_seen': row[2]
+            })
+        return results
+
