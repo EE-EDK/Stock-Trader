@@ -16,17 +16,18 @@
 ### Pipeline Overview
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'fontSize':'16px', 'fontFamily':'arial'}}}%%
 graph TB
     subgraph "1️⃣ DATA COLLECTION (Parallel Execution)"
-        A1[ApeWisdom<br/>Top 100 Tickers<br/>FREE]
-        A2[OpenInsider<br/>Insider Trades<br/>FREE]
-        A3[Finnhub<br/>Prices & Sentiment<br/>60 calls/min]
-        A4[Alpha Vantage<br/>News Sentiment<br/>100 calls/day]
-        A5[YFinance<br/>Fundamentals<br/>Unlimited]
-        A6[VADER<br/>Local Sentiment<br/>Offline AI]
-        A7[FRED<br/>Macro Indicators<br/>120/min]
+        A1["<b>ApeWisdom</b><br/>Top 100 Tickers<br/>FREE"]
+        A2["<b>OpenInsider</b><br/>Insider Trades<br/>FREE"]
+        A3["<b>Finnhub</b><br/>Prices & Sentiment<br/>60 calls/min"]
+        A4["<b>Alpha Vantage</b><br/>News Sentiment<br/>100 calls/day"]
+        A5["<b>YFinance</b><br/>Fundamentals<br/>Unlimited"]
+        A6["<b>VADER</b><br/>Local Sentiment<br/>Offline AI"]
+        A7["<b>FRED</b><br/>Macro Indicators<br/>120/min"]
 
-        A1 --> DB1[(SQLite Database<br/>data/sentiment.db)]
+        A1 --> DB1[("<b>SQLite Database</b><br/>data/sentiment.db")]
         A2 --> DB1
         A3 --> DB1
         A4 --> DB1
@@ -36,50 +37,59 @@ graph TB
     end
 
     subgraph "2️⃣ METRICS CALCULATION"
-        DB1 --> B1[Velocity Calculator<br/>• 24h velocity<br/>• 7-day trends<br/>• Sentiment velocity<br/>• Composite score 0-100]
-        DB1 --> B2[Technical Analyzer<br/>• RSI 14-period<br/>• MACD signals<br/>• Bollinger Bands<br/>• SMA/EMA 20,50<br/>• Technical score 0-100]
+        DB1 --> B1["<b>Velocity Calculator</b><br/>• 24h velocity<br/>• 7-day trends<br/>• Sentiment velocity<br/>• Composite score 0-100"]
+        DB1 --> B2["<b>Technical Analyzer</b><br/>• RSI 14-period<br/>• MACD signals<br/>• Bollinger Bands<br/>• SMA/EMA 20,50<br/>• Technical score 0-100"]
 
-        B1 --> DB2[(Database Updates<br/>velocity table)]
+        B1 --> DB2[("<b>Database Updates</b><br/>velocity table")]
         B2 --> DB2
     end
 
     subgraph "3️⃣ SIGNAL GENERATION"
-        DB2 --> C1[Signal Generator<br/>8 Signal Types:<br/>1. Velocity Spike +30<br/>2. Insider Cluster +40<br/>3. Sentiment Flip +20<br/>4. Technical Breakout +25<br/>5. RSI Oversold +15<br/>6. Golden Cross +20<br/>7. News Sentiment +15]
+        DB2 --> C1["<b>Signal Generator</b><br/>8 Signal Types:<br/>1. Velocity Spike +30<br/>2. Insider Cluster +40<br/>3. Sentiment Flip +20<br/>4. Technical Breakout +25<br/>5. RSI Oversold +15<br/>6. Golden Cross +20<br/>7. News Sentiment +15"]
 
-        C1 --> C2[Conviction Scoring<br/>Base + Bonuses<br/>Capped at 100]
-        C2 --> C3[Filter ≥ 40 conviction]
-        C3 --> DB3[(Database<br/>signals table)]
+        C1 --> C2["<b>Conviction Scoring</b><br/>Base + Bonuses<br/>Capped at 100"]
+        C2 --> C3["<b>Filter ≥ 40</b><br/>conviction"]
+        C3 --> DB3[("<b>Database</b><br/>signals table")]
     end
 
     subgraph "4️⃣ PAPER TRADING (Optional)"
-        DB3 --> D1{Enabled?}
-        D1 -->|Yes| D2[Create Mock Positions<br/>Size by conviction<br/>Set stop loss/targets]
-        D2 --> D3[Daily Updates<br/>Track P/L<br/>Check exits]
-        D3 --> DB4[(Database<br/>paper_trades<br/>snapshots)]
+        DB3 --> D1{"<b>Enabled?</b>"}
+        D1 -->|Yes| D2["<b>Create Positions</b><br/>Size by conviction<br/>Set stop loss/targets"]
+        D2 --> D3["<b>Daily Updates</b><br/>Track P/L<br/>Check exits"]
+        D3 --> DB4[("<b>Database</b><br/>paper_trades<br/>snapshots")]
         D1 -->|No| E1
     end
 
     subgraph "5️⃣ REPORTING"
-        DB4 --> E1[Dashboard Generator<br/>HTML Report]
+        DB4 --> E1["<b>Dashboard Generator</b><br/>HTML Report"]
         DB3 --> E1
-        E1 --> E2[HTML Dashboard<br/>reports/dashboard_*.html]
+        E1 --> E2["<b>HTML Dashboard</b><br/>reports/dashboard_*.html"]
 
-        DB3 --> E3[Email Reporter<br/>Optional Alerts]
+        DB3 --> E3["<b>Email Reporter</b><br/>Optional Alerts"]
     end
 
-    style A1 fill:#e1f5ff
-    style A2 fill:#e1f5ff
-    style A3 fill:#fff4e1
-    style A4 fill:#fff4e1
-    style A5 fill:#fff4e1
-    style A6 fill:#fff4e1
-    style A7 fill:#fff4e1
-    style DB1 fill:#f0f0f0
-    style DB2 fill:#f0f0f0
-    style DB3 fill:#f0f0f0
-    style DB4 fill:#f0f0f0
-    style C2 fill:#ffe1e1
-    style E2 fill:#e1ffe1
+    style A1 fill:#5DADE2,stroke:#2874A6,stroke-width:3px,color:#000
+    style A2 fill:#5DADE2,stroke:#2874A6,stroke-width:3px,color:#000
+    style A3 fill:#F8C471,stroke:#D68910,stroke-width:3px,color:#000
+    style A4 fill:#F8C471,stroke:#D68910,stroke-width:3px,color:#000
+    style A5 fill:#F8C471,stroke:#D68910,stroke-width:3px,color:#000
+    style A6 fill:#F8C471,stroke:#D68910,stroke-width:3px,color:#000
+    style A7 fill:#F8C471,stroke:#D68910,stroke-width:3px,color:#000
+    style DB1 fill:#AAB7B8,stroke:#566573,stroke-width:3px,color:#000
+    style DB2 fill:#AAB7B8,stroke:#566573,stroke-width:3px,color:#000
+    style DB3 fill:#AAB7B8,stroke:#566573,stroke-width:3px,color:#000
+    style DB4 fill:#AAB7B8,stroke:#566573,stroke-width:3px,color:#000
+    style B1 fill:#A9DFBF,stroke:#27AE60,stroke-width:3px,color:#000
+    style B2 fill:#A9DFBF,stroke:#27AE60,stroke-width:3px,color:#000
+    style C1 fill:#D7BDE2,stroke:#7D3C98,stroke-width:3px,color:#000
+    style C2 fill:#F5B7B1,stroke:#C0392B,stroke-width:3px,color:#000
+    style C3 fill:#F5B7B1,stroke:#C0392B,stroke-width:3px,color:#000
+    style D1 fill:#FAD7A0,stroke:#D68910,stroke-width:3px,color:#000
+    style D2 fill:#FAD7A0,stroke:#D68910,stroke-width:3px,color:#000
+    style D3 fill:#FAD7A0,stroke:#D68910,stroke-width:3px,color:#000
+    style E1 fill:#A3E4D7,stroke:#16A085,stroke-width:3px,color:#000
+    style E2 fill:#58D68D,stroke:#229954,stroke-width:4px,color:#000
+    style E3 fill:#A3E4D7,stroke:#16A085,stroke-width:3px,color:#000
 ```
 
 ### Database Schema
