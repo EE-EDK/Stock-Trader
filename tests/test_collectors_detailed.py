@@ -17,7 +17,6 @@ from src.collectors.apewisdom import ApeWisdomCollector
 from src.collectors.openinsider import OpenInsiderCollector
 from src.collectors.finnhub import FinnhubCollector
 from src.collectors.alphavantage import AlphaVantageCollector
-from src.collectors.fmp import FMPCollector
 
 
 class TestApeWisdomCollector:
@@ -337,69 +336,6 @@ class TestAlphaVantageCollector:
 
         assert 'top_gainers' in results
         assert 'top_losers' in results
-
-
-class TestFMPCollector:
-    """Test Financial Modeling Prep collector"""
-
-    def test_initialization(self):
-        """Test collector initialization"""
-        collector = FMPCollector(api_key='test_key')
-        assert collector.api_key == 'test_key'
-        assert collector.rate_limit == 250
-
-    @patch('requests.get')
-    def test_collect_earnings_calendar(self, mock_get):
-        """Test earnings calendar collection"""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = [
-            {
-                'symbol': 'AAPL',
-                'date': '2024-01-25',
-                'epsEstimated': 2.10,
-                'eps': 2.15,
-                'time': 'amc'
-            }
-        ]
-        mock_get.return_value = mock_response
-
-        collector = FMPCollector(api_key='test_key')
-        results = collector.collect_earnings_calendar('2024-01-01', '2024-01-31')
-
-        assert isinstance(results, list)
-        if results:
-            assert 'ticker' in results[0]
-            assert 'date' in results[0]
-
-    @patch('requests.get')
-    def test_collect_analyst_estimates(self, mock_get):
-        """Test analyst estimates collection"""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = [
-            {
-                'date': '2024-01-01',
-                'estimatedRevenueAvg': 1000000000,
-                'estimatedEpsAvg': 2.50
-            }
-        ]
-        mock_get.return_value = mock_response
-
-        collector = FMPCollector(api_key='test_key')
-        result = collector.collect_analyst_estimates('AAPL')
-
-        assert result is not None or result is None  # May return None if empty
-
-    @patch('requests.get')
-    def test_api_error_handling(self, mock_get):
-        """Test API error handling"""
-        mock_get.side_effect = requests.RequestException("API Error")
-
-        collector = FMPCollector(api_key='test_key')
-        results = collector.collect_earnings_calendar('2024-01-01', '2024-01-31')
-
-        assert results == []
 
 
 class TestEdgeCasesAndIntegration:
