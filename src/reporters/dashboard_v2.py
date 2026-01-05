@@ -693,9 +693,13 @@ class ModernDashboardGenerator:
         """Generate market sentiment section"""
         # Sentiment overview
         if sentiment_data:
-            positive_count = sum(1 for s in sentiment_data.values() if s.get('avg_sentiment', 0) > 0.1)
-            neutral_count = sum(1 for s in sentiment_data.values() if -0.1 <= s.get('avg_sentiment', 0) <= 0.1)
-            negative_count = sum(1 for s in sentiment_data.values() if s.get('avg_sentiment', 0) < -0.1)
+            # Handle None values explicitly
+            positive_count = sum(1 for s in sentiment_data.values()
+                               if (s.get('avg_sentiment') or 0) > 0.1)
+            neutral_count = sum(1 for s in sentiment_data.values()
+                              if -0.1 <= (s.get('avg_sentiment') or 0) <= 0.1)
+            negative_count = sum(1 for s in sentiment_data.values()
+                               if (s.get('avg_sentiment') or 0) < -0.1)
             total = positive_count + neutral_count + negative_count
 
             if total > 0:
@@ -731,12 +735,17 @@ class ModernDashboardGenerator:
             return ""
 
         # Get summary stats (using correct field names from TechnicalAnalyzer)
-        oversold = sum(1 for t in technical_data.values() if t.get('rsi_14', 50) < 30)
-        overbought = sum(1 for t in technical_data.values() if t.get('rsi_14', 50) > 70)
+        # Handle None values explicitly since .get() default only applies if key doesn't exist
+        oversold = sum(1 for t in technical_data.values()
+                      if (t.get('rsi_14') or 50) < 30)
+        overbought = sum(1 for t in technical_data.values()
+                        if (t.get('rsi_14') or 50) > 70)
 
         # Determine trend from momentum
-        uptrend = sum(1 for t in technical_data.values() if t.get('momentum_10d', 0) > 5)
-        downtrend = sum(1 for t in technical_data.values() if t.get('momentum_10d', 0) < -5)
+        uptrend = sum(1 for t in technical_data.values()
+                     if (t.get('momentum_10d') or 0) > 5)
+        downtrend = sum(1 for t in technical_data.values()
+                       if (t.get('momentum_10d') or 0) < -5)
 
         return f"""<div class="section">
             <h2 class="section-title">Technical Overview</h2>
