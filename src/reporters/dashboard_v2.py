@@ -1326,11 +1326,14 @@ class ModernDashboardGenerator:
                     <td><span class="badge {shift_class}">{arrow} {abs(shift['sentiment_change']):.2f}</span></td>
                 </tr>"""
 
-        # Sentiment distribution
+        # Sentiment distribution (None treated as 0 for neutral)
         if sentiment_data:
-            positive = sum(1 for s in sentiment_data.values() if (s.get('avg_sentiment') or 0) > 0.1)
-            neutral = sum(1 for s in sentiment_data.values() if -0.1 <= (s.get('avg_sentiment') or 0) <= 0.1)
-            negative = sum(1 for s in sentiment_data.values() if (s.get('avg_sentiment') or 0) < -0.1)
+            # Extract sentiment values, treating None as 0
+            sentiment_values = [s.get('avg_sentiment') if s.get('avg_sentiment') is not None else 0
+                                for s in sentiment_data.values()]
+            positive = sum(1 for val in sentiment_values if val > 0.1)
+            neutral = sum(1 for val in sentiment_values if -0.1 <= val <= 0.1)
+            negative = sum(1 for val in sentiment_values if val < -0.1)
         else:
             positive = neutral = negative = 0
 
