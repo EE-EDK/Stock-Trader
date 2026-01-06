@@ -614,8 +614,8 @@ class Database:
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT ticker, mention_count, upvotes,
-                   mention_count * (1 + upvotes/100.0) as viral_score,
+            SELECT ticker, mentions, upvotes,
+                   mentions * (1 + upvotes/100.0) as viral_score,
                    collected_at
             FROM mentions
             WHERE collected_at >= datetime('now', '-' || ? || ' hours')
@@ -627,7 +627,7 @@ class Database:
         for row in cursor.fetchall():
             results.append({
                 'ticker': row[0],
-                'mention_count': row[1],
+                'mention_count': row[1],  # Keep dict key as mention_count for compatibility
                 'upvotes': row[2],
                 'viral_score': row[3],
                 'collected_at': row[4]
@@ -785,17 +785,17 @@ class Database:
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT m1.ticker, m1.mention_count, m1.collected_at
+            SELECT m1.ticker, m1.mentions, m1.collected_at
             FROM mentions m1
             WHERE m1.collected_at >= datetime('now', '-' || ? || ' hours')
-              AND m1.mention_count >= ?
+              AND m1.mentions >= ?
               AND NOT EXISTS (
                   SELECT 1 FROM mentions m2
                   WHERE m2.ticker = m1.ticker
                     AND m2.collected_at < datetime('now', '-' || ? || ' hours')
                     AND m2.collected_at >= datetime('now', '-' || ? || ' hours')
               )
-            ORDER BY m1.mention_count DESC
+            ORDER BY m1.mentions DESC
             LIMIT 10
         """, (hours, min_mentions, hours, hours * 2))
 
@@ -803,7 +803,7 @@ class Database:
         for row in cursor.fetchall():
             results.append({
                 'ticker': row[0],
-                'mention_count': row[1],
+                'mention_count': row[1],  # Keep dict key as mention_count for compatibility
                 'first_seen': row[2]
             })
         return results
