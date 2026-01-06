@@ -541,7 +541,7 @@ class Database:
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT ticker, mention_velocity_24h, price_velocity_24h,
+            SELECT ticker, mention_velocity_24h, mention_velocity_7d,
                    sentiment_velocity, composite_score, calculated_at
             FROM velocity
             WHERE calculated_at >= datetime('now', '-' || ? || ' hours')
@@ -554,7 +554,7 @@ class Database:
             results.append({
                 'ticker': row[0],
                 'mention_velocity_24h': row[1],
-                'price_velocity_24h': row[2],
+                'mention_velocity_7d': row[2],
                 'sentiment_velocity': row[3],
                 'composite_score': row[4],
                 'calculated_at': row[5]
