@@ -106,7 +106,8 @@ def collect_apewisdom(config):
     """Collect ApeWisdom data in parallel"""
     try:
         ape = ApeWisdomCollector()
-        mentions = ape.collect(top_n=config['collection']['apewisdom']['top_n'])
+        top_n = config.get('collection', {}).get('apewisdom', {}).get('top_n', 100)
+        mentions = ape.collect(top_n=top_n)
         ape.close()
         return ('apewisdom', mentions, None)
     except Exception as e:
@@ -118,9 +119,8 @@ def collect_openinsider(config):
     try:
         insider = OpenInsiderCollector()
         trades = insider.collect_cluster_buys()
-        trades += insider.collect_ceo_cfo_buys(
-            min_value=config['collection']['openinsider']['min_value']
-        )
+        min_value = config.get('collection', {}).get('openinsider', {}).get('min_value', 25000)
+        trades += insider.collect_ceo_cfo_buys(min_value=min_value)
         insider.close()
         return ('openinsider', trades, None)
     except Exception as e:
@@ -461,11 +461,12 @@ def run_pipeline(config: dict, skip_email: bool = False):
     else:
         try:
             reporter = EmailReporter(config['email'])
+            report_section = config.get('report', {})
             report = reporter.generate_report(
-                signals=signals[:config['report']['max_signals']],
+                signals=signals[:report_section.get('max_signals', 10)],
                 velocity_data=velocity_data,
-                include_charts=config['report'].get('include_charts', False),
-                watchlist_size=config['report'].get('watchlist_size', 20)
+                include_charts=report_section.get('include_charts', False),
+                watchlist_size=report_section.get('watchlist_size', 20)
             )
 
             if reporter.send(report):

@@ -487,7 +487,7 @@ class StockTraderGUI:
         ).pack(anchor=W, pady=(0, 20))
 
         # Type Verification section
-        type_frame = ttkb.LabelFrame(container, text="Type Safety Verification", padding=15)
+        type_frame = ttkb.LabelFrame(container, text="Type Safety Verification")
         type_frame.pack(fill=X, pady=10)
 
         ttkb.Label(
@@ -504,7 +504,7 @@ class StockTraderGUI:
         ).pack(anchor=W, pady=5)
 
         # Bug Fix Verification section
-        verify_frame = ttkb.LabelFrame(container, text="Bug Fix Verification", padding=15)
+        verify_frame = ttkb.LabelFrame(container, text="Bug Fix Verification")
         verify_frame.pack(fill=X, pady=10)
 
         ttkb.Label(
@@ -521,7 +521,7 @@ class StockTraderGUI:
         ).pack(anchor=W, pady=5)
 
         # Backtesting section
-        backtest_frame = ttkb.LabelFrame(container, text="Backtesting", padding=15)
+        backtest_frame = ttkb.LabelFrame(container, text="Backtesting")
         backtest_frame.pack(fill=X, pady=10)
 
         ttkb.Label(
@@ -546,7 +546,7 @@ class StockTraderGUI:
         ).pack(anchor=W, pady=5)
 
         # Runtime Validation section
-        runtime_frame = ttkb.LabelFrame(container, text="Runtime Validation", padding=15)
+        runtime_frame = ttkb.LabelFrame(container, text="Runtime Validation")
         runtime_frame.pack(fill=X, pady=10)
 
         ttkb.Label(
@@ -563,7 +563,7 @@ class StockTraderGUI:
         ).pack(anchor=W, pady=5)
 
         # Output area
-        output_frame = ttkb.LabelFrame(container, text="Output", padding=10)
+        output_frame = ttkb.LabelFrame(container, text="Output")
         output_frame.pack(fill=BOTH, expand=YES, pady=10)
 
         self.util_output = scrolledtext.ScrolledText(
@@ -577,42 +577,33 @@ class StockTraderGUI:
 
     def run_utility(self, script_path, name):
         """Run a utility script and display output"""
-        print(f"[DEBUG] run_utility called: {name}, {script_path}")  # Debug
         self.util_output.delete(1.0, tk.END)
         self.util_output_queue.put(f"Running {name}...\n\n")
-        print(f"[DEBUG] Queued initial message")  # Debug
 
         def run():
             try:
-                # Get script path relative to project root
                 script_filename = os.path.basename(script_path)
                 full_script_path = os.path.join(self.project_root, "utils", script_filename)
 
-                # Check if script exists
                 if not os.path.exists(full_script_path):
                     self.util_output_queue.put(f"❌ Error: Script not found at {full_script_path}\n")
                     self.util_output_queue.put(f"Please ensure utils/ folder exists in project root.\n")
                     return
-
-                print(f"[DEBUG] Project root: {self.project_root}")  # Debug
-                print(f"[DEBUG] Starting subprocess: python {full_script_path}")  # Debug
 
                 process = subprocess.Popen(
                     ["python", full_script_path],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
-                    encoding='utf-8',  # Explicitly use UTF-8 to handle emojis on Windows
+                    encoding='utf-8',
                     bufsize=1,
-                    cwd=self.project_root  # Run from project root
+                    cwd=self.project_root
                 )
 
-                print(f"[DEBUG] Process started, reading output...")  # Debug
                 for line in process.stdout:
                     self.util_output_queue.put(line)
 
                 process.wait()
-                print(f"[DEBUG] Process finished with code: {process.returncode}")  # Debug
 
                 if process.returncode == 0:
                     self.util_output_queue.put(f"\n✅ {name} completed successfully\n")
@@ -620,14 +611,9 @@ class StockTraderGUI:
                     self.util_output_queue.put(f"\n❌ {name} failed with code {process.returncode}\n")
 
             except Exception as e:
-                print(f"[DEBUG] Exception in run_utility: {e}")  # Debug
-                import traceback
-                traceback.print_exc()  # Debug
                 self.util_output_queue.put(f"\n❌ Error: {str(e)}\n")
 
-        print(f"[DEBUG] Starting background thread")  # Debug
         threading.Thread(target=run, daemon=True).start()
-        print(f"[DEBUG] Thread started")  # Debug
 
     def run_backtest(self):
         """Run backtest with specified days"""
@@ -725,7 +711,7 @@ class StockTraderGUI:
         ).pack(side=LEFT, padx=5)
 
         # Output console
-        console_frame = ttkb.LabelFrame(tab, text="Console Output", bootstyle="primary")
+        console_frame = ttkb.LabelFrame(tab, text="Console Output")
         console_frame.pack(fill=BOTH, expand=YES, padx=10, pady=10)
 
         self.console = scrolledtext.ScrolledText(
@@ -882,7 +868,7 @@ class StockTraderGUI:
     def save_config(self):
         """Save configuration to YAML file"""
         try:
-            # Build config from form values
+            # Build config from form values (report defaults required by pipeline)
             config = {
                 'api_keys': {},
                 'database': {'path': 'data/sentiment.db'},
@@ -891,7 +877,11 @@ class StockTraderGUI:
                 'backtesting': {},
                 'thresholds': {},
                 'email': {},
-                'report': {}
+                'report': {
+                    'max_signals': 10,
+                    'include_charts': False,
+                    'watchlist_size': 20,
+                }
             }
 
             for key, var in self.api_vars.items():
@@ -927,7 +917,6 @@ class StockTraderGUI:
                 with open(self.settings_path, 'r') as f:
                     self.settings = yaml.safe_load(f) or {}
         except Exception as e:
-            print(f"[DEBUG] Failed to load settings: {e}")
             self.settings = {}
 
     def save_settings(self):
@@ -939,8 +928,8 @@ class StockTraderGUI:
                 os.makedirs(settings_dir, exist_ok=True)
             with open(self.settings_path, 'w') as f:
                 yaml.dump(self.settings, f, default_flow_style=False)
-        except Exception as e:
-            print(f"[DEBUG] Failed to save settings: {e}")
+        except Exception:
+            pass
 
     def _get_settings_path(self):
         """Get settings file path - use AppData for exe builds, local for dev"""
@@ -1285,7 +1274,6 @@ Need help? Check the full README.md for detailed documentation.
         try:
             while True:
                 message = self.util_output_queue.get_nowait()
-                print(f"[DEBUG] Got message from queue: {message[:50]}...")  # Debug
                 self.util_output.insert(tk.END, message)
                 self.util_output.see(tk.END)
         except queue.Empty:
