@@ -101,6 +101,20 @@ def load_config(config_path: str = "config/config.yaml") -> dict:
         raise
 
 
+def get_db_path(config: dict) -> str:
+    """
+    @brief Return database path from config, whether database is a dict or a string.
+    @param config Configuration dictionary
+    @return Database file path
+    """
+    db = config.get('database')
+    if db is None:
+        return 'data/sentiment.db'
+    if isinstance(db, dict):
+        return db.get('path', 'data/sentiment.db')
+    return str(db)
+
+
 # Parallel collection helper functions
 def collect_apewisdom(config):
     """Collect ApeWisdom data in parallel"""
@@ -212,7 +226,7 @@ def run_pipeline(config: dict, skip_email: bool = False):
     logger.info("=" * 60)
 
     # Initialize database
-    db_path = config['database']['path']
+    db_path = get_db_path(config)
     db = Database(db_path)
     db.initialize()
     logger.info(f"Database initialized at {db_path}")
@@ -649,7 +663,7 @@ def main():
         # Initialize database only
         if args.init_db:
             logger.info("Initializing database...")
-            db = Database(config['database']['path'])
+            db = Database(get_db_path(config))
             db.initialize()
             db.close()
             logger.info("Database initialized successfully")
