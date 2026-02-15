@@ -765,6 +765,13 @@ class ModernDashboardGenerator:
         conditions = assessment.get('conditions', [])
         recommendations = assessment.get('recommendations', [])
 
+        # For MEDIUM risk, avoid "Elevated volatility" when recommendation says "Normal market conditions"
+        condition_text = conditions[0] if conditions else 'Market conditions unknown'
+        if risk_level == 'MEDIUM' and conditions and (
+            'Elevated' in condition_text or 'High volatility' in condition_text
+        ):
+            condition_text = 'Moderate volatility'
+
         return f"""<div class="header">
         <h1>Trading Signals</h1>
         <p>{datetime.now().strftime('%B %d, %Y • %I:%M %p')}</p>
@@ -780,7 +787,7 @@ class ModernDashboardGenerator:
         </div>
         <div class="score-info">
             <h3>{risk_emoji} Market Risk: {risk_level}</h3>
-            <p>{conditions[0] if conditions else 'Market conditions unknown'}</p>
+            <p>{condition_text}</p>
             <p style="opacity: 0.7;">{recommendations[0] if recommendations else 'Proceed with normal risk management'}</p>
         </div>
     </div>"""
@@ -1000,9 +1007,25 @@ class ModernDashboardGenerator:
         if not any([velocity_gainers, insider_trades, social_mentions, sentiment_shifts]):
             return ""
 
+        # Deduplicate by ticker: keep first (best) occurrence per ticker
+        def dedupe_by_ticker(items, ticker_key='ticker'):
+            seen = set()
+            out = []
+            for x in items:
+                t = x.get(ticker_key) or getattr(x, ticker_key, None)
+                if t and t not in seen:
+                    seen.add(t)
+                    out.append(x)
+            return out
+
+        velocity_unique = dedupe_by_ticker(velocity_gainers[:20])[:5]
+        insider_unique = dedupe_by_ticker(insider_trades[:20])[:5]
+        social_unique = dedupe_by_ticker(social_mentions[:20])[:5]
+        sentiment_unique = dedupe_by_ticker(sentiment_shifts[:20])[:5]
+
         # Top 5 velocity gainers
         velocity_html = ""
-        for i, v in enumerate(velocity_gainers[:5], 1):
+        for i, v in enumerate(velocity_unique, 1):
             velocity_html += f"""
                 <div class="mover-item">
                     <span class="rank">#{i}</span>
@@ -1012,7 +1035,7 @@ class ModernDashboardGenerator:
 
         # Top 5 insider activity
         insider_html = ""
-        for i, trade in enumerate(insider_trades[:5], 1):
+        for i, trade in enumerate(insider_unique, 1):
             trade_class = "positive" if 'buy' in trade['trade_type'].lower() or 'purchase' in trade['trade_type'].lower() else "negative"
             insider_html += f"""
                 <div class="mover-item">
@@ -1023,7 +1046,7 @@ class ModernDashboardGenerator:
 
         # Top 5 social mentions
         social_html = ""
-        for i, mention in enumerate(social_mentions[:5], 1):
+        for i, mention in enumerate(social_unique, 1):
             social_html += f"""
                 <div class="mover-item">
                     <span class="rank">#{i}</span>
@@ -1033,7 +1056,7 @@ class ModernDashboardGenerator:
 
         # Top 5 sentiment shifts
         sentiment_html = ""
-        for i, shift in enumerate(sentiment_shifts[:5], 1):
+        for i, shift in enumerate(sentiment_unique, 1):
             shift_class = "positive" if shift['sentiment_change'] > 0 else "negative"
             arrow = "↑" if shift['sentiment_change'] > 0 else "↓"
             sentiment_html += f"""
@@ -1499,9 +1522,18 @@ class ModernDashboardGenerator:
         if not social_mentions and not emerging_tickers:
             return ""
 
+        # Deduplicate by ticker so each ticker appears once (keep first/highest rank)
+        seen_tickers = set()
+        social_unique = []
+        for m in social_mentions:
+            t = m.get('ticker')
+            if t and t not in seen_tickers:
+                seen_tickers.add(t)
+                social_unique.append(m)
+
         # Top social mentions table
         social_html = ""
-        for i, mention in enumerate(social_mentions[:10], 1):
+        for i, mention in enumerate(social_unique[:10], 1):
             social_html += f"""
                 <tr>
                     <td>#{i}</td>

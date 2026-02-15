@@ -641,9 +641,9 @@ class Database:
 
         cursor.execute("""
             SELECT v.ticker, v.sentiment_velocity,
-                   p1.sentiment_score as current_sentiment,
-                   p2.sentiment_score as previous_sentiment,
-                   (p1.sentiment_score - p2.sentiment_score) as sentiment_change
+                   p1.news_sentiment as current_sentiment,
+                   p2.news_sentiment as previous_sentiment,
+                   (p1.news_sentiment - p2.news_sentiment) as sentiment_change
             FROM velocity v
             LEFT JOIN prices p1 ON v.ticker = p1.ticker
                 AND p1.collected_at = (SELECT MAX(collected_at) FROM prices WHERE ticker = v.ticker)
