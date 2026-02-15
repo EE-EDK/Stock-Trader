@@ -12,7 +12,7 @@ if not defined PYTHON (
     echo Python was not found. Please install Python 3.10 or newer.
     echo.
     echo Opening the Python download page...
-    echo After installing, check "Add Python to PATH" and run this file again.
+    echo After installing, add Python to PATH, then run this file again.
     echo.
     start https://www.python.org/downloads/
     pause
@@ -24,7 +24,7 @@ echo.
 
 :: Create virtual environment if it doesn't exist
 if not exist ".venv\Scripts\python.exe" (
-    echo Creating virtual environment (first run only)...
+    echo Creating virtual environment - first run only...
     %PYTHON% -m venv .venv
     if errorlevel 1 (
         echo Failed to create virtual environment.
@@ -44,7 +44,7 @@ echo Installing dependencies...
 "%VENV_PY%" -m pip install --upgrade pip -q
 "%VENV_PIP%" install -r requirements.txt -q
 if errorlevel 1 (
-    echo Failed to install dependencies. Try running: "%VENV_PIP%" install -r requirements.txt
+    echo Failed to install dependencies. Run: pip install -r requirements.txt
     pause
     exit /b 1
 )
@@ -53,7 +53,7 @@ echo.
 
 :: Start the web server in a new window
 echo Starting web server...
-start "Stock Trader Web" cmd /k "cd /d %ROOT% && .venv\Scripts\python.exe -m uvicorn web.main:app --host 0.0.0.0 --port 5000"
+start "Stock Trader Web" call "%ROOT%_run_server.bat"
 timeout /t 3 /nobreak > nul
 
 :: Open browser
