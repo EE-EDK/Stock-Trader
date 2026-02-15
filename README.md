@@ -183,7 +183,7 @@ erDiagram
 ```mermaid
 graph LR
     A[Stock Trader] --> B[Command Line<br/>python main.py]
-    A --> C[GUI Mode<br/>python gui.py (PyQt5)]
+    A --> C[GUI Mode<br/>python gui.py · PyQt5]
     A --> D[Automated Cron<br/>0 9 * * *]
 
     B --> E[Terminal Output<br/>+ HTML Dashboard]
