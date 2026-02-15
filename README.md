@@ -225,10 +225,10 @@ firefox reports/dashboard_*.html
 
 ### 8 FREE Data Sources
 
-| Source | Data | API Calls/Day | Cost | Setup Time |
-|--------|------|---------------|------|------------|
-| **Finnhub** | Stock prices | 200+ | FREE | 2 min |
-| **Alpha Vantage** | News sentiment | 100 | FREE | 2 min |
+| Source | Data | API / Rate | Cost | Setup Time |
+|--------|------|------------|------|------------|
+| **Finnhub** | Stock prices, quotes | 60/min | FREE | 2 min |
+| **Alpha Vantage** | News sentiment | 100/day | FREE | 2 min |
 | **Yahoo Finance** | Fundamentals, ratios | Unlimited | FREE | 0 min |
 | **VADER** | Local sentiment | Unlimited | FREE | 0 min |
 | **OpenInsider** | Insider trades | Unlimited | FREE | 0 min |
@@ -236,7 +236,7 @@ firefox reports/dashboard_*.html
 | **FRED** | Macro indicators (VIX, rates) | 120/min | FREE | 2 min |
 | **Technical** | RSI, MACD, Bollinger | Unlimited | FREE | 0 min |
 
-**Total: $0/month forever**
+**Total: $0/month forever.** All eight sources are wired in the pipeline (`main.py`): ApeWisdom & OpenInsider (parallel), then Finnhub for prices, YFinance/VADER/Alpha Vantage/FRED in parallel, and Technical on DB price history.
 
 ### 8 Signal Types
 
