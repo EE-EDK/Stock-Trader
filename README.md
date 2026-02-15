@@ -16,7 +16,7 @@
 ### Pipeline Overview
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': { 'fontSize':'16px', 'fontFamily':'arial'}}}%%
+%%{init: {'theme':'base', 'themeVariables': { 'fontSize':'16px', 'fontFamily':'arial', 'lineColor':'#3fb950'}}}%%
 graph TB
     subgraph "1️⃣ DATA COLLECTION (Parallel Execution)"
         A1["<b>ApeWisdom</b><br/>Top 100 Tickers<br/>FREE"]
@@ -90,6 +90,8 @@ graph TB
     style E1 fill:#A3E4D7,stroke:#16A085,stroke-width:3px,color:#000
     style E2 fill:#58D68D,stroke:#229954,stroke-width:4px,color:#000
     style E3 fill:#A3E4D7,stroke:#16A085,stroke-width:3px,color:#000
+
+    linkStyle 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23 stroke:#3fb950,stroke-width:3px
 ```
 
 ### Database Schema
