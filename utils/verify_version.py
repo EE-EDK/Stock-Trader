@@ -20,21 +20,21 @@ print("=" * 70)
 fixes = {
     "Paper trading price extraction fix": {
         "file": "main.py",
-        "line": 478,
+        "line": 441,
         "should_contain": "price_data['price']",
-        "description": "Line 478 should extract price from dict"
+        "description": "Line 441 should extract price from dict"
     },
     "Dashboard variable initialization": {
         "file": "main.py",
-        "line": 234,
+        "line": 228,
         "should_contain": "macro_indicators = {}",
-        "description": "Line 234 should initialize optional variables"
+        "description": "Line 228 should initialize optional variables"
     },
     "Signal generator NoneType check": {
         "file": "src/signals/generator.py",
-        "line": 306,
+        "line": 296,
         "should_contain": "if rsi is None:",
-        "description": "Line 306 should check for None before comparison"
+        "description": "Line 296 should check for None before comparison"
     },
     "Paper trading JSON parsing": {
         "file": "src/trading/paper_trading.py",
