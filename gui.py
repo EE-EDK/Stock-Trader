@@ -87,9 +87,11 @@ class TradingTheme:
             color: {TradingTheme.TEXT};
             border: none;
             padding: 4px;
+            outline: none;
         }}
-        QListWidget::item {{ padding: 10px 12px; border-radius: 4px; }}
-        QListWidget::item:selected {{ background-color: {TradingTheme.ACCENT}; color: {TradingTheme.BG_DARK}; }}
+        QListWidget::item {{ padding: 10px 12px; border-radius: 4px; border: none; outline: none; }}
+        QListWidget::item:selected {{ background-color: {TradingTheme.ACCENT}; color: {TradingTheme.BG_DARK}; border: none; outline: none; }}
+        QListWidget::item:selected:focus {{ border: none; outline: none; }}
         QListWidget::item:hover:!selected {{ background-color: {TradingTheme.BG_LIGHT}; }}
         QStatusBar {{ background-color: {TradingTheme.BG_MEDIUM}; color: {TradingTheme.TEXT_DIM}; border-top: 1px solid {TradingTheme.BORDER}; }}
         QLabel {{ color: {TradingTheme.TEXT}; }}
@@ -288,6 +290,7 @@ class StockTraderGUI(QMainWindow):
 
     def _create_nav(self) -> QListWidget:
         nav = QListWidget()
+        nav.setAttribute(Qt.WA_ShowFocusRect, False)
         nav.setMinimumWidth(200)
         nav.setMaximumWidth(280)
         for label in [
