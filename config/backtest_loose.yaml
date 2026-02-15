@@ -1,0 +1,18 @@
+# Backtest variant: looser (min_conv 35 to include more signals)
+# Used for: python utils/backtest.py --days 240 --config config/backtest_loose.yaml
+
+database:
+  path: "data/sentiment.db"
+
+backtesting:
+  initial_capital: 10000
+  position_size: 1000
+  max_positions: 10
+  conviction_weighted: true
+  hold_days: 30
+  stop_loss_pct: -10
+  take_profit_pct: 20
+  min_conviction: 35
+
+thresholds:
+  minimum_conviction: 40
