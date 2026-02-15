@@ -290,7 +290,6 @@ class StockTraderGUI(QMainWindow):
 
     def _create_nav(self) -> QListWidget:
         nav = QListWidget()
-        nav.setAttribute(Qt.WA_ShowFocusRect, False)
         nav.setMinimumWidth(200)
         nav.setMaximumWidth(280)
         for label in [
