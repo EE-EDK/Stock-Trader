@@ -183,17 +183,20 @@ erDiagram
 ```mermaid
 graph LR
     A[Stock Trader] --> B[Command Line<br/>python main.py]
-    A --> C[GUI Mode<br/>python gui.py · PyQt5]
-    A --> D[Automated Cron<br/>0 9 * * *]
+    A --> C[Web App<br/>uvicorn web.main:app]
+    A --> D[GUI Mode · Optional<br/>python gui.py PyQt5]
+    A --> E[Automated Cron<br/>0 9 * * *]
 
-    B --> E[Terminal Output<br/>+ HTML Dashboard]
-    C --> F[Visual Config<br/>+ Live Console]
-    D --> G[Scheduled Runs<br/>+ Logs]
+    B --> F[Terminal Output<br/>+ HTML Dashboard]
+    C --> G[Dashboard · Run · Settings<br/>+ Live Log · Backtest · Utilities]
+    D --> H[Visual Config<br/>+ Live Console]
+    E --> I[Scheduled Runs<br/>+ Logs]
 
     style A fill:#4a90e2,color:#fff
     style B fill:#e1f5ff
     style C fill:#e1f5ff
     style D fill:#e1f5ff
+    style E fill:#e1f5ff
 ```
 
 ---
@@ -217,6 +220,10 @@ python main.py
 
 # 5. View results
 firefox reports/dashboard_*.html
+
+# Or run the web app (dashboard, run pipeline, settings, backtest, utilities)
+uvicorn web.main:app --host 0.0.0.0 --port 5000
+# Then open http://localhost:5000
 ```
 
 ---
@@ -282,6 +289,7 @@ firefox reports/dashboard_*.html
 - ✅ **Paper trading** - Mock purchases to validate signals before risking capital
 - ✅ **Backtesting** - Validate strategy against historical data with comprehensive metrics
 - ✅ **Macro indicators** - FRED economic data integration (VIX, rates, unemployment, etc.)
+- ✅ **Web app** - FastAPI dashboard, run pipeline (live log), settings (config/config.yaml), backtest, utilities (gear icon)
 - ✅ **100% FREE** - Zero recurring costs
 - ✅ **Local database** - Your data stays on your machine
 - ✅ **Automated** - Set and forget with cron
@@ -294,7 +302,10 @@ firefox reports/dashboard_*.html
 ```
 Stock-Trader/
 ├── main.py                          # Main pipeline orchestrator
-├── gui.py                           # PyQt5 GUI (config + pipeline control)
+├── gui.py                           # Optional PyQt5 GUI
+├── web/                             # FastAPI web app (dashboard, run, settings, backtest, utilities)
+│   ├── main.py                      # App entry
+│   └── templates/                   # HTML templates
 ├── config/
 │   ├── config.yaml                  # Your configuration
 │   ├── config.example.yaml          # Template
