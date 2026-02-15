@@ -866,23 +866,28 @@ class StockTraderGUI:
             self.log_to_console(f"✗ Error loading config: {e}\n")
 
     def save_config(self):
-        """Save configuration to YAML file"""
+        """Save configuration to YAML file. Preserves existing sections/keys not edited by the GUI (e.g. report)."""
         try:
-            # Build config from form values (report defaults required by pipeline)
-            config = {
-                'api_keys': {},
-                'database': {'path': 'data/sentiment.db'},
-                'collection': {},
-                'paper_trading': {},
-                'backtesting': {},
-                'thresholds': {},
-                'email': {},
-                'report': {
-                    'max_signals': 10,
-                    'include_charts': False,
-                    'watchlist_size': 20,
-                }
-            }
+            # Load existing config so we don't overwrite user edits to non-GUI keys (e.g. report.*)
+            if os.path.exists(self.config_path):
+                with open(self.config_path, 'r') as f:
+                    config = yaml.safe_load(f) or {}
+            else:
+                config = {}
+
+            # Ensure top-level sections exist so set_nested_value works; do not overwrite existing
+            for section, default in (
+                ('api_keys', {}),
+                ('database', {'path': 'data/sentiment.db'}),
+                ('collection', {}),
+                ('paper_trading', {}),
+                ('backtesting', {}),
+                ('thresholds', {}),
+                ('email', {}),
+                ('report', {'max_signals': 10, 'include_charts': False, 'watchlist_size': 20}),
+            ):
+                if section not in config or not isinstance(config.get(section), dict):
+                    config[section] = default.copy() if isinstance(default, dict) else default
 
             for key, var in self.api_vars.items():
                 value = var.get()
