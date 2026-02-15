@@ -186,17 +186,18 @@ except Exception as e:
 # Test 6: Test dashboard generator
 print("\n[TEST 6] Testing dashboard generator...")
 try:
-    from src.reporters.dashboard import DashboardGenerator
+    # Pipeline uses dashboard_v2 (ModernDashboardGenerator), not dashboard.py
+    from src.reporters.dashboard_v2 import ModernDashboardGenerator as DashboardGenerator
     dashboard = DashboardGenerator(output_dir="reports_test")
-    successes.append("[OK] DashboardGenerator instantiation")
-    print("  [OK] DashboardGenerator instantiation")
+    successes.append("[OK] DashboardGenerator (dashboard_v2) instantiation")
+    print("  [OK] DashboardGenerator (dashboard_v2) instantiation")
 
-    # Test generate method signature
+    # Test generate method signature (must match main.py call)
     import inspect
     sig = inspect.signature(dashboard.generate)
     params = list(sig.parameters.keys())
     required_params = ['signals', 'velocity_data', 'technical_data', 'sentiment_data',
-                       'paper_trading_stats', 'macro_indicators', 'market_assessment']
+                       'paper_trading_stats', 'macro_indicators', 'market_assessment', 'db']
 
     missing = [p for p in required_params if p not in params]
     if missing:
@@ -210,34 +211,36 @@ except Exception as e:
     errors.append(f"[FAIL] DashboardGenerator: {e}")
     print(f"  [FAIL] DashboardGenerator: {e}")
 
-# Test 7: Test paper trading system
+# Test 7: Test paper trading system (PaperTradingManager expects db_path: str, config: dict)
 print("\n[TEST 7] Testing paper trading system...")
 try:
     from src.trading.paper_trading import PaperTradingManager
     from src.database.models import Database
-    db = Database('data/test_runtime2.db')
+    db_path = 'data/test_runtime2.db'
+    db = Database(db_path)
     db.initialize()
-    pts = PaperTradingManager(db, {'enabled': False, 'initial_capital': 10000})
+    pts = PaperTradingManager(db_path, {'paper_trading': {'enabled': False}})
     db.close()
-    if os.path.exists('data/test_runtime2.db'):
-        os.remove('data/test_runtime2.db')
+    if os.path.exists(db_path):
+        os.remove(db_path)
     successes.append("[OK] PaperTradingManager instantiation")
     print("  [OK] PaperTradingManager instantiation")
 except Exception as e:
     errors.append(f"[FAIL] PaperTradingManager: {e}")
     print(f"  [FAIL] PaperTradingManager: {e}")
 
-# Test 8: Test backtester
+# Test 8: Test backtester (Backtester expects db_path: str, config: dict)
 print("\n[TEST 8] Testing backtester...")
 try:
     from src.analysis.backtester import Backtester
     from src.database.models import Database
-    db = Database('data/test_runtime3.db')
+    db_path = 'data/test_runtime3.db'
+    db = Database(db_path)
     db.initialize()
-    bt = Backtester(db, {'initial_capital': 10000})
+    bt = Backtester(db_path, {'backtesting': {'initial_capital': 10000}})
     db.close()
-    if os.path.exists('data/test_runtime3.db'):
-        os.remove('data/test_runtime3.db')
+    if os.path.exists(db_path):
+        os.remove(db_path)
     successes.append("[OK] Backtester instantiation")
     print("  [OK] Backtester instantiation")
 except Exception as e:
