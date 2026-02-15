@@ -1000,16 +1000,13 @@ MIT License - See LICENSE file for details
 - [x] **Backtesting module** - ✅ Complete (v1.2.0)
 - [x] **Enhanced dashboard** - ✅ Complete (v1.2.0)
 
-### Phase 3 - 🚧 IN PROGRESS
-- [ ] Options flow data (Unusual Whales/Cheddar Flow) - Requires paid subscription
-- [ ] Web dashboard (Flask/FastAPI)
-- [ ] Discord/Telegram bot for notifications
+### Phase 3 - 🚧 UNDER CONSIDERATION
+- [ ] Web dashboard (Flask/FastAPI) – browser-based view of reports/signals; can coexist with the PyQt5 GUI (GUI for config & pipeline, web for viewing) or later replace static HTML with a served app.
 
 ### Phase 4 (Long-term)
 - [ ] Machine learning for signal optimization
 - [ ] Multi-timeframe analysis
 - [ ] Correlation with market regime
-- [ ] Real broker API integration
 
 ---
 
