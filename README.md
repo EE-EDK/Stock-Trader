@@ -7,7 +7,7 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![FREE APIs](https://img.shields.io/badge/APIs-100%25%20FREE-brightgreen.svg)](https://github.com)
-[![Tests](https://img.shields.io/badge/tests-122%20passing-success.svg)](https://github.com)
+[![Tests](https://img.shields.io/badge/tests-passing-success.svg)](https://github.com)
 
 ---
 
@@ -16,7 +16,7 @@
 ### Pipeline Overview
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': { 'fontSize':'16px', 'fontFamily':'arial'}}}%%
+%%{init: {'theme':'base', 'themeVariables': { 'fontSize':'16px', 'fontFamily':'arial', 'lineColor':'#3fb950'}}}%%
 graph TB
     subgraph "1️⃣ DATA COLLECTION (Parallel Execution)"
         A1["<b>ApeWisdom</b><br/>Top 100 Tickers<br/>FREE"]
@@ -90,6 +90,8 @@ graph TB
     style E1 fill:#A3E4D7,stroke:#16A085,stroke-width:3px,color:#000
     style E2 fill:#58D68D,stroke:#229954,stroke-width:4px,color:#000
     style E3 fill:#A3E4D7,stroke:#16A085,stroke-width:3px,color:#000
+
+    linkStyle 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23 stroke:#3fb950,stroke-width:3px
 ```
 
 ### Database Schema
@@ -181,7 +183,7 @@ erDiagram
 ```mermaid
 graph LR
     A[Stock Trader] --> B[Command Line<br/>python main.py]
-    A --> C[GUI Mode<br/>python gui.py]
+    A --> C[GUI Mode<br/>python gui.py (PyQt5)]
     A --> D[Automated Cron<br/>0 9 * * *]
 
     B --> E[Terminal Output<br/>+ HTML Dashboard]
@@ -292,10 +294,12 @@ firefox reports/dashboard_*.html
 ```
 Stock-Trader/
 ├── main.py                          # Main pipeline orchestrator
-├── gui.py                           # Graphical user interface
+├── gui.py                           # PyQt5 GUI (config + pipeline control)
 ├── config/
 │   ├── config.yaml                  # Your configuration
-│   └── config.example.yaml          # Template
+│   ├── config.example.yaml          # Template
+│   ├── backtest_strict.yaml         # Stricter backtest (min_conv 50, -7% stop)
+│   └── backtest_loose.yaml          # Looser backtest (min_conv 35)
 ├── src/
 │   ├── collectors/                  # Data collectors
 │   │   ├── alphavantage.py         # Alpha Vantage sentiment
@@ -691,7 +695,14 @@ Command-line tool for running backtests on historical signals. See [Backtesting 
 
 **Usage:**
 ```bash
+# Default config (from config.yaml)
 python utils/backtest.py --days 90
+
+# Stricter params (min_conv 50, stop -7%%, position $750)
+python utils/backtest.py --days 240 --config config/backtest_strict.yaml
+
+# Looser params (min_conv 35, more signals)
+python utils/backtest.py --days 240 --config config/backtest_loose.yaml
 ```
 
 ### Runtime Validation
@@ -745,7 +756,9 @@ The 154 warnings found by the type checker are mostly intentional `.get()` usage
 | Finnhub Collector | 5 | 76% | ✅ All passing |
 | OpenInsider Collector | 5 | 74% | ✅ All passing |
 | Velocity Calculator | 4 | 92% | ✅ All passing |
-| **Total** | **238** | **50%** | **✅ 238 passing** |
+| **Total** | **238+** | **~50%** | **✅ passing** |
+
+*Test and coverage numbers can be updated after running the full suite.*
 
 ### Run Tests
 
