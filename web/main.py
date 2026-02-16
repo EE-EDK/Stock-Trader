@@ -15,6 +15,7 @@ from queue import Queue, Empty
 import yaml
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sse_starlette.sse import EventSourceResponse
 
@@ -25,6 +26,7 @@ REPORTS_DIR = PROJECT_ROOT / "reports"
 
 app = FastAPI(title="Stock Trader", version="1.0")
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
 
 def get_config() -> dict:
