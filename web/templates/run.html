@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Run Pipeline – Stock Trader{% endblock %}
+{% block content %}
+<h1 style="margin-bottom: 1rem;">Run Pipeline</h1>
+<p style="color: var(--text-dim); margin-bottom: 1rem;">Runs the full pipeline: collect data, velocity, technical, signals, paper trading, dashboard.</p>
+<button id="runBtn" style="padding: 0.6rem 1.2rem; background: var(--accent); color: var(--bg-dark); border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">Run Pipeline</button>
+<pre id="log" style="margin-top: 1rem; padding: 1rem; background: #0d1117; border: 1px solid var(--border); border-radius: 6px; min-height: 300px; overflow: auto; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all;"></pre>
+{% endblock %}
+{% block extra_js %}
+<script>
+const runBtn = document.getElementById('runBtn');
+const logEl = document.getElementById('log');
+runBtn.addEventListener('click', () => {
+    runBtn.disabled = true;
+    logEl.textContent = 'Starting pipeline...\n\n';
+    const es = new EventSource('/api/run/stream');
+    es.onmessage = (e) => {
+        logEl.textContent += e.data;
+        logEl.scrollTop = logEl.scrollHeight;
+    };
+    es.onerror = () => {
+        es.close();
+        logEl.textContent += '\n[Stream ended]. View Dashboard for the latest report.';
+        runBtn.disabled = false;
+    };
+});
+</script>
+{% endblock %}
