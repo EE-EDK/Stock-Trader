@@ -49,6 +49,12 @@ def save_config(updates: dict) -> None:
     """Merge updates into existing config and save to config/config.yaml."""
     config = get_config()
     _deep_merge(config, updates)
+    # Ensure database is always a dict so pipeline does not get string indices error
+    db = config.get("database")
+    if isinstance(db, str):
+        config["database"] = {"path": db}
+    elif db is not None and not isinstance(db, dict):
+        config["database"] = {"path": "data/sentiment.db"}
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
