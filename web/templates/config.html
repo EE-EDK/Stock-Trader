@@ -1,0 +1,479 @@
+{% extends "base.html" %}
+{% block title %}Settings – Stock Trader{% endblock %}
+{% block extra_css %}
+.nav-tabs { display: flex; gap: 0.25rem; flex-wrap: wrap; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+.nav-tabs a { padding: 0.5rem 0.75rem; border-radius: 6px; color: var(--text-dim); text-decoration: none; }
+.nav-tabs a:hover { color: var(--text); background: var(--bg-light); }
+.nav-tabs a.active { color: var(--accent); font-weight: 600; }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+.config-section { background: var(--bg-medium); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+.config-section h3 { color: var(--accent); margin-bottom: 0.75rem; font-size: 1rem; }
+.config-section-intro { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 0.75rem; line-height: 1.4; }
+.config-row-pair { display: flex; align-items: flex-start; gap: 0; padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
+.config-row-pair:last-child { border-bottom: none; }
+.config-controls { flex: 0 0 340px; min-width: 300px; }
+.config-controls .config-row { margin-bottom: 0; }
+.config-desc { flex: 1; padding-left: 1rem; margin-left: 1rem; border-left: 3px solid var(--border); font-size: 0.8rem; color: var(--text-dim); line-height: 1.45; }
+.config-row { margin-bottom: 0.75rem; }
+.config-row label { display: inline-block; min-width: 200px; color: var(--text); }
+.config-row input[type="text"], .config-row input[type="number"], .config-row input[type="password"] { padding: 0.4rem 0.6rem; background: var(--bg-light); color: var(--text); border: 1px solid var(--border); border-radius: 4px; width: 260px; }
+.config-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
+.api-key-link { font-size: 0.85rem; color: var(--accent); margin-left: 0.5rem; }
+.api-key-link:hover { text-decoration: underline; }
+.get-api-flash { animation: get-api-flash 1s ease-in-out infinite; }
+@keyframes get-api-flash {
+    0%, 100% { color: var(--accent); }
+    50% { color: #f0c000; }
+}
+{% endblock %}
+{% block content %}
+<h1 style="margin-bottom: 1rem;">Settings</h1>
+<div class="nav-tabs" id="configTabs">
+    <a href="#" data-tab="api">API Keys</a>
+    <a href="#" data-tab="collection">Data Collection</a>
+    <a href="#" data-tab="paper">Paper Trading</a>
+    <a href="#" data-tab="backtest">Backtesting</a>
+    <a href="#" data-tab="thresholds">Signal Thresholds</a>
+    <a href="#" data-tab="email">Email</a>
+    <a href="#" data-tab="report">Report</a>
+</div>
+
+<form id="configForm">
+    <div id="tab-api" class="tab-pane">
+        <div class="config-section">
+            <h3>API Keys (FREE tiers)</h3>
+            <p class="config-section-intro">These keys let the pipeline fetch market data and news. Without the required key, the pipeline cannot run. Optional keys enable extra data sources that improve signal quality and conviction scores.</p>
+            <div class="config-row-pair">
+                <div class="config-controls">
+                    <div class="config-row">
+                        <label for="api_keys.finnhub">Finnhub (REQUIRED)</label>
+                        <input type="text" id="api_keys.finnhub" name="api_keys.finnhub" placeholder="Your API key">
+                        <a id="get-api-finnhub" class="api-key-link" href="https://finnhub.io/register" target="_blank" rel="noopener">Get API key</a>
+                    </div>
+                </div>
+                <div class="config-desc">Powers social and news sentiment and core ticker data. The pipeline will not start without a valid Finnhub key.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls">
+                    <div class="config-row">
+                        <label for="api_keys.alphavantage">Alpha Vantage</label>
+                        <input type="text" id="api_keys.alphavantage" name="api_keys.alphavantage" placeholder="Your API key">
+                        <a class="api-key-link" href="https://www.alphavantage.co/support/#api-key" target="_blank" rel="noopener">Get API key</a>
+                    </div>
+                </div>
+                <div class="config-desc">Adds news sentiment per ticker (free tier: limited calls/day). When enabled, improves signal quality; when missing, Alpha Vantage collection is skipped.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls">
+                    <div class="config-row">
+                        <label for="api_keys.fred">FRED</label>
+                        <input type="text" id="api_keys.fred" name="api_keys.fred" placeholder="Your API key">
+                        <a class="api-key-link" href="https://fred.stlouisfed.org/docs/api/api_key.html" target="_blank" rel="noopener">Get API key</a>
+                    </div>
+                </div>
+                <div class="config-desc">Used for macro indicators (VIX, rates, unemployment, inflation, forex). Enables market-context data in the dashboard; no key means FRED collection is skipped.</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tab-collection" class="tab-pane">
+        <div class="config-section">
+            <h3>Alpha Vantage</h3>
+            <p class="config-section-intro">News sentiment from Alpha Vantage (free tier has a daily call limit). More articles and tickers use more API calls but can improve signal quality.</p>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label><input type="checkbox" name="collection.alphavantage.enabled" id="collection.alphavantage.enabled"> Enabled</label></div></div>
+                <div class="config-desc">Turn on to add Alpha Vantage news sentiment to the pipeline. Off = no Alpha Vantage calls; signals rely on other sources only.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="collection.alphavantage.top_n">Top N Tickers</label><input type="number" name="collection.alphavantage.top_n" id="collection.alphavantage.top_n" min="1" max="100" value="20"></div></div>
+                <div class="config-desc">How many top tickers (by velocity/activity) to run through Alpha Vantage. Higher = more API usage and potentially richer sentiment; lower = fewer calls.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="collection.alphavantage.articles_per_ticker">Articles per Ticker</label><input type="number" name="collection.alphavantage.articles_per_ticker" min="1" max="100" value="50"></div></div>
+                <div class="config-desc">Max news articles analyzed per ticker. More articles can improve sentiment accuracy but increase API usage.</div>
+            </div>
+        </div>
+        <div class="config-section">
+            <h3>Yahoo Finance</h3>
+            <p class="config-section-intro">Yahoo Finance data is free and unlimited. It feeds price history, fundamentals, and analyst ratings used in signals and the dashboard.</p>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label><input type="checkbox" name="collection.yfinance.enabled" id="collection.yfinance.enabled"> Enabled</label></div></div>
+                <div class="config-desc">Master switch for Yahoo Finance. Disable to skip all YFinance collection (pipeline will have less price and fundamental data).</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label><input type="checkbox" name="collection.yfinance.collect_fundamentals" id="collection.yfinance.collect_fundamentals"> Collect Fundamentals</label></div></div>
+                <div class="config-desc">When on, fetches fundamentals (e.g. P/E, market cap). Used in reports and can influence signal context; off saves a bit of collection time.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label><input type="checkbox" name="collection.yfinance.collect_analyst_ratings" id="collection.yfinance.collect_analyst_ratings"> Collect Analyst Ratings</label></div></div>
+                <div class="config-desc">When on, fetches analyst ratings. Shown in the dashboard and can add context to trading signals.</div>
+            </div>
+        </div>
+        <div class="config-section">
+            <h3>VADER Sentiment</h3>
+            <p class="config-section-intro">VADER analyzes sentiment from scraped headlines (no paid API). Affects signal conviction and sentiment metrics shown in reports.</p>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label><input type="checkbox" name="collection.vader_sentiment.enabled" id="collection.vader_sentiment.enabled"> Enabled</label></div></div>
+                <div class="config-desc">Enable to run local VADER sentiment on collected text. Off = no headline sentiment; signals and dashboard will lack this component.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label><input type="checkbox" name="collection.vader_sentiment.scrape_headlines" id="collection.vader_sentiment.scrape_headlines"> Scrape Headlines</label></div></div>
+                <div class="config-desc">When on, the system scrapes headlines (e.g. Google News, Yahoo) for VADER to analyze. Off = VADER only runs on other collected text.</div>
+            </div>
+        </div>
+        <div class="config-section">
+            <h3>Technical Analysis</h3>
+            <p class="config-section-intro">Technical indicators are computed from price history (no extra API). They appear in the dashboard and can influence signal strength.</p>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label><input type="checkbox" name="collection.technical_analysis.enabled" id="collection.technical_analysis.enabled"> Enabled</label></div></div>
+                <div class="config-desc">Turn on to compute technicals from price data. Off = no technical indicators in reports or signal logic.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="collection.technical_analysis.lookback_days">Lookback Days</label><input type="number" name="collection.technical_analysis.lookback_days" min="10" max="200" value="50"></div></div>
+                <div class="config-desc">How many days of price history to use for technicals. Longer = smoother indicators but slower to react; shorter = more responsive but noisier.</div>
+            </div>
+        </div>
+        <div class="config-section">
+            <h3>FRED Macro</h3>
+            <p class="config-section-intro">FRED provides macro indicators (VIX, rates, unemployment, inflation, forex). Used for market context in the dashboard and in assessing risk; requires a FRED API key.</p>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label><input type="checkbox" name="collection.fred.enabled" id="collection.fred.enabled"> Enabled</label></div></div>
+                <div class="config-desc">Enable to fetch FRED data each run. Off = no macro indicators; dashboard macro section will be empty.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls">
+                    <div class="config-row"><label><input type="checkbox" name="collection.fred.collect_vix" id="collection.fred.collect_vix"> Collect VIX</label></div>
+                    <div class="config-row"><label><input type="checkbox" name="collection.fred.collect_rates" id="collection.fred.collect_rates"> Collect Rates</label></div>
+                    <div class="config-row"><label><input type="checkbox" name="collection.fred.collect_unemployment" id="collection.fred.collect_unemployment"> Collect Unemployment</label></div>
+                    <div class="config-row"><label><input type="checkbox" name="collection.fred.collect_inflation" id="collection.fred.collect_inflation"> Collect Inflation</label></div>
+                    <div class="config-row"><label><input type="checkbox" name="collection.fred.collect_forex" id="collection.fred.collect_forex"> Collect Forex</label></div>
+                </div>
+                <div class="config-desc">Check which FRED series to fetch. Each adds one API call per run. All feed into the dashboard macro view and market-context display.</div>
+            </div>
+        </div>
+        <div class="config-section">
+            <h3>ApeWisdom / OpenInsider</h3>
+            <p class="config-section-intro">ApeWisdom and OpenInsider supply social/insider activity. Insider data boosts conviction scores and can trigger insider-cluster signals; more tickers/value = more coverage.</p>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="collection.apewisdom.top_n">ApeWisdom Top N</label><input type="number" name="collection.apewisdom.top_n" min="1" max="200" value="100"></div></div>
+                <div class="config-desc">Number of top tickers to pull from ApeWisdom. Higher = broader social coverage and potentially more signals; lower = faster runs and less API load.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="collection.openinsider.min_value">OpenInsider Min Value ($)</label><input type="number" name="collection.openinsider.min_value" min="1000" value="25000"></div></div>
+                <div class="config-desc">Only insider trades with total value at or above this amount are counted. Higher = fewer but larger trades (e.g. institutional); lower = more trades including smaller ones.</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tab-paper" class="tab-pane">
+        <div class="config-section">
+            <h3>Paper Trading</h3>
+            <p class="config-section-intro">Paper trading simulates buys and sells using your signals—no real money. Each run can open/close positions based on conviction and exit rules. These settings control which signals become trades and how positions are sized and closed.</p>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label><input type="checkbox" name="paper_trading.enabled" id="paper_trading.enabled"> Enable Paper Trading</label></div></div>
+                <div class="config-desc">When enabled, the pipeline creates and updates paper positions from signals. Disable to run the pipeline without any paper trades.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="paper_trading.min_conviction">Minimum Conviction</label><input type="number" name="paper_trading.min_conviction" min="0" max="100" value="40"></div></div>
+                <div class="config-desc">Only signals with conviction at or above this value will open a paper trade. Higher = fewer, more selective trades; lower = more trades, including weaker signals.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="paper_trading.position_size">Position Size ($)</label><input type="number" name="paper_trading.position_size" min="100" max="10000" value="1000"></div></div>
+                <div class="config-desc">Nominal dollar size per position (used with conviction-weighted sizing if enabled elsewhere). Affects how much “capital” each paper trade represents.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="paper_trading.max_open_positions">Max Open Positions</label><input type="number" name="paper_trading.max_open_positions" min="1" max="50" value="10"></div></div>
+                <div class="config-desc">Cap on how many positions can be open at once. Once reached, no new paper buys until one closes. Limits concentration and simulates limited capital.</div>
+            </div>
+            <h3 style="margin-top: 1rem;">Exit Strategy</h3>
+            <p class="config-section-intro">Paper positions are closed when one of these conditions is met: hold time expires, stop loss hits, or take profit hits. Changing these changes how long positions last and how much gain/loss is locked in.</p>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="paper_trading.hold_days">Hold Days</label><input type="number" name="paper_trading.hold_days" min="1" max="365" value="30"></div></div>
+                <div class="config-desc">Positions are auto-closed after this many days if not already closed by stop loss or take profit. Shorter = faster turnover; longer = more time for moves to play out.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="paper_trading.stop_loss_pct">Stop Loss %</label><input type="number" name="paper_trading.stop_loss_pct" min="-50" max="0" value="-10"></div></div>
+                <div class="config-desc">Close the position when unrealized loss reaches this percentage (e.g. -10 = close when down 10%). Tighter (e.g. -5) cuts losses sooner; looser allows more drawdown.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="paper_trading.take_profit_pct">Take Profit %</label><input type="number" name="paper_trading.take_profit_pct" min="0" max="200" value="20"></div></div>
+                <div class="config-desc">Close the position when unrealized gain reaches this percentage. Higher = let winners run longer; lower = lock in profits sooner.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label><input type="checkbox" name="paper_trading.report_in_dashboard" id="paper_trading.report_in_dashboard"> Report in Dashboard</label></div></div>
+                <div class="config-desc">When on, paper trades and P&amp;L are shown in the HTML dashboard. Off = pipeline still runs paper trading but the dashboard does not display it.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="paper_trading.backfill_days">Backfill Days</label><input type="number" name="paper_trading.backfill_days" min="0" max="365" value="90"></div></div>
+                <div class="config-desc">On first run (or when needed), paper trading can backfill positions from past signals over this many days. 0 = no backfill; higher = more historical paper positions for comparison with backtests.</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tab-backtest" class="tab-pane">
+        <div class="config-section">
+            <h3>Backtesting</h3>
+            <p class="config-section-intro">Backtesting replays past signals against historical price data to estimate performance. No real or paper trades are placed; results show how the current thresholds and exit rules would have performed. Use the Backtest page to run a backtest; these settings define the simulation parameters.</p>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="backtesting.initial_capital">Initial Capital ($)</label><input type="number" name="backtesting.initial_capital" min="1000" max="100000" value="10000"></div></div>
+                <div class="config-desc">Starting capital for the backtest. Used to compute returns and final P&amp;L; does not affect which signals are generated, only how performance is scaled.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="backtesting.position_size">Position Size ($)</label><input type="number" name="backtesting.position_size" min="100" max="10000" value="1000"></div></div>
+                <div class="config-desc">Base dollar size per simulated position. If conviction-weighted sizing is on, higher-conviction signals use a larger share of this; otherwise each position is this size.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="backtesting.max_positions">Max Positions</label><input type="number" name="backtesting.max_positions" min="1" max="50" value="10"></div></div>
+                <div class="config-desc">Maximum number of concurrent positions in the backtest. Once reached, no new buys until one closes; limits concentration and mimics limited capital.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label><input type="checkbox" name="backtesting.conviction_weighted" id="backtesting.conviction_weighted"> Conviction Weighted Sizing</label></div></div>
+                <div class="config-desc">When on, position size scales with signal conviction (higher conviction = larger position). When off, every position uses the same base size.</div>
+            </div>
+            <h3 style="margin-top: 1rem;">Exit Strategy</h3>
+            <p class="config-section-intro">Simulated positions are closed when hold time expires, stop loss hits, or take profit hits. Same logic as paper trading; align these with paper settings to compare backtest and paper results.</p>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="backtesting.hold_days">Hold Days</label><input type="number" name="backtesting.hold_days" min="1" max="365" value="30"></div></div>
+                <div class="config-desc">Positions are closed after this many days if not stopped out or taken profit. Shorter = more turnover; longer = more time for moves to play out.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="backtesting.stop_loss_pct">Stop Loss %</label><input type="number" name="backtesting.stop_loss_pct" min="-50" max="0" value="-10"></div></div>
+                <div class="config-desc">Close when unrealized loss reaches this percentage. Tighter stops cut losses sooner; looser allows more drawdown.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="backtesting.take_profit_pct">Take Profit %</label><input type="number" name="backtesting.take_profit_pct" min="0" max="200" value="20"></div></div>
+                <div class="config-desc">Close when unrealized gain reaches this percentage. Higher = let winners run; lower = lock in profits sooner.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="backtesting.min_conviction">Min Conviction</label><input type="number" name="backtesting.min_conviction" min="0" max="100" value="40"></div></div>
+                <div class="config-desc">Only signals with conviction at or above this value are included in the backtest. Higher = fewer, stronger signals; lower = more signals, including weaker ones.</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tab-thresholds" class="tab-pane">
+        <div class="config-section">
+            <h3>Velocity Spike</h3>
+            <p class="config-section-intro">Velocity spike signals fire when social or news mention volume jumps sharply. These thresholds control how big the jump must be and how strong the composite score must be for a signal to count.</p>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="thresholds.velocity_spike.mention_vel_24h_min">Mention Velocity 24h Min (%)</label><input type="number" name="thresholds.velocity_spike.mention_vel_24h_min" min="0" max="1000" value="100"></div></div>
+                <div class="config-desc">Minimum percentage increase in mention volume over 24 hours to qualify as a velocity spike. Higher = fewer, stronger spikes; lower = more sensitive, more signals.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="thresholds.velocity_spike.composite_score_min">Composite Score Min</label><input type="number" name="thresholds.velocity_spike.composite_score_min" min="0" max="100" value="50"></div></div>
+                <div class="config-desc">Minimum composite score (combining velocity, sentiment, and other factors) for a velocity-spike signal. Higher = only the strongest spikes become signals.</div>
+            </div>
+        </div>
+        <div class="config-section">
+            <h3>Insider Cluster</h3>
+            <p class="config-section-intro">Insider-cluster signals fire when multiple insiders trade the same ticker within a lookback window. These settings define what counts as a cluster and how large the activity must be.</p>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="thresholds.insider_cluster.min_insiders">Min Insiders</label><input type="number" name="thresholds.insider_cluster.min_insiders" min="1" max="10" value="2"></div></div>
+                <div class="config-desc">Minimum number of distinct insiders who must trade the ticker to form a cluster. Higher = fewer but stronger cluster signals.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="thresholds.insider_cluster.lookback_days">Lookback Days</label><input type="number" name="thresholds.insider_cluster.lookback_days" min="1" max="90" value="14"></div></div>
+                <div class="config-desc">Number of days to look back for insider trades. Trades within this window are grouped to detect clusters; longer = more trades considered, potentially more clusters.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="thresholds.insider_cluster.min_value_total">Min Value Total ($)</label><input type="number" name="thresholds.insider_cluster.min_value_total" min="1000" value="50000"></div></div>
+                <div class="config-desc">Total dollar value of insider activity (buys) in the cluster must meet or exceed this. Higher = only larger, more significant clusters trigger signals.</div>
+            </div>
+        </div>
+        <div class="config-section">
+            <h3>Reporting</h3>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="thresholds.minimum_conviction">Minimum Conviction to Report</label><input type="number" name="thresholds.minimum_conviction" min="0" max="100" value="40"></div></div>
+                <div class="config-desc">Only signals with conviction at or above this value appear in reports, the dashboard, and are eligible for paper trading and backtest. Higher = fewer, higher-quality signals shown; lower = more signals including weaker ones.</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tab-email" class="tab-pane">
+        <div class="config-section">
+            <h3>Email</h3>
+            <p class="config-section-intro">After each pipeline run, a summary report can be sent by email. Configure your SMTP server and recipients here; the report includes top signals and optional charts.</p>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label><input type="checkbox" name="email.enabled" id="email.enabled"> Enable Email Reports</label></div></div>
+                <div class="config-desc">When on, the pipeline sends an email report at the end of each run. Off = no email is sent; dashboard and reports are still generated locally.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="email.smtp_server">SMTP Server</label><input type="text" name="email.smtp_server" id="email.smtp_server" placeholder="smtp.gmail.com"></div></div>
+                <div class="config-desc">Your mail server hostname (e.g. smtp.gmail.com for Gmail). Must support SMTP; use the server your provider documents for sending.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="email.smtp_port">SMTP Port</label><input type="number" name="email.smtp_port" min="1" max="65535" value="587"></div></div>
+                <div class="config-desc">Port for SMTP (587 common for STARTTLS; 465 for SSL). Must match your provider; wrong port will cause send failures.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="email.sender">Sender Email</label><input type="text" name="email.sender" id="email.sender" placeholder="your@email.com"></div></div>
+                <div class="config-desc">From address for the report email. Usually the same account you use to authenticate (e.g. your Gmail address).</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="email.password">Password (App Password)</label><input type="password" name="email.password" id="email.password" placeholder="" autocomplete="current-password"></div></div>
+                <div class="config-desc">SMTP password. For Gmail, use an App Password, not your normal login password. Stored in config; keep the file secure.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="email.recipients">Recipients (comma-separated)</label><input type="text" name="email.recipients" id="email.recipients" placeholder="a@x.com, b@y.com"></div></div>
+                <div class="config-desc">Who receives the report. Enter one or more addresses separated by commas; all receive the same email.</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tab-report" class="tab-pane">
+        <div class="config-section">
+            <h3>Report</h3>
+            <p class="config-section-intro">These options control what appears in the HTML dashboard and in email reports: how many signals to show, whether to include charts, and the size of the velocity watchlist.</p>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="report.max_signals">Max Signals</label><input type="number" name="report.max_signals" min="1" max="50" value="10"></div></div>
+                <div class="config-desc">Maximum number of top signals to include in the report and dashboard. Higher = more signals shown; lower = only the best few.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label><input type="checkbox" name="report.include_charts" id="report.include_charts"> Include Charts</label></div></div>
+                <div class="config-desc">When on, the report includes price/sentiment charts for reported signals. Off = text and tables only; faster to generate and smaller emails.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label><input type="checkbox" name="report.include_watchlist" id="report.include_watchlist"> Include Watchlist</label></div></div>
+                <div class="config-desc">When on, the report includes a watchlist of tickers ranked by velocity/activity (up to watchlist size). Off = only the top signals section.</div>
+            </div>
+            <div class="config-row-pair">
+                <div class="config-controls"><div class="config-row"><label for="report.watchlist_size">Watchlist Size</label><input type="number" name="report.watchlist_size" min="5" max="100" value="20"></div></div>
+                <div class="config-desc">Number of tickers to show in the velocity watchlist when include watchlist is on. Larger = more tickers; smaller = focus on the top movers.</div>
+            </div>
+        </div>
+    </div>
+
+    <div style="margin-top: 1rem;">
+        <button type="submit" style="padding: 0.6rem 1.2rem; background: var(--accent); color: var(--bg-dark); border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">Save Configuration</button>
+        <span id="status" style="margin-left: 1rem; color: var(--text-dim);"></span>
+    </div>
+</form>
+
+<details style="margin-top: 2rem;">
+    <summary style="cursor: pointer; color: var(--text-dim);">Advanced: Raw YAML</summary>
+    <div class="config-section" style="margin-top: 0.5rem;">
+        <textarea id="rawYaml" rows="12" style="width: 100%; font-family: monospace; font-size: 0.9rem; padding: 0.5rem; background: var(--bg-light); color: var(--text); border: 1px solid var(--border); border-radius: 4px;"></textarea>
+        <div style="margin-top: 0.5rem;">
+            <button type="button" id="loadRaw">Load from file</button>
+            <button type="button" id="saveRaw">Save raw YAML</button>
+            <span id="rawStatus" style="margin-left: 1rem; color: var(--text-dim);"></span>
+        </div>
+    </div>
+</details>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function() {
+    const tabs = document.getElementById('configTabs');
+    const panes = document.querySelectorAll('.tab-pane');
+    tabs.querySelectorAll('a').forEach(a => {
+        a.addEventListener('click', (e) => {
+            e.preventDefault();
+            const t = a.getAttribute('data-tab');
+            tabs.querySelectorAll('a').forEach(x => x.classList.remove('active'));
+            a.classList.add('active');
+            panes.forEach(p => {
+                p.classList.toggle('active', p.id === 'tab-' + t);
+            });
+        });
+    });
+    const first = tabs.querySelector('a[data-tab="api"]');
+    if (first) { first.classList.add('active'); document.getElementById('tab-api').classList.add('active'); }
+})();
+
+document.getElementById('loadRaw').addEventListener('click', () => {
+    fetch('/api/config/raw').then(r => r.text()).then(t => { document.getElementById('rawYaml').value = t; document.getElementById('rawStatus').textContent = 'Loaded.'; }).catch(() => { document.getElementById('rawStatus').textContent = 'Load failed'; });
+});
+document.getElementById('saveRaw').addEventListener('click', async () => {
+    const raw = document.getElementById('rawYaml').value;
+    const status = document.getElementById('rawStatus');
+    status.textContent = 'Saving...';
+    try {
+        const res = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ raw }) });
+        const data = await res.json();
+        status.textContent = data.ok ? 'Saved.' : 'Error';
+    } catch (e) { status.textContent = 'Error: ' + e.message; }
+});
+
+function setNested(obj, path, value) {
+    const parts = path.split('.');
+    let o = obj;
+    for (let i = 0; i < parts.length - 1; i++) {
+        const k = parts[i];
+        if (!(k in o) || typeof o[k] !== 'object') o[k] = {};
+        o = o[k];
+    }
+    let v = value;
+    if (value === 'true') v = true;
+    if (value === 'false') v = false;
+    if (typeof value === 'string' && /^-?\d+$/.test(value)) v = parseInt(value, 10);
+    if (typeof value === 'string' && /^-?\d+\.?\d*$/.test(value) && value.includes('.')) v = parseFloat(value);
+    o[parts[parts.length - 1]] = v;
+}
+
+function getNested(obj, path) {
+    const parts = path.split('.');
+    let o = obj;
+    for (const k of parts) {
+        if (o == null || typeof o !== 'object') return undefined;
+        o = o[k];
+    }
+    return o;
+}
+
+fetch('/api/config')
+    .then(r => r.json())
+    .then(config => {
+        document.querySelectorAll('#configForm input').forEach(inp => {
+            const name = inp.getAttribute('name');
+            if (!name) return;
+            const v = getNested(config, name);
+            if (v === undefined) return;
+            if (inp.type === 'checkbox') inp.checked = !!v;
+            else if (inp.type === 'password') inp.value = typeof v === 'string' ? v : '';
+            else if (inp.type === 'number') inp.value = Number(v);
+            else inp.value = Array.isArray(v) ? v.join(', ') : (v == null ? '' : String(v));
+        });
+        var finn = getNested(config, 'api_keys.finnhub');
+        if (!finn || String(finn).trim() === '') {
+            var getApiEl = document.getElementById('get-api-finnhub');
+            if (getApiEl) {
+                getApiEl.classList.add('get-api-flash');
+                getApiEl.addEventListener('click', function once() {
+                    getApiEl.classList.remove('get-api-flash');
+                    getApiEl.removeEventListener('click', once);
+                });
+            }
+        }
+    })
+    .catch(() => {});
+
+document.getElementById('configForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const status = document.getElementById('status');
+    status.textContent = 'Saving...';
+    const payload = {};
+    document.querySelectorAll('#configForm input').forEach(inp => {
+        const name = inp.getAttribute('name');
+        if (!name) return;
+        let val;
+        if (inp.type === 'checkbox') val = inp.checked;
+        else if (name === 'email.recipients') val = inp.value.split(',').map(s => s.trim()).filter(Boolean);
+        else val = inp.value;
+        setNested(payload, name, val);
+    });
+    try {
+        const res = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        status.textContent = data.ok ? 'Saved.' : 'Error saving';
+    } catch (err) {
+        status.textContent = 'Error: ' + err.message;
+    }
+});
+</script>
+{% endblock %}

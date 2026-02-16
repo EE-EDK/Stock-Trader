@@ -90,8 +90,12 @@ def load_config(config_path: str = "config/config.yaml") -> dict:
     try:
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
+        if not isinstance(config, dict):
+            logger.warning(f"Config file did not parse as a dictionary (got {type(config).__name__}). Using minimal default.")
+            config = {"database": {"path": "data/sentiment.db"}}
+        else:
             logger.info(f"Configuration loaded from {config_path}")
-            return config
+        return config
     except FileNotFoundError:
         logger.error(f"Configuration file not found: {config_path}")
         logger.info("Please copy config/config.example.yaml to config/config.yaml and fill in your settings")
@@ -99,6 +103,22 @@ def load_config(config_path: str = "config/config.yaml") -> dict:
     except yaml.YAMLError as e:
         logger.error(f"Error parsing config file: {e}")
         raise
+
+
+def get_db_path(config: dict) -> str:
+    """
+    @brief Return database path from config, whether database is a dict or a string.
+    @param config Configuration dictionary (or None/other if misloaded)
+    @return Database file path
+    """
+    if config is None or not isinstance(config, dict):
+        return 'data/sentiment.db'
+    db = config.get('database')
+    if db is None:
+        return 'data/sentiment.db'
+    if isinstance(db, dict):
+        return db.get('path', 'data/sentiment.db')
+    return str(db)
 
 
 # Parallel collection helper functions
@@ -212,7 +232,7 @@ def run_pipeline(config: dict, skip_email: bool = False):
     logger.info("=" * 60)
 
     # Initialize database
-    db_path = config['database']['path']
+    db_path = get_db_path(config)
     db = Database(db_path)
     db.initialize()
     logger.info(f"Database initialized at {db_path}")
@@ -649,7 +669,7 @@ def main():
         # Initialize database only
         if args.init_db:
             logger.info("Initializing database...")
-            db = Database(config['database']['path'])
+            db = Database(get_db_path(config))
             db.initialize()
             db.close()
             logger.info("Database initialized successfully")
