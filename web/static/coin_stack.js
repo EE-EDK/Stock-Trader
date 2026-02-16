@@ -6,17 +6,18 @@
 (function() {
     'use strict';
 
-    const LANDING_X = 7.5;           // World X where coins land (right of view, ~25px from right in layout)
-    const BOUNCE_START_X = -9;
-    const COIN_RADIUS = 0.4;
-    const COIN_HEIGHT = 0.12;
+    const LANDING_X = 9;            // Stack near gear (right side, per purple lines)
+    const BOUNCE_START_X = -9.5;    // Left side – coin appears "from nowhere" here
+    const COIN_RADIUS = 0.88;       // ~size of "S" in Settings (purple circle reference)
+    const COIN_HEIGHT = 0.18;
+    const BOUNCE_HORIZONTAL_SPEED = 5.5;
+    const NUM_BOUNCES = 6;          // Zig-zag: top-to-bottom-to-top bounces across screen
+    const TOP_Y = 4.2;              // Top of nav strip (bounce ceiling)
+    const BOTTOM_Y = -4.2;          // Bottom of nav strip (bounce floor)
     const GRAVITY = 28;
-    const BOUNCE_HORIZONTAL_SPEED = 4.2;
-    const BOUNCE_FLIGHT_TIME = (LANDING_X - BOUNCE_START_X) / BOUNCE_HORIZONTAL_SPEED;
-    const BOUNCE_PEAK = 1.2;
-    const BOUNCE_G = (2 * BOUNCE_PEAK) / Math.pow(BOUNCE_FLIGHT_TIME / 2, 2);
+    const FALL_SPEED = (28 * 0.5) / 3;  // Fall 3x slower than before
     const FALL_OVER_ANGULAR = 2.5;
-    const WORLD_BOUNDS = { x: 12, y: 15, yFloor: -8 };
+    const WORLD_BOUNDS = { yFloor: -8 };
 
     let scene, camera, renderer, clock;
     let coinGroup, coins = [], stackBaseY = 0;
@@ -39,14 +40,14 @@
         // Lighting rig for shiny metal: key + fill + rim so the coin catches light as it rolls
         const hemi = new THREE.HemisphereLight(0xfff5e0, 0x2a2520, 0.4);
         scene.add(hemi);
-        const keyLight = new THREE.DirectionalLight(0xfff4e0, 1.4);
+        const keyLight = new THREE.DirectionalLight(0xfff8e0, 2.0);
         keyLight.position.set(6, 10, 8);
         keyLight.castShadow = false;
         scene.add(keyLight);
-        const fillLight = new THREE.DirectionalLight(0xffe4b5, 0.5);
+        const fillLight = new THREE.DirectionalLight(0xffe8b0, 0.8);
         fillLight.position.set(-4, 2, 5);
         scene.add(fillLight);
-        const rimLight = new THREE.DirectionalLight(0xffd700, 0.6);
+        const rimLight = new THREE.DirectionalLight(0xffd700, 1.0);
         rimLight.position.set(-3, 4, -6);
         scene.add(rimLight);
 
@@ -74,9 +75,9 @@
         canvas.width = size;
         canvas.height = size;
         const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#1a1d23';
+        ctx.fillStyle = '#2a2d35';
         ctx.fillRect(0, 0, size, size);
-        ctx.fillStyle = '#d4af37';
+        ctx.fillStyle = '#e8b828';
         ctx.font = 'bold 72px system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -90,16 +91,16 @@
         const root = new THREE.Group();
 
         const goldMat = new THREE.MeshStandardMaterial({
-            color: 0xd4af37,
+            color: 0xe8b828,
             metalness: 0.96,
-            roughness: 0.12,
+            roughness: 0.1,
             envMapIntensity: 1
         });
 
         const edgeMat = new THREE.MeshStandardMaterial({
-            color: 0xb8960e,
+            color: 0xd4a810,
             metalness: 0.95,
-            roughness: 0.15
+            roughness: 0.12
         });
 
         const cyl = new THREE.CylinderGeometry(COIN_RADIUS, COIN_RADIUS, COIN_HEIGHT, 32);
@@ -109,9 +110,9 @@
 
         const faceGeo = new THREE.CircleGeometry(COIN_RADIUS * 0.98, 32);
         const faceMat = new THREE.MeshStandardMaterial({
-            color: 0xd4af37,
+            color: 0xe8b828,
             metalness: 0.94,
-            roughness: 0.14,
+            roughness: 0.1,
             map: createDollarTexture()
         });
         const face = new THREE.Mesh(faceGeo, faceMat);
@@ -127,12 +128,18 @@
         return root;
     }
 
+    function zigzagY(t) {
+        if (t >= 1) return stackBaseY + COIN_HEIGHT / 2;
+        const seg = Math.floor(t * NUM_BOUNCES);
+        const s = (t * NUM_BOUNCES) % 1;
+        if (seg % 2 === 0) return TOP_Y + s * (BOTTOM_Y - TOP_Y);
+        return BOTTOM_Y + s * (TOP_Y - BOTTOM_Y);
+    }
+
     function spawnBouncingCoin() {
         const mesh = createCoinMesh();
-        const startY = stackBaseY + COIN_HEIGHT / 2;
-        mesh.position.set(BOUNCE_START_X, startY, 0);
-        const vy0 = BOUNCE_G * (BOUNCE_FLIGHT_TIME / 2);
-        mesh.userData.vel = new THREE.Vector3(BOUNCE_HORIZONTAL_SPEED, vy0, 0);
+        mesh.position.set(BOUNCE_START_X, TOP_Y, 0);
+        mesh.userData.vel = new THREE.Vector3(BOUNCE_HORIZONTAL_SPEED, 0, 0);
         mesh.userData.landed = false;
         coinGroup.add(mesh);
         activeCoin = mesh;
@@ -141,19 +148,19 @@
 
     function updateBouncePhysics(mesh, dt) {
         if (mesh.userData.landed) return;
-        const v = mesh.userData.vel;
         const p = mesh.position;
-        v.y -= BOUNCE_G * dt;
-        const dx = v.x * dt;
-        p.x += dx;
-        p.y += v.y * dt;
-        // Roll: rotation proportional to distance traveled (like a wheel)
-        mesh.rotation.y += dx / COIN_RADIUS;
+        const totalDist = LANDING_X - BOUNCE_START_X;
+        p.x += mesh.userData.vel.x * dt;
+        const t = Math.min(1, (p.x - BOUNCE_START_X) / totalDist);
+        p.y = zigzagY(t);
+        mesh.rotation.y += (mesh.userData.vel.x * dt) / COIN_RADIUS;
+        mesh.rotation.x = t * NUM_BOUNCES * Math.PI;
         if (p.x >= LANDING_X) {
             p.x = LANDING_X;
             p.y = stackBaseY + COIN_HEIGHT / 2;
-            v.set(0, 0, 0);
+            mesh.userData.vel.set(0, 0, 0);
             mesh.userData.landed = true;
+            mesh.rotation.x = 0;
         }
     }
 
@@ -190,7 +197,7 @@
                 });
             }
         } else if (state === 'FALL_DOWN') {
-            coinGroup.position.y -= GRAVITY * dt * 0.5;
+            coinGroup.position.y -= FALL_SPEED * dt;
             if (coinGroup.position.y < WORLD_BOUNDS.yFloor) {
                 state = 'RESET';
             }
