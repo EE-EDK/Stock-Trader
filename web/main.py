@@ -28,11 +28,17 @@ templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
 
 def get_config() -> dict:
-    """Load config from config/config.yaml."""
+    """Load config from config/config.yaml. Always returns a dict."""
     if not CONFIG_PATH.exists():
         return {}
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+    except yaml.YAMLError:
+        return {}
+    if not isinstance(config, dict):
+        return {"database": {"path": "data/sentiment.db"}}
+    return config
 
 
 def _deep_merge(base: dict, overlay: dict) -> dict:
