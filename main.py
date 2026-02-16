@@ -90,8 +90,12 @@ def load_config(config_path: str = "config/config.yaml") -> dict:
     try:
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
+        if not isinstance(config, dict):
+            logger.warning(f"Config file did not parse as a dictionary (got {type(config).__name__}). Using minimal default.")
+            config = {"database": {"path": "data/sentiment.db"}}
+        else:
             logger.info(f"Configuration loaded from {config_path}")
-            return config
+        return config
     except FileNotFoundError:
         logger.error(f"Configuration file not found: {config_path}")
         logger.info("Please copy config/config.example.yaml to config/config.yaml and fill in your settings")
@@ -104,9 +108,11 @@ def load_config(config_path: str = "config/config.yaml") -> dict:
 def get_db_path(config: dict) -> str:
     """
     @brief Return database path from config, whether database is a dict or a string.
-    @param config Configuration dictionary
+    @param config Configuration dictionary (or None/other if misloaded)
     @return Database file path
     """
+    if config is None or not isinstance(config, dict):
+        return 'data/sentiment.db'
     db = config.get('database')
     if db is None:
         return 'data/sentiment.db'
