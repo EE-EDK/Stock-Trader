@@ -40,6 +40,16 @@ def load_config(config_path: str = "config/config.yaml") -> dict:
         sys.exit(1)
 
 
+def get_db_path(config: dict) -> str:
+    """Return database path whether config['database'] is a dict or a string."""
+    db = config.get('database')
+    if db is None:
+        return 'data/sentiment.db'
+    if isinstance(db, dict):
+        return db.get('path', 'data/sentiment.db')
+    return str(db)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Backtest trading signals against historical data',
@@ -110,7 +120,7 @@ Examples:
         start_date = end_date - timedelta(days=args.days)
 
     # Get database path
-    db_path = args.db or config['database']['path']
+    db_path = args.db or get_db_path(config)
 
     print("=" * 70)
     print("STOCK TRADING SIGNALS - BACKTEST")
