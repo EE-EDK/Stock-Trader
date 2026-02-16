@@ -21,6 +21,11 @@
 .config-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
 .api-key-link { font-size: 0.85rem; color: var(--accent); margin-left: 0.5rem; }
 .api-key-link:hover { text-decoration: underline; }
+.get-api-flash { animation: get-api-flash 1s ease-in-out infinite; }
+@keyframes get-api-flash {
+    0%, 100% { color: var(--accent); }
+    50% { color: #f0c000; }
+}
 {% endblock %}
 {% block content %}
 <h1 style="margin-bottom: 1rem;">Settings</h1>
@@ -44,7 +49,7 @@
                     <div class="config-row">
                         <label for="api_keys.finnhub">Finnhub (REQUIRED)</label>
                         <input type="text" id="api_keys.finnhub" name="api_keys.finnhub" placeholder="Your API key">
-                        <a class="api-key-link" href="https://finnhub.io/register" target="_blank" rel="noopener">Get API key</a>
+                        <a id="get-api-finnhub" class="api-key-link" href="https://finnhub.io/register" target="_blank" rel="noopener">Get API key</a>
                     </div>
                 </div>
                 <div class="config-desc">Powers social and news sentiment and core ticker data. The pipeline will not start without a valid Finnhub key.</div>
@@ -430,6 +435,17 @@ fetch('/api/config')
             else if (inp.type === 'number') inp.value = Number(v);
             else inp.value = Array.isArray(v) ? v.join(', ') : (v == null ? '' : String(v));
         });
+        var finn = getNested(config, 'api_keys.finnhub');
+        if (!finn || String(finn).trim() === '') {
+            var getApiEl = document.getElementById('get-api-finnhub');
+            if (getApiEl) {
+                getApiEl.classList.add('get-api-flash');
+                getApiEl.addEventListener('click', function once() {
+                    getApiEl.classList.remove('get-api-flash');
+                    getApiEl.removeEventListener('click', once);
+                });
+            }
+        }
     })
     .catch(() => {});
 
