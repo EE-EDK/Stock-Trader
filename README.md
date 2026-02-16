@@ -7,7 +7,7 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![FREE APIs](https://img.shields.io/badge/APIs-100%25%20FREE-brightgreen.svg)](https://github.com)
-[![Tests](https://img.shields.io/badge/tests-122%20passing-success.svg)](https://github.com)
+[![Tests](https://img.shields.io/badge/tests-passing-success.svg)](https://github.com)
 
 ---
 
@@ -16,7 +16,7 @@
 ### Pipeline Overview
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': { 'fontSize':'16px', 'fontFamily':'arial'}}}%%
+%%{init: {'theme':'base', 'themeVariables': { 'fontSize':'16px', 'fontFamily':'arial', 'lineColor':'#3fb950'}}}%%
 graph TB
     subgraph "1️⃣ DATA COLLECTION (Parallel Execution)"
         A1["<b>ApeWisdom</b><br/>Top 100 Tickers<br/>FREE"]
@@ -90,6 +90,8 @@ graph TB
     style E1 fill:#A3E4D7,stroke:#16A085,stroke-width:3px,color:#000
     style E2 fill:#58D68D,stroke:#229954,stroke-width:4px,color:#000
     style E3 fill:#A3E4D7,stroke:#16A085,stroke-width:3px,color:#000
+
+    linkStyle 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23 stroke:#3fb950,stroke-width:3px
 ```
 
 ### Database Schema
@@ -181,17 +183,20 @@ erDiagram
 ```mermaid
 graph LR
     A[Stock Trader] --> B[Command Line<br/>python main.py]
-    A --> C[GUI Mode<br/>python gui.py]
-    A --> D[Automated Cron<br/>0 9 * * *]
+    A --> C[Web App<br/>uvicorn web.main:app]
+    A --> D[GUI Mode · Optional<br/>python gui.py PyQt5]
+    A --> E[Automated Cron<br/>0 9 * * *]
 
-    B --> E[Terminal Output<br/>+ HTML Dashboard]
-    C --> F[Visual Config<br/>+ Live Console]
-    D --> G[Scheduled Runs<br/>+ Logs]
+    B --> F[Terminal Output<br/>+ HTML Dashboard]
+    C --> G[Dashboard · Run · Settings<br/>+ Live Log · Backtest · Utilities]
+    D --> H[Visual Config<br/>+ Live Console]
+    E --> I[Scheduled Runs<br/>+ Logs]
 
     style A fill:#4a90e2,color:#fff
     style B fill:#e1f5ff
     style C fill:#e1f5ff
     style D fill:#e1f5ff
+    style E fill:#e1f5ff
 ```
 
 ---
@@ -215,6 +220,10 @@ python main.py
 
 # 5. View results
 firefox reports/dashboard_*.html
+
+# Or run the web app (dashboard, run pipeline, settings, backtest, utilities)
+uvicorn web.main:app --host 0.0.0.0 --port 5000
+# Then open http://localhost:5000
 ```
 
 ---
@@ -223,10 +232,10 @@ firefox reports/dashboard_*.html
 
 ### 8 FREE Data Sources
 
-| Source | Data | API Calls/Day | Cost | Setup Time |
-|--------|------|---------------|------|------------|
-| **Finnhub** | Stock prices | 200+ | FREE | 2 min |
-| **Alpha Vantage** | News sentiment | 100 | FREE | 2 min |
+| Source | Data | API / Rate | Cost | Setup Time |
+|--------|------|------------|------|------------|
+| **Finnhub** | Stock prices, quotes | 60/min | FREE | 2 min |
+| **Alpha Vantage** | News sentiment | 100/day | FREE | 2 min |
 | **Yahoo Finance** | Fundamentals, ratios | Unlimited | FREE | 0 min |
 | **VADER** | Local sentiment | Unlimited | FREE | 0 min |
 | **OpenInsider** | Insider trades | Unlimited | FREE | 0 min |
@@ -234,7 +243,7 @@ firefox reports/dashboard_*.html
 | **FRED** | Macro indicators (VIX, rates) | 120/min | FREE | 2 min |
 | **Technical** | RSI, MACD, Bollinger | Unlimited | FREE | 0 min |
 
-**Total: $0/month forever**
+**Total: $0/month forever.** All eight sources are wired in the pipeline (`main.py`): ApeWisdom & OpenInsider (parallel), then Finnhub for prices, YFinance/VADER/Alpha Vantage/FRED in parallel, and Technical on DB price history.
 
 ### 8 Signal Types
 
@@ -280,6 +289,7 @@ firefox reports/dashboard_*.html
 - ✅ **Paper trading** - Mock purchases to validate signals before risking capital
 - ✅ **Backtesting** - Validate strategy against historical data with comprehensive metrics
 - ✅ **Macro indicators** - FRED economic data integration (VIX, rates, unemployment, etc.)
+- ✅ **Web app** - FastAPI dashboard, run pipeline (live log), settings (config/config.yaml), backtest, utilities (gear icon)
 - ✅ **100% FREE** - Zero recurring costs
 - ✅ **Local database** - Your data stays on your machine
 - ✅ **Automated** - Set and forget with cron
@@ -292,10 +302,15 @@ firefox reports/dashboard_*.html
 ```
 Stock-Trader/
 ├── main.py                          # Main pipeline orchestrator
-├── gui.py                           # Graphical user interface
+├── gui.py                           # Optional PyQt5 GUI
+├── web/                             # FastAPI web app (dashboard, run, settings, backtest, utilities)
+│   ├── main.py                      # App entry
+│   └── templates/                   # HTML templates
 ├── config/
 │   ├── config.yaml                  # Your configuration
-│   └── config.example.yaml          # Template
+│   ├── config.example.yaml          # Template
+│   ├── backtest_strict.yaml         # Stricter backtest (min_conv 50, -7% stop)
+│   └── backtest_loose.yaml          # Looser backtest (min_conv 35)
 ├── src/
 │   ├── collectors/                  # Data collectors
 │   │   ├── alphavantage.py         # Alpha Vantage sentiment
@@ -691,7 +706,14 @@ Command-line tool for running backtests on historical signals. See [Backtesting 
 
 **Usage:**
 ```bash
+# Default config (from config.yaml)
 python utils/backtest.py --days 90
+
+# Stricter params (min_conv 50, stop -7%%, position $750)
+python utils/backtest.py --days 240 --config config/backtest_strict.yaml
+
+# Looser params (min_conv 35, more signals)
+python utils/backtest.py --days 240 --config config/backtest_loose.yaml
 ```
 
 ### Runtime Validation
@@ -745,7 +767,9 @@ The 154 warnings found by the type checker are mostly intentional `.get()` usage
 | Finnhub Collector | 5 | 76% | ✅ All passing |
 | OpenInsider Collector | 5 | 74% | ✅ All passing |
 | Velocity Calculator | 4 | 92% | ✅ All passing |
-| **Total** | **238** | **50%** | **✅ 238 passing** |
+| **Total** | **238+** | **~50%** | **✅ passing** |
+
+*Test and coverage numbers can be updated after running the full suite.*
 
 ### Run Tests
 
@@ -987,16 +1011,13 @@ MIT License - See LICENSE file for details
 - [x] **Backtesting module** - ✅ Complete (v1.2.0)
 - [x] **Enhanced dashboard** - ✅ Complete (v1.2.0)
 
-### Phase 3 - 🚧 IN PROGRESS
-- [ ] Options flow data (Unusual Whales/Cheddar Flow) - Requires paid subscription
-- [ ] Web dashboard (Flask/FastAPI)
-- [ ] Discord/Telegram bot for notifications
+### Phase 3 - 🚧 UNDER CONSIDERATION
+- [ ] Web dashboard (Flask/FastAPI) – browser-based view of reports/signals; can coexist with the PyQt5 GUI (GUI for config & pipeline, web for viewing) or later replace static HTML with a served app.
 
 ### Phase 4 (Long-term)
 - [ ] Machine learning for signal optimization
 - [ ] Multi-timeframe analysis
 - [ ] Correlation with market regime
-- [ ] Real broker API integration
 
 ---
 
