@@ -1,0 +1,18 @@
+# Backtest variant: stricter (min_conv 50, stop -7%, position $750)
+# Used for: python utils/backtest.py --days 240 --config config/backtest_strict.yaml
+
+database:
+  path: "data/sentiment.db"
+
+backtesting:
+  initial_capital: 10000
+  position_size: 750
+  max_positions: 10
+  conviction_weighted: true
+  hold_days: 30
+  stop_loss_pct: -7
+  take_profit_pct: 20
+  min_conviction: 50
+
+thresholds:
+  minimum_conviction: 40
