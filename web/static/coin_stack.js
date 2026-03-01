@@ -6,26 +6,31 @@
 (function() {
     'use strict';
 
-    const LANDING_X = 9;            // Stack near gear (right side, per purple lines)
-    const BOUNCE_START_X = -9.5;    // Left side – coin appears "from nowhere" here
-    const COIN_RADIUS = 0.88;       // ~size of "S" in Settings (purple circle reference)
-    const COIN_HEIGHT = 0.18;
-    const BOUNCE_HORIZONTAL_SPEED = 5.5;
-    const NUM_BOUNCES = 6;          // Zig-zag: top-to-bottom-to-top bounces across screen
-    const TOP_Y = 4.2;              // Top of nav strip (bounce ceiling)
-    const BOTTOM_Y = -4.2;          // Bottom of nav strip (bounce floor)
-    const GRAVITY = 28;
-    const FALL_SPEED = (28 * 0.5) / 3;  // Fall 3x slower than before
+    const LANDING_X = 10.4;         // Stack right up to the gear (camera right is 11)
+    const BOUNCE_START_X = -10.4;   // Left edge – coin appears from nowhere; nothing else on left
+    const COIN_RADIUS = 0.88;       // ~size of "S" in Settings
+    const COIN_HEIGHT = 0.5;        // Thick disc so stack shows distinct coins (reference images)
+    const BOUNCE_HORIZONTAL_SPEED = 9.2;  // Fast enough to reach gear in ~2.3s
+    const NUM_BOUNCES = 10;         // Zig-zag all the way across to gear
+    const TOP_Y = 4.2;
+    const BOTTOM_Y = -4.2;
+    const STACK_X_OFFSET = 0.5;     // Imperfect stack: visible left/right wobble per coin
+    const STACK_Z_OFFSET = 0.2;
+    const FALL_SPEED = 5.2;         // Steady downward speed (GIF: consistent gravity-like fall)
+    const FALL_DRIFT = 0.15;       // Slight horizontal drift per coin
+    const FALL_TUMBLE_MIN = 2.5;   // Multi-axis tumble like GIF (spin + flip)
+    const FALL_TUMBLE_MAX = 5.5;
     const FALL_OVER_ANGULAR = 2.5;
-    const WORLD_BOUNDS = { yFloor: -8 };
+    const WORLD_BOUNDS = { yFloor: -100 };  // Fall to bottom of page before reset
 
     let scene, camera, renderer, clock;
-    let coinGroup, coins = [], stackBaseY = 0;
+    let stackGroup, bouncerGroup;    // stack = landed right side only; bouncer = single coin from nowhere
+    let coins = [], stackBaseY = 0;
+    let fallingCoins = [];           // Coins released and tumbling down (GIF-style)
     let state = 'BOUNCE';
     let activeCoin = null;
     let stackCount = 0;
     let fallOverAngle = 0;
-    let fallOverDuration = 0.8;
 
     function initWorldAnchor(container) {
         scene = new THREE.Scene();
@@ -33,7 +38,7 @@
 
         const w = container.clientWidth || 280;
         const h = 56;
-        camera = new THREE.OrthographicCamera(-10, 10, 6, -6, 0.1, 100);
+        camera = new THREE.OrthographicCamera(-12, 12, 6, -6, 0.1, 100);
         camera.position.set(0, 0, 15);
         camera.lookAt(0, 0, 0);
 
@@ -65,8 +70,10 @@
         renderer.domElement.style.height = '100%';
 
         clock = new THREE.Clock();
-        coinGroup = new THREE.Group();
-        scene.add(coinGroup);
+        stackGroup = new THREE.Group();
+        bouncerGroup = new THREE.Group();
+        scene.add(stackGroup);
+        scene.add(bouncerGroup);
     }
 
     function createDollarTexture() {
@@ -98,17 +105,27 @@
         });
 
         const edgeMat = new THREE.MeshStandardMaterial({
-            color: 0xd4a810,
-            metalness: 0.95,
-            roughness: 0.12
+            color: 0x8b6914,
+            metalness: 0.9,
+            roughness: 0.18
         });
 
         const cyl = new THREE.CylinderGeometry(COIN_RADIUS, COIN_RADIUS, COIN_HEIGHT, 32);
-        const cylMesh = new THREE.Mesh(cyl, goldMat);
+        const cylMesh = new THREE.Mesh(cyl, edgeMat);
         cylMesh.rotation.x = Math.PI / 2;
         root.add(cylMesh);
 
-        const faceGeo = new THREE.CircleGeometry(COIN_RADIUS * 0.98, 32);
+        const rimTorus = new THREE.TorusGeometry(COIN_RADIUS - 0.02, 0.045, 8, 32);
+        const rimFront = new THREE.Mesh(rimTorus, edgeMat);
+        rimFront.rotation.x = Math.PI / 2;
+        rimFront.position.z = COIN_HEIGHT / 2;
+        root.add(rimFront);
+        const rimBack = new THREE.Mesh(rimTorus.clone(), edgeMat);
+        rimBack.rotation.x = Math.PI / 2;
+        rimBack.position.z = -COIN_HEIGHT / 2;
+        root.add(rimBack);
+
+        const faceGeo = new THREE.CircleGeometry(COIN_RADIUS * 0.92, 32);
         const faceMat = new THREE.MeshStandardMaterial({
             color: 0xe8b828,
             metalness: 0.94,
@@ -137,13 +154,41 @@
     }
 
     function spawnBouncingCoin() {
+        while (bouncerGroup.children.length > 0) bouncerGroup.remove(bouncerGroup.children[0]);
         const mesh = createCoinMesh();
         mesh.position.set(BOUNCE_START_X, TOP_Y, 0);
         mesh.userData.vel = new THREE.Vector3(BOUNCE_HORIZONTAL_SPEED, 0, 0);
         mesh.userData.landed = false;
-        coinGroup.add(mesh);
+        bouncerGroup.add(mesh);
         activeCoin = mesh;
         return mesh;
+    }
+
+    function releaseCoinsToFall() {
+        stackGroup.updateMatrixWorld(true);
+        const worldPos = new THREE.Vector3();
+        const kids = stackGroup.children.slice();
+        for (let i = 0; i < kids.length; i++) {
+            const coin = kids[i];
+            coin.getWorldPosition(worldPos);
+            stackGroup.remove(coin);
+            scene.add(coin);
+            coin.position.copy(worldPos);
+            coin.rotation.set(
+                Math.random() * Math.PI * 2,
+                Math.random() * Math.PI * 2,
+                Math.random() * Math.PI * 2
+            );
+            coin.userData.tumbleX = FALL_TUMBLE_MIN + Math.random() * (FALL_TUMBLE_MAX - FALL_TUMBLE_MIN);
+            coin.userData.tumbleY = FALL_TUMBLE_MIN + Math.random() * (FALL_TUMBLE_MAX - FALL_TUMBLE_MIN);
+            coin.userData.tumbleZ = FALL_TUMBLE_MIN + Math.random() * (FALL_TUMBLE_MAX - FALL_TUMBLE_MIN);
+            if (Math.random() < 0.5) coin.userData.tumbleX *= -1;
+            if (Math.random() < 0.5) coin.userData.tumbleY *= -1;
+            if (Math.random() < 0.5) coin.userData.tumbleZ *= -1;
+            coin.userData.driftX = (Math.random() - 0.5) * 2 * FALL_DRIFT;
+            coin.userData.driftZ = (Math.random() - 0.5) * 2 * FALL_DRIFT;
+            fallingCoins.push(coin);
+        }
     }
 
     function updateBouncePhysics(mesh, dt) {
@@ -156,11 +201,18 @@
         mesh.rotation.y += (mesh.userData.vel.x * dt) / COIN_RADIUS;
         mesh.rotation.x = t * NUM_BOUNCES * Math.PI;
         if (p.x >= LANDING_X) {
-            p.x = LANDING_X;
-            p.y = stackBaseY + COIN_HEIGHT / 2;
             mesh.userData.vel.set(0, 0, 0);
             mesh.userData.landed = true;
             mesh.rotation.x = 0;
+            mesh.visible = false;
+            bouncerGroup.remove(mesh);
+            mesh.position.set(
+                LANDING_X + (Math.random() - 0.5) * 2 * STACK_X_OFFSET,
+                stackBaseY + COIN_HEIGHT / 2,
+                (Math.random() - 0.5) * 2 * STACK_Z_OFFSET
+            );
+            stackGroup.add(mesh);
+            mesh.visible = true;
         }
     }
 
@@ -182,35 +234,46 @@
                     state = 'FALL_OVER';
                     fallOverAngle = 0;
                 } else {
-                    setTimeout(function() { spawnBouncingCoin(); }, 200);
+                    setTimeout(function() { spawnBouncingCoin(); }, 220);
                 }
             }
         } else if (state === 'FALL_OVER') {
             fallOverAngle += FALL_OVER_ANGULAR * dt;
             const tip = Math.min(fallOverAngle, Math.PI / 2);
-            coinGroup.rotation.z = tip;
+            stackGroup.rotation.z = tip;
             if (fallOverAngle >= Math.PI / 2) {
+                stackGroup.rotation.z = Math.PI / 2;
+                releaseCoinsToFall();
                 state = 'FALL_DOWN';
-                coinGroup.rotation.z = Math.PI / 2;
-                coins.forEach(function(m) {
-                    m.userData.vel = new THREE.Vector3(0, 0, 0);
-                });
             }
         } else if (state === 'FALL_DOWN') {
-            coinGroup.position.y -= FALL_SPEED * dt;
-            if (coinGroup.position.y < WORLD_BOUNDS.yFloor) {
-                state = 'RESET';
+            const stillFalling = [];
+            for (let i = 0; i < fallingCoins.length; i++) {
+                const coin = fallingCoins[i];
+                coin.position.y -= FALL_SPEED * dt;
+                coin.position.x += coin.userData.driftX * dt;
+                coin.position.z += coin.userData.driftZ * dt;
+                coin.rotation.x += coin.userData.tumbleX * dt;
+                coin.rotation.y += coin.userData.tumbleY * dt;
+                coin.rotation.z += coin.userData.tumbleZ * dt;
+                if (coin.position.y > WORLD_BOUNDS.yFloor) stillFalling.push(coin);
+                else scene.remove(coin);
             }
+            fallingCoins = stillFalling;
+            if (fallingCoins.length === 0) state = 'RESET';
         } else if (state === 'RESET') {
-            while (coinGroup.children.length) coinGroup.remove(coinGroup.children[0]);
+            while (stackGroup.children.length) stackGroup.remove(stackGroup.children[0]);
+            while (bouncerGroup.children.length) bouncerGroup.remove(bouncerGroup.children[0]);
+            for (let i = 0; i < fallingCoins.length; i++) scene.remove(fallingCoins[i]);
+            fallingCoins = [];
             coins = [];
             stackBaseY = 0;
             stackCount = 0;
             activeCoin = null;
-            coinGroup.rotation.z = 0;
-            coinGroup.position.y = 0;
+            stackGroup.rotation.set(0, 0, 0);
+            stackGroup.position.set(0, 0, 0);
             state = 'BOUNCE';
-            setTimeout(function() { spawnBouncingCoin(); }, 400);
+            setTimeout(function() { spawnBouncingCoin(); }, 350);
         }
 
         renderer.render(scene, camera);
@@ -222,9 +285,8 @@
         const h = 56;
         if (renderer) {
             renderer.setSize(w, h);
-            const half = 10;
-            camera.left = -half;
-            camera.right = half;
+            camera.left = -12;
+            camera.right = 12;
             camera.top = 6;
             camera.bottom = -6;
             camera.updateProjectionMatrix();

@@ -64,6 +64,7 @@ reports/
 outputs/
 *.csv
 *.html
+!web/templates/*.html
 type_check_report.txt
 
 # GUI settings (user-specific)
