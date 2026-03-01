@@ -69,9 +69,10 @@ echo.
 
 :: Start the web server in a new window
 echo Starting web server...
-start "Stock Trader Web" call "%ROOT%_run_server.bat"
+start "Stock Trader Web" cmd /k "cd /d %ROOT% && .venv\Scripts\python.exe -m uvicorn web.main:app --host 0.0.0.0 --port 5000"
 timeout /t 3 /nobreak > nul
 
+:: Open browser
 start http://localhost:5000
 echo.
 echo Browser opened at http://localhost:5000
