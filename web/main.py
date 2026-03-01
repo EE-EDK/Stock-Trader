@@ -15,6 +15,7 @@ from queue import Queue, Empty
 import yaml
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sse_starlette.sse import EventSourceResponse
 
@@ -25,14 +26,21 @@ REPORTS_DIR = PROJECT_ROOT / "reports"
 
 app = FastAPI(title="Stock Trader", version="1.0")
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
 
 def get_config() -> dict:
-    """Load config from config/config.yaml."""
+    """Load config from config/config.yaml. Always returns a dict."""
     if not CONFIG_PATH.exists():
         return {}
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+    except yaml.YAMLError:
+        return {}
+    if not isinstance(config, dict):
+        return {"database": {"path": "data/sentiment.db"}}
+    return config
 
 
 def _deep_merge(base: dict, overlay: dict) -> dict:
@@ -49,6 +57,12 @@ def save_config(updates: dict) -> None:
     """Merge updates into existing config and save to config/config.yaml."""
     config = get_config()
     _deep_merge(config, updates)
+    # Ensure database is always a dict so pipeline does not get string indices error
+    db = config.get("database")
+    if isinstance(db, str):
+        config["database"] = {"path": db}
+    elif db is not None and not isinstance(db, dict):
+        config["database"] = {"path": "data/sentiment.db"}
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
