@@ -9,6 +9,7 @@ import json
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import logging
+import contextlib
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +46,9 @@ class PaperTradingManager:
             with open(schema_path, 'r') as f:
                 schema_sql = f.read()
 
-            conn = sqlite3.connect(self.db_path)
-            conn.executescript(schema_sql)
-            conn.commit()
-            conn.close()
+            with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
+                conn.executescript(schema_sql)
+                conn.commit()
             logger.info("Paper trading tables initialized")
         except Exception as e:
             logger.error(f"Failed to initialize paper trading tables: {e}")
@@ -58,11 +58,6 @@ class PaperTradingManager:
         @brief Calculate position size based on conviction (weighted)
         @param conviction Signal conviction score (0-100)
         @return Dollar amount to invest
-
-        conviction 100 → 2x base ($2000)
-        conviction 80 → 1.6x base ($1600)
-        conviction 60 → 1.2x base ($1200)
-        conviction 50 → 1.0x base ($1000)
         """
         # Clamp conviction to minimum of 0 to avoid negative position sizes
         conviction = max(0, conviction)
@@ -107,20 +102,18 @@ class PaperTradingManager:
         target_price = entry_price * (1 + self.take_profit_pct / 100)
 
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
+            with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO paper_trades
+                    (ticker, entry_date, entry_price, shares, conviction, signal_types,
+                     position_size, stop_loss, target_price, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')
+                """, (ticker, entry_date.isoformat(), entry_price, shares, conviction,
+                      json.dumps(signal_types), actual_position_size, stop_loss, target_price))
 
-            cursor.execute("""
-                INSERT INTO paper_trades
-                (ticker, entry_date, entry_price, shares, conviction, signal_types,
-                 position_size, stop_loss, target_price, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')
-            """, (ticker, entry_date, entry_price, shares, conviction,
-                  json.dumps(signal_types), actual_position_size, stop_loss, target_price))
-
-            trade_id = cursor.lastrowid
-            conn.commit()
-            conn.close()
+                trade_id = cursor.lastrowid
+                conn.commit()
 
             logger.info(f"Created paper trade: {ticker} | {shares} shares @ ${entry_price:.2f} "
                        f"| Position: ${actual_position_size:.2f} (conviction {conviction})")
@@ -136,23 +129,21 @@ class PaperTradingManager:
 
     def _trade_exists(self, ticker: str, entry_date: datetime) -> bool:
         """Check if a trade already exists for this ticker and date"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT id FROM paper_trades
-            WHERE ticker = ? AND entry_date = ?
-        """, (ticker, entry_date))
-        exists = cursor.fetchone() is not None
-        conn.close()
+        with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id FROM paper_trades
+                WHERE ticker = ? AND entry_date = ?
+            """, (ticker, entry_date.isoformat()))
+            exists = cursor.fetchone() is not None
         return exists
 
     def _count_open_positions(self) -> int:
         """Count currently open positions"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM paper_trades WHERE status = 'open'")
-        count = cursor.fetchone()[0]
-        conn.close()
+        with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM paper_trades WHERE status = 'open'")
+            count = cursor.fetchone()[0]
         return count
 
     def update_positions(self, current_prices: Dict[str, float], current_date: datetime):
@@ -164,59 +155,58 @@ class PaperTradingManager:
         if not self.enabled:
             return
 
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
+            cursor = conn.cursor()
 
-        # Get all open positions
-        cursor.execute("""
-            SELECT id, ticker, entry_date, entry_price, shares, stop_loss, target_price
-            FROM paper_trades
-            WHERE status = 'open'
-        """)
-        open_trades = cursor.fetchall()
+            # Get all open positions
+            cursor.execute("""
+                SELECT id, ticker, entry_date, entry_price, shares, stop_loss, target_price
+                FROM paper_trades
+                WHERE status = 'open'
+            """)
+            open_trades = cursor.fetchall()
 
-        for trade in open_trades:
-            trade_id, ticker, entry_date_str, entry_price, shares, stop_loss, target_price = trade
+            for trade in open_trades:
+                trade_id, ticker, entry_date_str, entry_price, shares, stop_loss, target_price = trade
 
-            # Get current price (extract from dict)
-            price_data = current_prices.get(ticker)
-            if not price_data or not isinstance(price_data, dict) or 'price' not in price_data:
-                logger.warning(f"No current price for {ticker}, skipping update")
-                continue
+                # Get current price (extract from dict)
+                price_data = current_prices.get(ticker, {})
+                if not price_data or not isinstance(price_data, dict) or 'price' not in price_data:
+                    logger.warning(f"No current price for {ticker}, skipping update")
+                    continue
 
-            current_price = price_data['price']
+                current_price = price_data['price']
 
-            # Create snapshot
-            unrealized_pnl = (current_price - entry_price) * shares
-            unrealized_pct = ((current_price - entry_price) / entry_price) * 100
+                # Create snapshot
+                unrealized_pnl = (current_price - entry_price) * shares
+                unrealized_pct = ((current_price - entry_price) / entry_price) * 100
 
-            try:
-                cursor.execute("""
-                    INSERT OR REPLACE INTO paper_trade_snapshots
-                    (trade_id, snapshot_date, current_price, unrealized_pnl, unrealized_pct)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (trade_id, current_date, current_price, unrealized_pnl, unrealized_pct))
-            except Exception as e:
-                logger.error(f"Failed to create snapshot for trade {trade_id}: {e}")
+                try:
+                    cursor.execute("""
+                        INSERT OR REPLACE INTO paper_trade_snapshots
+                        (trade_id, snapshot_date, current_price, unrealized_pnl, unrealized_pct)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (trade_id, current_date.isoformat(), current_price, unrealized_pnl, unrealized_pct))
+                except Exception as e:
+                    logger.error(f"Failed to create snapshot for trade {trade_id}: {e}")
 
-            # Check exit conditions
-            entry_date = datetime.fromisoformat(entry_date_str)
-            days_held = (current_date - entry_date).days
+                # Check exit conditions
+                entry_date = datetime.fromisoformat(entry_date_str)
+                days_held = (current_date - entry_date).days
 
-            exit_reason = None
-            if current_price <= stop_loss:
-                exit_reason = 'stop_loss'
-            elif current_price >= target_price:
-                exit_reason = 'take_profit'
-            elif days_held >= self.hold_days:
-                exit_reason = 'time_limit'
+                exit_reason = None
+                if current_price <= stop_loss:
+                    exit_reason = 'stop_loss'
+                elif current_price >= target_price:
+                    exit_reason = 'take_profit'
+                elif days_held >= self.hold_days:
+                    exit_reason = 'time_limit'
 
-            if exit_reason:
-                self._close_position(cursor, trade_id, current_price, current_date,
-                                   exit_reason, entry_price, shares, days_held)
+                if exit_reason:
+                    self._close_position(cursor, trade_id, current_price, current_date,
+                                       exit_reason, entry_price, shares, days_held)
 
-        conn.commit()
-        conn.close()
+            conn.commit()
         logger.info(f"Updated {len(open_trades)} open paper trading positions")
 
     def _close_position(self, cursor, trade_id: int, exit_price: float, exit_date: datetime,
@@ -230,7 +220,7 @@ class PaperTradingManager:
             SET exit_date = ?, exit_price = ?, exit_reason = ?, status = 'closed',
                 profit_loss = ?, return_pct = ?, days_held = ?
             WHERE id = ?
-        """, (exit_date, exit_price, exit_reason, profit_loss, return_pct, days_held, trade_id))
+        """, (exit_date.isoformat() if exit_date else None, exit_price, exit_reason, profit_loss, return_pct, days_held, trade_id))
 
         logger.info(f"Closed paper trade {trade_id}: {exit_reason} | "
                    f"P/L: ${profit_loss:.2f} ({return_pct:+.1f}%) | {days_held} days")
@@ -245,20 +235,19 @@ class PaperTradingManager:
 
         logger.info(f"Backfilling paper trades from signals in last {days} days...")
 
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
+            cursor = conn.cursor()
 
-        # Get signals from last N days with conviction >= threshold
-        cutoff_date = datetime.now() - timedelta(days=days)
-        cursor.execute("""
-            SELECT ticker, conviction_score, triggers, created_at
-            FROM signals
-            WHERE created_at >= ? AND conviction_score >= ?
-            ORDER BY created_at ASC
-        """, (cutoff_date, self.min_conviction))
+            # Get signals from last N days with conviction >= threshold
+            cutoff_date = datetime.now() - timedelta(days=days)
+            cursor.execute("""
+                SELECT ticker, conviction_score, triggers, created_at
+                FROM signals
+                WHERE created_at >= ? AND conviction_score >= ?
+                ORDER BY created_at ASC
+            """, (cutoff_date.isoformat(), self.min_conviction))
 
-        signals = cursor.fetchall()
-        conn.close()
+            signals = cursor.fetchall()
 
         created_count = 0
         skipped_count = 0
@@ -293,19 +282,18 @@ class PaperTradingManager:
 
     def _get_historical_price(self, ticker: str, date: datetime) -> Optional[float]:
         """Get historical price for a ticker on a specific date"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
+            cursor = conn.cursor()
 
-        # Get price closest to the date (within 1 day)
-        cursor.execute("""
-            SELECT price FROM prices
-            WHERE ticker = ? AND collected_at >= ? AND collected_at < ?
-            ORDER BY collected_at ASC
-            LIMIT 1
-        """, (ticker, date, date + timedelta(days=1)))
+            # Get price closest to the date (within 1 day)
+            cursor.execute("""
+                SELECT price FROM prices
+                WHERE ticker = ? AND collected_at >= ? AND collected_at < ?
+                ORDER BY collected_at ASC
+                LIMIT 1
+            """, (ticker, date.isoformat(), (date + timedelta(days=1)).isoformat()))
 
-        result = cursor.fetchone()
-        conn.close()
+            result = cursor.fetchone()
         return result[0] if result else None
 
     def get_performance_summary(self) -> Dict:
@@ -316,45 +304,43 @@ class PaperTradingManager:
         if not self.enabled:
             return {}
 
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
+            cursor = conn.cursor()
 
-        # Closed trades stats
-        cursor.execute("""
-            SELECT
-                COUNT(*) as total_trades,
-                SUM(CASE WHEN profit_loss > 0 THEN 1 ELSE 0 END) as winning_trades,
-                AVG(return_pct) as avg_return_pct,
-                SUM(profit_loss) as total_pnl,
-                AVG(days_held) as avg_days_held,
-                MAX(return_pct) as best_return,
-                MIN(return_pct) as worst_return
-            FROM paper_trades
-            WHERE status = 'closed'
-        """)
-        closed_stats = cursor.fetchone()
+            # Closed trades stats
+            cursor.execute("""
+                SELECT
+                    COUNT(*) as total_trades,
+                    SUM(CASE WHEN profit_loss > 0 THEN 1 ELSE 0 END) as winning_trades,
+                    AVG(return_pct) as avg_return_pct,
+                    SUM(profit_loss) as total_pnl,
+                    AVG(days_held) as avg_days_held,
+                    MAX(return_pct) as best_return,
+                    MIN(return_pct) as worst_return
+                FROM paper_trades
+                WHERE status = 'closed'
+            """)
+            closed_stats = cursor.fetchone()
 
-        # Open positions stats
-        cursor.execute("""
-            SELECT COUNT(*), SUM(position_size)
-            FROM paper_trades
-            WHERE status = 'open'
-        """)
-        open_count, total_deployed = cursor.fetchone()
+            # Open positions stats
+            cursor.execute("""
+                SELECT COUNT(*), SUM(position_size)
+                FROM paper_trades
+                WHERE status = 'open'
+            """)
+            open_count, total_deployed = cursor.fetchone()
 
-        # Get latest unrealized P/L for open positions
-        cursor.execute("""
-            SELECT SUM(s.unrealized_pnl), AVG(s.unrealized_pct)
-            FROM paper_trade_snapshots s
-            INNER JOIN (
-                SELECT trade_id, MAX(snapshot_date) as max_date
-                FROM paper_trade_snapshots
-                GROUP BY trade_id
-            ) latest ON s.trade_id = latest.trade_id AND s.snapshot_date = latest.max_date
-        """)
-        unrealized_pnl, unrealized_pct = cursor.fetchone()
-
-        conn.close()
+            # Get latest unrealized P/L for open positions
+            cursor.execute("""
+                SELECT SUM(s.unrealized_pnl), AVG(s.unrealized_pct)
+                FROM paper_trade_snapshots s
+                INNER JOIN (
+                    SELECT trade_id, MAX(snapshot_date) as max_date
+                    FROM paper_trade_snapshots
+                    GROUP BY trade_id
+                ) latest ON s.trade_id = latest.trade_id AND s.snapshot_date = latest.max_date
+            """)
+            unrealized_pnl, unrealized_pct = cursor.fetchone()
 
         if closed_stats[0] == 0:  # No closed trades yet
             win_rate = 0
@@ -390,21 +376,20 @@ class PaperTradingManager:
         if not self.enabled:
             return []
 
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
+            cursor = conn.cursor()
 
-        cutoff_date = datetime.now() - timedelta(days=days)
-        cursor.execute("""
-            SELECT ticker, entry_price, exit_price, profit_loss, return_pct,
-                   days_held, exit_reason, exit_date
-            FROM paper_trades
-            WHERE status = 'closed' AND exit_date >= ?
-            ORDER BY exit_date DESC
-            LIMIT 10
-        """, (cutoff_date,))
+            cutoff_date = datetime.now() - timedelta(days=days)
+            cursor.execute("""
+                SELECT ticker, entry_price, exit_price, profit_loss, return_pct,
+                       days_held, exit_reason, exit_date
+                FROM paper_trades
+                WHERE status = 'closed' AND exit_date >= ?
+                ORDER BY exit_date DESC
+                LIMIT 10
+            """, (cutoff_date.isoformat(),))
 
-        rows = cursor.fetchall()
-        conn.close()
+            rows = cursor.fetchall()
 
         return [{
             'ticker': row[0],
@@ -422,31 +407,30 @@ class PaperTradingManager:
         if not self.enabled:
             return []
 
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
+            cursor = conn.cursor()
 
-        cursor.execute("""
-            SELECT
-                pt.ticker, pt.entry_date, pt.entry_price, pt.shares,
-                pt.position_size, pt.conviction,
-                s.current_price, s.unrealized_pnl, s.unrealized_pct,
-                pt.stop_loss, pt.target_price
-            FROM paper_trades pt
-            LEFT JOIN (
-                SELECT trade_id, current_price, unrealized_pnl, unrealized_pct
-                FROM paper_trade_snapshots
-                WHERE (trade_id, snapshot_date) IN (
-                    SELECT trade_id, MAX(snapshot_date)
+            cursor.execute("""
+                SELECT
+                    pt.ticker, pt.entry_date, pt.entry_price, pt.shares,
+                    pt.position_size, pt.conviction,
+                    s.current_price, s.unrealized_pnl, s.unrealized_pct,
+                    pt.stop_loss, pt.target_price
+                FROM paper_trades pt
+                LEFT JOIN (
+                    SELECT trade_id, current_price, unrealized_pnl, unrealized_pct
                     FROM paper_trade_snapshots
-                    GROUP BY trade_id
-                )
-            ) s ON pt.id = s.trade_id
-            WHERE pt.status = 'open'
-            ORDER BY pt.entry_date DESC
-        """)
+                    WHERE (trade_id, snapshot_date) IN (
+                        SELECT trade_id, MAX(snapshot_date)
+                        FROM paper_trade_snapshots
+                        GROUP BY trade_id
+                    )
+                ) s ON pt.id = s.trade_id
+                WHERE pt.status = 'open'
+                ORDER BY pt.entry_date DESC
+            """)
 
-        rows = cursor.fetchall()
-        conn.close()
+            rows = cursor.fetchall()
 
         positions = []
         for row in rows:

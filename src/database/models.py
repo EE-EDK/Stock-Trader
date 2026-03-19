@@ -673,11 +673,11 @@ class Database:
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT indicator_name, value, date
+            SELECT indicator_name, value, observation_date
             FROM macro_indicators
             WHERE indicator_name = ?
-              AND date >= date('now', '-' || ? || ' days')
-            ORDER BY date ASC
+              AND observation_date >= date('now', '-' || ? || ' days')
+            ORDER BY observation_date ASC
         """, (indicator, days))
 
         results = []
@@ -699,13 +699,13 @@ class Database:
                    COUNT(DISTINCT s.id) as signal_count,
                    AVG(s.conviction_score) as avg_conviction,
                    COUNT(DISTINCT pt.id) as trades_executed,
-                   SUM(CASE WHEN pt.pnl > 0 THEN 1 ELSE 0 END) as wins,
-                   SUM(CASE WHEN pt.pnl <= 0 AND pt.pnl IS NOT NULL THEN 1 ELSE 0 END) as losses,
-                   AVG(pt.pnl) as avg_pnl,
-                   MAX(pt.pnl) as best_trade,
-                   MIN(pt.pnl) as worst_trade
+                   SUM(CASE WHEN pt.profit_loss > 0 THEN 1 ELSE 0 END) as wins,
+                   SUM(CASE WHEN pt.profit_loss <= 0 AND pt.profit_loss IS NOT NULL THEN 1 ELSE 0 END) as losses,
+                   AVG(pt.profit_loss) as avg_pnl,
+                   MAX(pt.profit_loss) as best_trade,
+                   MIN(pt.profit_loss) as worst_trade
             FROM signals s
-            LEFT JOIN paper_trades pt ON s.id = pt.signal_id AND pt.exit_date IS NOT NULL
+            LEFT JOIN paper_trades pt ON s.ticker = pt.ticker AND date(s.created_at) = date(pt.entry_date) AND pt.exit_date IS NOT NULL
             WHERE s.created_at >= datetime('now', '-90 days')
             GROUP BY s.signal_type
             ORDER BY signal_count DESC
@@ -760,7 +760,7 @@ class Database:
 
         # Add realized P/L
         cursor.execute("""
-            SELECT date(exit_date) as trade_date, SUM(pnl) as realized_pnl
+            SELECT date(exit_date) as trade_date, SUM(profit_loss) as realized_pnl
             FROM paper_trades
             WHERE exit_date IS NOT NULL
               AND exit_date >= datetime('now', '-' || ? || ' days')

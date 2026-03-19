@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 import json
+import contextlib
 
 logger = logging.getLogger(__name__)
 
@@ -119,21 +120,21 @@ class Backtester:
         """
         target_date = date + timedelta(days=offset_days)
 
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
+            cursor = conn.cursor()
 
-        # Get price from database (within 7 days of target date)
-        cursor.execute("""
-            SELECT price
-            FROM prices
-            WHERE ticker = ?
-            AND DATE(collected_at) BETWEEN DATE(?) AND DATE(?, '+7 days')
-            ORDER BY ABS(JULIANDAY(collected_at) - JULIANDAY(?))
-            LIMIT 1
-        """, (ticker, target_date, target_date, target_date))
+            # Get price from database (within 7 days of target date)
+            target_date_str = target_date.strftime('%Y-%m-%d %H:%M:%S')
+            cursor.execute("""
+                SELECT price
+                FROM prices
+                WHERE ticker = ?
+                AND DATE(collected_at) BETWEEN DATE(?) AND DATE(?, '+7 days')
+                ORDER BY ABS(JULIANDAY(collected_at) - JULIANDAY(?))
+                LIMIT 1
+            """, (ticker, target_date_str, target_date_str, target_date_str))
 
-        row = cursor.fetchone()
-        conn.close()
+            row = cursor.fetchone()
 
         return row[0] if row else None
 
@@ -162,6 +163,42 @@ class Backtester:
         stop_loss = entry_price * (1 + self.stop_loss_pct / 100)
         target_price = entry_price * (1 + self.take_profit_pct / 100)
 
+        # Fetch all possible prices for the hold period in one query
+        end_date = entry_date + timedelta(days=self.hold_days + 7)  # Add buffer for missing days
+        
+        with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
+            cursor = conn.cursor()
+            
+            # Using strftime to avoid datetime parameter deprecation
+            entry_date_str = entry_date.strftime('%Y-%m-%d %H:%M:%S')
+            end_date_str = end_date.strftime('%Y-%m-%d %H:%M:%S')
+            
+            cursor.execute("""
+                SELECT collected_at, price
+                FROM prices
+                WHERE ticker = ?
+                AND DATE(collected_at) >= DATE(?) AND DATE(collected_at) <= DATE(?)
+                ORDER BY collected_at ASC
+            """, (ticker, entry_date_str, end_date_str))
+            
+            rows = cursor.fetchall()
+            
+        prices_by_date = {}
+        for row in rows:
+            try:
+                # Handle both ISO format and simple string format
+                date_obj = datetime.fromisoformat(row[0].replace('Z', '+00:00'))
+            except ValueError:
+                # Fallback parser if not standard iso
+                try:
+                    date_obj = datetime.strptime(row[0], '%Y-%m-%d %H:%M:%S')
+                except ValueError:
+                    date_obj = datetime.strptime(row[0].split()[0], '%Y-%m-%d')
+            
+            date_key = date_obj.date()
+            if date_key not in prices_by_date:
+                prices_by_date[date_key] = row[1]
+
         # Simulate daily price checks
         exit_date = None
         exit_price = None
@@ -169,7 +206,15 @@ class Backtester:
 
         for day in range(1, self.hold_days + 1):
             current_date = entry_date + timedelta(days=day)
-            current_price = self.get_historical_price(ticker, current_date)
+            
+            # Look for price on current day or up to 7 days ahead
+            current_price = None
+            for offset in range(8):
+                check_date = current_date + timedelta(days=offset)
+                if check_date.date() in prices_by_date:
+                    current_price = prices_by_date[check_date.date()]
+                    current_date = check_date
+                    break
 
             if current_price is None:
                 continue
@@ -189,7 +234,20 @@ class Backtester:
         # If no exit condition hit, exit at time limit
         if exit_date is None:
             exit_date = entry_date + timedelta(days=self.hold_days)
-            exit_price = self.get_historical_price(ticker, exit_date)
+            
+            # Try to get exit price
+            exit_price = None
+            for offset in range(8):
+                check_date = exit_date + timedelta(days=offset)
+                if check_date.date() in prices_by_date:
+                    exit_price = prices_by_date[check_date.date()]
+                    exit_date = check_date
+                    break
+                    
+            if exit_price is None:
+                # Fallback to standard get_historical_price if bulk fetch didn't catch it
+                exit_price = self.get_historical_price(ticker, exit_date)
+            
             exit_reason = 'time_limit'
 
         if exit_price is None:
@@ -222,42 +280,43 @@ class Backtester:
         @param end_date End of backtest period
         @return List of signal dictionaries
         """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        start_date_str = start_date.strftime('%Y-%m-%d %H:%M:%S')
+        end_date_str = end_date.strftime('%Y-%m-%d %H:%M:%S')
+        
+        with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
+            cursor = conn.cursor()
 
-        # First check if there's ANY data in the database for this period
-        cursor.execute("""
-            SELECT COUNT(*) FROM signals
-            WHERE DATE(created_at) BETWEEN DATE(?) AND DATE(?)
-        """, (start_date, end_date))
+            # First check if there's ANY data in the database for this period
+            cursor.execute("""
+                SELECT COUNT(*) FROM signals
+                WHERE DATE(created_at) BETWEEN DATE(?) AND DATE(?)
+            """, (start_date_str, end_date_str))
 
-        total_signals = cursor.fetchone()[0]
+            total_signals = cursor.fetchone()[0]
 
-        # Query for signals meeting conviction threshold
-        cursor.execute("""
-            SELECT ticker, conviction_score, triggers, price_at_signal, created_at
-            FROM signals
-            WHERE DATE(created_at) BETWEEN DATE(?) AND DATE(?)
-            AND conviction_score >= ?
-            ORDER BY created_at ASC
-        """, (start_date, end_date, self.min_conviction))
+            # Query for signals meeting conviction threshold
+            cursor.execute("""
+                SELECT ticker, conviction_score, triggers, price_at_signal, created_at
+                FROM signals
+                WHERE DATE(created_at) BETWEEN DATE(?) AND DATE(?)
+                AND conviction_score >= ?
+                ORDER BY created_at ASC
+            """, (start_date_str, end_date_str, self.min_conviction))
 
-        signals = []
-        for row in cursor.fetchall():
-            try:
-                triggers = json.loads(row[2]) if row[2] else []
-            except:
-                triggers = []
+            signals = []
+            for row in cursor.fetchall():
+                try:
+                    triggers = json.loads(row[2]) if row[2] else []
+                except:
+                    triggers = []
 
-            signals.append({
-                'ticker': row[0],
-                'conviction': int(row[1]),
-                'triggers': triggers,
-                'price': row[3],
-                'date': datetime.fromisoformat(row[4])
-            })
-
-        conn.close()
+                signals.append({
+                    'ticker': row[0],
+                    'conviction': int(row[1]),
+                    'triggers': triggers,
+                    'price': row[3],
+                    'date': datetime.fromisoformat(row[4].replace('Z', '+00:00')) if 'T' in row[4] else datetime.strptime(row[4], '%Y-%m-%d %H:%M:%S')
+                })
 
         if total_signals == 0:
             logger.warning(f"No signals found in backtest period")
@@ -329,28 +388,26 @@ class Backtester:
         @param hist Historical price dataframe from yfinance
         """
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
+            with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
+                with conn:
+                    cursor = conn.cursor()
 
-            # Check if prices table exists, if not create it
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS prices (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    ticker TEXT NOT NULL,
-                    price REAL,
-                    collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+                    # Check if prices table exists, if not create it
+                    cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS prices (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            ticker TEXT NOT NULL,
+                            price REAL,
+                            collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                    """)
 
-            # Insert historical prices
-            for date, row in hist.iterrows():
-                cursor.execute("""
-                    INSERT OR IGNORE INTO prices (ticker, price, collected_at)
-                    VALUES (?, ?, ?)
-                """, (ticker, float(row['Close']), date.strftime('%Y-%m-%d %H:%M:%S')))
-
-            conn.commit()
-            conn.close()
+                    # Insert historical prices
+                    for date, row in hist.iterrows():
+                        cursor.execute("""
+                            INSERT OR IGNORE INTO prices (ticker, price, collected_at)
+                            VALUES (?, ?, ?)
+                        """, (ticker, float(row['Close']), date.strftime('%Y-%m-%d %H:%M:%S')))
         except Exception as e:
             logger.debug(f"Failed to store prices for {ticker}: {e}")
 
@@ -443,7 +500,8 @@ class Backtester:
         @return RSI series
         """
         try:
-            import pandas as pd
+            if not YFINANCE_AVAILABLE:
+                return [50] * len(prices)
             delta = prices.diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
             loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
@@ -463,16 +521,20 @@ class Backtester:
         if not returns or len(returns) < 2:
             return 0.0
 
-        import numpy as np
+        import math
+        import statistics
 
-        returns_array = np.array(returns)
-        excess_returns = returns_array - (risk_free_rate / 252)  # Daily risk-free rate
+        daily_rf = risk_free_rate / 252.0
+        excess_returns = [r - daily_rf for r in returns]
 
-        if np.std(excess_returns) == 0:
+        stdev = statistics.stdev(excess_returns) if len(excess_returns) > 1 else 0.0
+        
+        if stdev == 0.0:
             return 0.0
 
-        sharpe = np.mean(excess_returns) / np.std(excess_returns)
-        return sharpe * np.sqrt(252)  # Annualized
+        mean_excess = sum(excess_returns) / len(excess_returns)
+        sharpe = mean_excess / stdev
+        return sharpe * math.sqrt(252)  # Annualized
 
     def calculate_max_drawdown(self, equity_curve: List[float]) -> float:
         """

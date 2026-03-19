@@ -170,6 +170,7 @@ class TestPositionSizeCalculation:
 
         self.tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
         self.db_path = self.tmp_file.name
+        self.tmp_file.close()
         self.manager = PaperTradingManager(self.db_path, config)
 
     def teardown_method(self):
@@ -226,6 +227,7 @@ class TestCreatePaperTrade:
 
         self.tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
         self.db_path = self.tmp_file.name
+        self.tmp_file.close()
 
         # Create schema manually for tests
         conn = sqlite3.connect(self.db_path)
@@ -429,6 +431,7 @@ class TestUpdatePositions:
 
         self.tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
         self.db_path = self.tmp_file.name
+        self.tmp_file.close()
 
         # Create schema
         conn = sqlite3.connect(self.db_path)
@@ -608,6 +611,7 @@ class TestBackfillFromSignals:
 
         self.tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
         self.db_path = self.tmp_file.name
+        self.tmp_file.close()
 
         # Create schema
         conn = sqlite3.connect(self.db_path)
@@ -666,12 +670,12 @@ class TestBackfillFromSignals:
         cursor.execute("""
             INSERT INTO signals (ticker, conviction_score, triggers, created_at)
             VALUES (?, ?, ?, ?)
-        """, ('AAPL', 80, json.dumps(['velocity_spike']), signal_date))
+        """, ('AAPL', 80, json.dumps(['velocity_spike']), signal_date.isoformat()))
 
         cursor.execute("""
             INSERT INTO prices (ticker, price, collected_at)
             VALUES (?, ?, ?)
-        """, ('AAPL', 150.0, signal_date))
+        """, ('AAPL', 150.0, signal_date.isoformat()))
 
         conn.commit()
         conn.close()
@@ -699,17 +703,17 @@ class TestBackfillFromSignals:
         cursor.execute("""
             INSERT INTO signals (ticker, conviction_score, triggers, created_at)
             VALUES (?, ?, ?, ?)
-        """, ('LOW', 50, json.dumps(['test']), signal_date))
+        """, ('LOW', 50, json.dumps(['test']), signal_date.isoformat()))
 
         # Above threshold (80 > 60)
         cursor.execute("""
             INSERT INTO signals (ticker, conviction_score, triggers, created_at)
             VALUES (?, ?, ?, ?)
-        """, ('HIGH', 80, json.dumps(['test']), signal_date))
+        """, ('HIGH', 80, json.dumps(['test']), signal_date.isoformat()))
 
         # Add prices
-        cursor.execute("INSERT INTO prices VALUES (?, ?, ?)", ('LOW', 100.0, signal_date))
-        cursor.execute("INSERT INTO prices VALUES (?, ?, ?)", ('HIGH', 100.0, signal_date))
+        cursor.execute("INSERT INTO prices VALUES (?, ?, ?)", ('LOW', 100.0, signal_date.isoformat()))
+        cursor.execute("INSERT INTO prices VALUES (?, ?, ?)", ('HIGH', 100.0, signal_date.isoformat()))
 
         conn.commit()
         conn.close()
@@ -736,12 +740,12 @@ class TestBackfillFromSignals:
         cursor.execute("""
             INSERT INTO signals (ticker, conviction_score, triggers, created_at)
             VALUES (?, ?, ?, ?)
-        """, ('AAPL', 80, json.dumps(['test']), signal_date))
+        """, ('AAPL', 80, json.dumps(['test']), signal_date.isoformat()))
 
         cursor.execute("""
             INSERT INTO prices (ticker, price, collected_at)
             VALUES (?, ?, ?)
-        """, ('AAPL', 150.0, signal_date))
+        """, ('AAPL', 150.0, signal_date.isoformat()))
 
         conn.commit()
         conn.close()
@@ -773,6 +777,7 @@ class TestPerformanceSummary:
 
         self.tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
         self.db_path = self.tmp_file.name
+        self.tmp_file.close()
 
         # Create schema
         conn = sqlite3.connect(self.db_path)
@@ -847,7 +852,7 @@ class TestPerformanceSummary:
             (ticker, entry_date, entry_price, shares, conviction, signal_types,
              position_size, exit_price, profit_loss, return_pct, days_held, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, ('AAPL', datetime.now(), 100.0, 10, 80, '[]',
+        """, ('AAPL', datetime.now().isoformat(), 100.0, 10, 80, '[]',
               1000.0, 120.0, 200.0, 20.0, 10, 'closed'))
 
         # Losing trade
@@ -856,7 +861,7 @@ class TestPerformanceSummary:
             (ticker, entry_date, entry_price, shares, conviction, signal_types,
              position_size, exit_price, profit_loss, return_pct, days_held, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, ('TSLA', datetime.now(), 200.0, 5, 80, '[]',
+        """, ('TSLA', datetime.now().isoformat(), 200.0, 5, 80, '[]',
               1000.0, 180.0, -100.0, -10.0, 15, 'closed'))
 
         conn.commit()
@@ -898,8 +903,8 @@ class TestPerformanceSummary:
              position_size, exit_date, exit_price, profit_loss, return_pct,
              days_held, exit_reason, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, ('AAPL', datetime.now() - timedelta(days=12), 100.0, 10, 80, '[]',
-              1000.0, exit_date, 120.0, 200.0, 20.0, 10, 'take_profit', 'closed'))
+        """, ('AAPL', (datetime.now() - timedelta(days=12)).isoformat(), 100.0, 10, 80, '[]',
+              1000.0, exit_date.isoformat(), 120.0, 200.0, 20.0, 10, 'take_profit', 'closed'))
 
         conn.commit()
         conn.close()
@@ -925,6 +930,7 @@ class TestEdgeCases:
 
         self.tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
         self.db_path = self.tmp_file.name
+        self.tmp_file.close()
 
         # Create minimal schema
         conn = sqlite3.connect(self.db_path)
