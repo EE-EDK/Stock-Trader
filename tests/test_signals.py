@@ -4,7 +4,6 @@
 @details Tests for SignalGenerator and Signal class
 """
 
-import pytest
 from datetime import datetime, timedelta
 from src.signals.generator import Signal, SignalGenerator
 
@@ -15,16 +14,16 @@ class TestSignal:
     def test_signal_creation(self):
         """Test creating a signal"""
         signal = Signal(
-            ticker='AAPL',
-            signal_type='velocity_spike',
+            ticker="AAPL",
+            signal_type="velocity_spike",
             conviction_score=75.0,
             price_at_signal=150.25,
-            triggers=['velocity_spike'],
-            notes='Test signal',
-            created_at=datetime.now()
+            triggers=["velocity_spike"],
+            notes="Test signal",
+            created_at=datetime.now(),
         )
 
-        assert signal.ticker == 'AAPL'
+        assert signal.ticker == "AAPL"
         assert signal.conviction_score == 75.0
         assert isinstance(signal.triggers, list)
 
@@ -36,35 +35,29 @@ class TestSignalGenerator:
         """Test initialization with default thresholds"""
         gen = SignalGenerator()
         assert gen.thresholds is not None
-        assert 'velocity_spike' in gen.thresholds
+        assert "velocity_spike" in gen.thresholds
 
     def test_init_custom_thresholds(self):
         """Test initialization with custom thresholds"""
         custom = {
-            'velocity_spike': {
-                'mention_vel_24h_min': 200,
-                'composite_score_min': 70
+            "velocity_spike": {
+                "mention_vel_24h_min": 200,
+                "composite_score_min": 70,
             }
         }
         gen = SignalGenerator(thresholds=custom)
-        assert gen.thresholds['velocity_spike']['mention_vel_24h_min'] == 200
+        assert gen.thresholds["velocity_spike"]["mention_vel_24h_min"] == 200
 
     def test_check_velocity_spike_pass(self):
         """Test velocity spike detection - passing case"""
         gen = SignalGenerator()
-        vel = {
-            'mention_velocity_24h': 150,
-            'composite_score': 70
-        }
+        vel = {"mention_velocity_24h": 150, "composite_score": 70}
         assert gen._check_velocity_spike(vel) is True
 
     def test_check_velocity_spike_fail(self):
         """Test velocity spike detection - failing case"""
         gen = SignalGenerator()
-        vel = {
-            'mention_velocity_24h': 50,
-            'composite_score': 40
-        }
+        vel = {"mention_velocity_24h": 50, "composite_score": 40}
         assert gen._check_velocity_spike(vel) is False
 
     def test_check_insider_cluster_pass(self):
@@ -73,46 +66,46 @@ class TestSignalGenerator:
         now = datetime.now()
         insiders = [
             {
-                'trade_type': 'P',
-                'trade_date': now - timedelta(days=5),
-                'value': 60000
+                "trade_type": "P",
+                "trade_date": now - timedelta(days=5),
+                "value": 60000,
             },
             {
-                'trade_type': 'P',
-                'trade_date': now - timedelta(days=3),
-                'value': 50000
-            }
+                "trade_type": "P",
+                "trade_date": now - timedelta(days=3),
+                "value": 50000,
+            },
         ]
         assert gen._check_insider_cluster(insiders) is True
 
-    def test_check_insider_cluster_fail_insufficient_insiders(self):
+    def test_check_insider_cluster_fail_not_enough_insiders(self):
         """Test insider cluster detection - too few insiders"""
         gen = SignalGenerator()
         now = datetime.now()
         insiders = [
             {
-                'trade_type': 'P',
-                'trade_date': now - timedelta(days=5),
-                'value': 120000
+                "trade_type": "P",
+                "trade_date": now - timedelta(days=5),
+                "value": 120000,
             }
         ]
         assert gen._check_insider_cluster(insiders) is False
 
-    def test_check_insider_cluster_fail_insufficient_value(self):
+    def test_check_insider_cluster_fail_insufficient_val(self):
         """Test insider cluster detection - insufficient total value"""
         gen = SignalGenerator()
         now = datetime.now()
         insiders = [
             {
-                'trade_type': 'P',
-                'trade_date': now - timedelta(days=5),
-                'value': 30000
+                "trade_type": "P",
+                "trade_date": now - timedelta(days=5),
+                "value": 30000,
             },
             {
-                'trade_type': 'P',
-                'trade_date': now - timedelta(days=3),
-                'value': 40000
-            }
+                "trade_type": "P",
+                "trade_date": now - timedelta(days=3),
+                "value": 40000,
+            },
         ]
         assert gen._check_insider_cluster(insiders) is False
 
@@ -122,91 +115,91 @@ class TestSignalGenerator:
         now = datetime.now()
         insiders = [
             {
-                'trade_type': 'P',
-                'trade_date': now - timedelta(days=30),
-                'value': 60000
+                "trade_type": "P",
+                "trade_date": now - timedelta(days=30),
+                "value": 60000,
             },
             {
-                'trade_type': 'P',
-                'trade_date': now - timedelta(days=25),
-                'value': 50000
-            }
+                "trade_type": "P",
+                "trade_date": now - timedelta(days=25),
+                "value": 50000,
+            },
         ]
         assert gen._check_insider_cluster(insiders) is False
 
     def test_check_sentiment_flip_positive(self):
         """Test sentiment flip detection - bullish flip"""
         gen = SignalGenerator()
-        vel = {'sentiment_velocity': 0.35}
+        vel = {"sentiment_velocity": 0.35}
         assert gen._check_sentiment_flip(vel) is True
 
     def test_check_sentiment_flip_negative(self):
         """Test sentiment flip detection - bearish flip"""
         gen = SignalGenerator()
-        vel = {'sentiment_velocity': -0.35}
+        vel = {"sentiment_velocity": -0.35}
         assert gen._check_sentiment_flip(vel) is True
 
     def test_check_sentiment_flip_fail(self):
         """Test sentiment flip detection - insufficient change"""
         gen = SignalGenerator()
-        vel = {'sentiment_velocity': 0.15}
+        vel = {"sentiment_velocity": 0.15}
         assert gen._check_sentiment_flip(vel) is False
 
     def test_generate_notes_velocity_spike(self):
         """Test note generation for velocity spike"""
         gen = SignalGenerator()
-        vel = {'mention_velocity_24h': 150, 'composite_score': 70}
-        notes = gen._generate_notes('AAPL', vel, [], ['velocity_spike'])
-        assert 'Mentions up 150%' in notes
-        assert 'Composite: 70' in notes
+        vel = {"mention_velocity_24h": 150, "composite_score": 70}
+        notes = gen._generate_notes("AAPL", vel, [], ["velocity_spike"])
+        assert "Mentions up 150%" in notes
+        assert "Composite: 70" in notes
 
     def test_generate_notes_insider_cluster(self):
         """Test note generation for insider cluster"""
         gen = SignalGenerator()
-        vel = {'composite_score': 65}
+        vel = {"composite_score": 65}
         insiders = [
-            {'trade_type': 'P', 'value': 60000},
-            {'trade_type': 'P', 'value': 50000}
+            {"trade_type": "P", "value": 60000},
+            {"trade_type": "P", "value": 50000},
         ]
-        notes = gen._generate_notes('AAPL', vel, insiders, ['insider_cluster'])
-        assert '2 insiders' in notes
-        assert '110,000' in notes
+        notes = gen._generate_notes("AAPL", vel, insiders, ["insider_cluster"])
+        assert "2 insiders" in notes
+        assert "110,000" in notes
 
     def test_generate_notes_combined(self):
         """Test note generation for combined signals"""
         gen = SignalGenerator()
         vel = {
-            'mention_velocity_24h': 200,
-            'sentiment_velocity': 0.4,
-            'composite_score': 75
+            "mention_velocity_24h": 200,
+            "sentiment_velocity": 0.4,
+            "composite_score": 75,
         }
-        insiders = [{'trade_type': 'P', 'value': 100000}]
-        triggers = ['velocity_spike', 'insider_cluster', 'sentiment_flip']
-        notes = gen._generate_notes('AAPL', vel, insiders, triggers)
+        insiders = [{"trade_type": "P", "value": 100000}]
+        triggers = ["velocity_spike", "insider_cluster", "sentiment_flip"]
+        notes = gen._generate_notes("AAPL", vel, insiders, triggers)
 
-        assert 'Mentions up 200%' in notes
-        assert '1 insiders' in notes
-        assert 'bullish' in notes
+        assert "Mentions up 200%" in notes
+        assert "1 insiders" in notes
+        assert "bullish" in notes
 
     def test_generate_signals_velocity_spike_only(self):
         """Test signal generation with only velocity spike"""
         gen = SignalGenerator()
 
         velocity_data = {
-            'AAPL': {
-                'mention_velocity_24h': 150,
-                'composite_score': 70,
-                'sentiment_velocity': 0.1
+            "AAPL": {
+                "mention_velocity_24h": 150,
+                "composite_score": 70,
+                "sentiment_velocity": 0.1,
             }
         }
         insider_data = {}
-        price_data = {'AAPL': {'price': 150.25}}
+        price_data = {"AAPL": {"price": 150.25}}
 
         signals = gen.generate_signals(velocity_data, insider_data, price_data)
 
         assert len(signals) == 1
-        assert signals[0].ticker == 'AAPL'
-        assert 'velocity_spike' in signals[0].triggers
+        assert signals[0].ticker == "AAPL"
+        assert "velocity_spike" in signals[0].triggers
         assert signals[0].conviction_score > 40
 
     def test_generate_signals_combined(self):
@@ -215,26 +208,34 @@ class TestSignalGenerator:
 
         now = datetime.now()
         velocity_data = {
-            'NVDA': {
-                'mention_velocity_24h': 200,
-                'composite_score': 80,
-                'sentiment_velocity': 0.35
+            "NVDA": {
+                "mention_velocity_24h": 200,
+                "composite_score": 80,
+                "sentiment_velocity": 0.35,
             }
         }
         insider_data = {
-            'NVDA': [
-                {'trade_type': 'P', 'trade_date': now - timedelta(days=5), 'value': 70000},
-                {'trade_type': 'P', 'trade_date': now - timedelta(days=3), 'value': 60000}
+            "NVDA": [
+                {
+                    "trade_type": "P",
+                    "trade_date": now - timedelta(days=5),
+                    "value": 70000,
+                },
+                {
+                    "trade_type": "P",
+                    "trade_date": now - timedelta(days=3),
+                    "value": 60000,
+                },
             ]
         }
-        price_data = {'NVDA': {'price': 500.00}}
+        price_data = {"NVDA": {"price": 500.00}}
 
         signals = gen.generate_signals(velocity_data, insider_data, price_data)
 
         assert len(signals) == 1
-        assert signals[0].ticker == 'NVDA'
+        assert signals[0].ticker == "NVDA"
         assert len(signals[0].triggers) >= 2
-        assert signals[0].signal_type == 'combined'
+        assert signals[0].signal_type == "combined"
         assert signals[0].conviction_score > 70
 
     def test_generate_signals_no_triggers(self):
@@ -242,14 +243,14 @@ class TestSignalGenerator:
         gen = SignalGenerator()
 
         velocity_data = {
-            'XYZ': {
-                'mention_velocity_24h': 10,
-                'composite_score': 30,
-                'sentiment_velocity': 0.05
+            "XYZ": {
+                "mention_velocity_24h": 10,
+                "composite_score": 30,
+                "sentiment_velocity": 0.05,
             }
         }
         insider_data = {}
-        price_data = {'XYZ': {'price': 10.00}}
+        price_data = {"XYZ": {"price": 10.00}}
 
         signals = gen.generate_signals(velocity_data, insider_data, price_data)
 
@@ -261,43 +262,50 @@ class TestSignalGenerator:
 
         now = datetime.now()
         velocity_data = {
-            'LOW': {
-                'mention_velocity_24h': 110,
-                'composite_score': 61,
-                'sentiment_velocity': 0.1
+            "LOW": {
+                "mention_velocity_24h": 110,
+                "composite_score": 61,
+                "sentiment_velocity": 0.1,
             },
-            'HIGH': {
-                'mention_velocity_24h': 300,
-                'composite_score': 85,
-                'sentiment_velocity': 0.4
-            }
+            "HIGH": {
+                "mention_velocity_24h": 300,
+                "composite_score": 85,
+                "sentiment_velocity": 0.4,
+            },
         }
         insider_data = {
-            'HIGH': [
-                {'trade_type': 'P', 'trade_date': now - timedelta(days=5), 'value': 80000},
-                {'trade_type': 'P', 'trade_date': now - timedelta(days=3), 'value': 70000}
+            "HIGH": [
+                {
+                    "trade_type": "P",
+                    "trade_date": now - timedelta(days=5),
+                    "value": 80000,
+                },
+                {
+                    "trade_type": "P",
+                    "trade_date": now - timedelta(days=3),
+                    "value": 70000,
+                },
             ]
         }
-        price_data = {
-            'LOW': {'price': 50.00},
-            'HIGH': {'price': 200.00}
-        }
+        price_data = {"LOW": {"price": 50.00}, "HIGH": {"price": 200.00}}
 
         signals = gen.generate_signals(velocity_data, insider_data, price_data)
 
         assert len(signals) >= 1
         # First signal should have highest conviction
         for i in range(len(signals) - 1):
-            assert signals[i].conviction_score >= signals[i + 1].conviction_score
+            assert (
+                signals[i].conviction_score >= signals[i + 1].conviction_score
+            )
 
     def test_filter_by_conviction(self):
         """Test filtering signals by conviction score"""
         gen = SignalGenerator()
 
         signals = [
-            Signal('A', 'test', 80, 100, [], '', datetime.now()),
-            Signal('B', 'test', 50, 100, [], '', datetime.now()),
-            Signal('C', 'test', 30, 100, [], '', datetime.now()),
+            Signal("A", "test", 80, 100, [], "", datetime.now()),
+            Signal("B", "test", 50, 100, [], "", datetime.now()),
+            Signal("C", "test", 30, 100, [], "", datetime.now()),
         ]
 
         filtered = gen.filter_by_conviction(signals, min_conviction=45)
@@ -309,31 +317,161 @@ class TestSignalGenerator:
         gen = SignalGenerator()
 
         signals = [
-            Signal('A', 'test', 90, 100, [], '', datetime.now()),
-            Signal('B', 'test', 80, 100, [], '', datetime.now()),
-            Signal('C', 'test', 70, 100, [], '', datetime.now()),
-            Signal('D', 'test', 60, 100, [], '', datetime.now()),
+            Signal("A", "test", 90, 100, [], "", datetime.now()),
+            Signal("B", "test", 80, 100, [], "", datetime.now()),
+            Signal("C", "test", 70, 100, [], "", datetime.now()),
+            Signal("D", "test", 60, 100, [], "", datetime.now()),
         ]
 
         top = gen.get_top_signals(signals, n=2)
         assert len(top) == 2
-        assert top[0].ticker == 'A'
-        assert top[1].ticker == 'B'
+        assert top[0].ticker == "A"
+        assert top[1].ticker == "B"
 
     def test_group_by_type(self):
         """Test grouping signals by type"""
         gen = SignalGenerator()
 
         signals = [
-            Signal('A', 'velocity_spike', 80, 100, [], '', datetime.now()),
-            Signal('B', 'insider_cluster', 75, 100, [], '', datetime.now()),
-            Signal('C', 'velocity_spike', 70, 100, [], '', datetime.now()),
-            Signal('D', 'combined', 90, 100, [], '', datetime.now()),
+            Signal("A", "velocity_spike", 80, 100, [], "", datetime.now()),
+            Signal("B", "insider_cluster", 75, 100, [], "", datetime.now()),
+            Signal("C", "velocity_spike", 70, 100, [], "", datetime.now()),
+            Signal("D", "combined", 90, 100, [], "", datetime.now()),
         ]
 
         grouped = gen.group_by_type(signals)
 
         assert len(grouped) == 3
-        assert len(grouped['velocity_spike']) == 2
-        assert len(grouped['insider_cluster']) == 1
-        assert len(grouped['combined']) == 1
+        assert len(grouped["velocity_spike"]) == 2
+        assert len(grouped["insider_cluster"]) == 1
+        assert len(grouped["combined"]) == 1
+
+    def test_check_technical_breakout(self):
+        gen = SignalGenerator()
+        assert (
+            gen._check_technical_breakout({"breakout_detected": True}) is True
+        )
+        assert (
+            gen._check_technical_breakout({"breakout_detected": False})
+            is False
+        )
+        assert gen._check_technical_breakout({}) is False
+
+    def test_check_rsi_oversold(self):
+        gen = SignalGenerator()
+        assert gen._check_rsi_oversold({"rsi_14": 25.0}) is True
+        assert gen._check_rsi_oversold({"rsi_14": 35.0}) is False
+        assert gen._check_rsi_oversold({"rsi_14": None}) is False
+        assert gen._check_rsi_oversold({}) is False
+
+    def test_check_positive_sentiment(self):
+        gen = SignalGenerator()
+        assert gen._check_positive_sentiment({"sentiment_score": 0.2}) is True
+
+        pos_bull = {"sentiment_score": 0.1, "sentiment_label": "Bullish"}
+        assert gen._check_positive_sentiment(pos_bull) is True
+
+        pos_out = {
+            "sentiment_score": 0.1,
+            "sentiment_label": "Positive outlook",
+        }
+        assert gen._check_positive_sentiment(pos_out) is True
+
+        neut = {"sentiment_score": 0.1, "sentiment_label": "neutral"}
+        assert gen._check_positive_sentiment(neut) is False
+
+        none_vals = {"sentiment_score": None, "sentiment_label": None}
+        assert gen._check_positive_sentiment(none_vals) is False
+
+        assert gen._check_positive_sentiment({}) is False
+
+    def test_insider_trade_date_parsing(self):
+        gen = SignalGenerator()
+        now = datetime.now()
+        insiders = [
+            {
+                "trade_type": "P",
+                "trade_date": (now - timedelta(days=2)).isoformat(),
+                "value": 150000,
+            },
+            {"trade_type": "P", "trade_date": "invalid-date", "value": 100000},
+        ]
+        # Should only count the valid recent purchase
+        # For check_insider_cluster to pass, min_insiders is 2 by default,
+        # so override threshold to 1.
+        gen.thresholds["insider_cluster"]["min_insiders"] = 1
+        assert gen._check_insider_cluster(insiders) is True
+
+    def test_generate_signals_technical_and_sentiment(self):
+        gen = SignalGenerator()
+        velocity_data = {
+            "TSLA": {
+                "mention_velocity_24h": 10,
+                "composite_score": 50,
+            }
+        }
+        insider_data = {}
+        price_data = {"TSLA": {"price": 200.0}}
+        technical_data = {
+            "TSLA": {
+                "breakout_detected": True,
+                "rsi_14": 20.0,
+                "golden_cross": True,
+                "technical_score": 90,
+            }
+        }
+        sentiment_data = {
+            "TSLA": {"sentiment_score": 0.5, "sentiment_label": "Bullish"}
+        }
+
+        signals = gen.generate_signals(
+            velocity_data,
+            insider_data,
+            price_data,
+            technical_data,
+            sentiment_data,
+            datetime.now(),
+        )
+
+        assert len(signals) == 1
+        signal = signals[0]
+        assert "technical_breakout" in signal.triggers
+        assert "rsi_oversold" in signal.triggers
+        assert "golden_cross" in signal.triggers
+        assert "news_sentiment_bullish" in signal.triggers
+
+        assert "Technical breakout detected" in signal.notes
+        assert "RSI oversold (20.0)" in signal.notes
+        assert "Golden cross (SMA)" in signal.notes
+        assert "News bullish (0.50)" in signal.notes
+
+    def test_generate_notes_missing_values(self):
+        gen = SignalGenerator()
+        triggers = ["rsi_oversold", "news_sentiment_bullish"]
+        # Test missing values note generation
+        # using dummy dicts to trigger conditions.
+        notes = gen._generate_notes(
+            "AAPL", {}, [], triggers, {"dummy": 1}, {"dummy": 1}
+        )
+        assert "RSI oversold (0.0)" in notes
+        assert "News bullish (0.00)" in notes
+
+    def test_generate_signals_with_technical_score(self):
+        gen = SignalGenerator()
+        velocity_data = {
+            "MSFT": {
+                "mention_velocity_24h": 0,
+                "composite_score": 10,
+            }
+        }
+        insider_data = {}
+        price_data = {}
+        technical_data = {
+            "MSFT": {"technical_score": 100, "breakout_detected": True}
+        }
+        # Score calculation is 25 (breakout) + 20 (tech score) + 3 (comp) = 48.
+        signals = gen.generate_signals(
+            velocity_data, insider_data, price_data, technical_data
+        )
+        assert len(signals) == 1
+        assert signals[0].conviction_score >= 40
