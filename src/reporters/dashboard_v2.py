@@ -1254,14 +1254,15 @@ class ModernDashboardGenerator:
         # Signal performance table
         perf_html = ""
         for perf in signal_performance[:8]:
-            win_rate_class = "positive" if perf['win_rate'] > 50 else "negative" if perf['win_rate'] < 50 else ""
+            win_rate = perf.get('win_rate', 0)
+            win_rate_class = "positive" if win_rate > 50 else "negative" if win_rate < 50 else ""
             perf_html += f"""
                 <tr>
-                    <td><strong>{perf['signal_type']}</strong></td>
-                    <td>{perf['signal_count']}</td>
-                    <td>{perf['trades_executed']}</td>
-                    <td><span class="badge {win_rate_class}">{perf['win_rate']:.1f}%</span></td>
-                    <td>${perf['avg_pnl']:.2f}</td>
+                    <td><strong>{perf.get('signal_type', 'N/A')}</strong></td>
+                    <td>{perf.get('signal_count', 0)}</td>
+                    <td>{perf.get('trades_executed', 0)}</td>
+                    <td><span class="badge {win_rate_class}">{win_rate:.1f}%</span></td>
+                    <td>${perf.get('avg_pnl', 0):.2f}</td>
                 </tr>"""
 
         # Equity curve data for chart

@@ -207,7 +207,7 @@ class TestCollectAllIndicators:
     def test_collect_all_partial_failure(self, mock_get_obs):
         """Test collecting when some indicators fail"""
         # Return None for some indicators (failure)
-        def side_effect(series_id):
+        def side_effect(series_id, **kwargs):
             if series_id == 'VIXCLS':
                 return {
                     'series_id': 'VIXCLS',

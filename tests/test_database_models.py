@@ -29,7 +29,7 @@ def sample_velocity_data(test_db):
     for i in range(15):
         cursor.execute("""
             INSERT INTO velocity
-            (ticker, mention_velocity_24h, price_velocity_24h, sentiment_velocity, composite_score, calculated_at)
+            (ticker, mention_velocity_24h, mention_velocity_7d, sentiment_velocity, composite_score, calculated_at)
             VALUES (?, ?, ?, ?, ?, datetime('now', '-' || ? || ' hours'))
         """, (f'TEST{i}', 10.0 + i, 5.0 + i, 0.5 + i*0.1, 50.0 + i*5, i))
 
@@ -47,7 +47,7 @@ def sample_insider_data(test_db):
     for i in range(20):
         trade_type = 'Purchase' if i % 2 == 0 else 'Sale'
         cursor.execute("""
-            INSERT INTO insider_trades
+            INSERT INTO insiders
             (ticker, insider_name, trade_type, value, trade_date, collected_at)
             VALUES (?, ?, ?, ?, date('now', '-' || ? || ' days'), datetime('now'))
         """, (f'TICK{i}', f'Insider {i}', trade_type, 100000 + i*10000, i))
@@ -65,10 +65,10 @@ def sample_social_data(test_db):
     # Insert sample social mentions
     for i in range(15):
         cursor.execute("""
-            INSERT INTO social_mentions
-            (ticker, mention_count, upvotes, viral_score, collected_at)
+            INSERT INTO mentions
+            (ticker, mentions, upvotes, rank, collected_at)
             VALUES (?, ?, ?, ?, datetime('now', '-' || ? || ' hours'))
-        """, (f'SOC{i}', 100 + i*10, 50 + i*5, 75.0 + i*2, i))
+        """, (f'SOC{i}', 100 + i*10, 50 + i*5, i, i))
 
     conn.commit()
     return test_db
@@ -79,6 +79,10 @@ def sample_signal_data(test_db):
     """Insert sample signals and paper trades for testing"""
     conn = test_db.connect()
     cursor = conn.cursor()
+
+    # Get column names to handle schema variations
+    cursor.execute("PRAGMA table_info(paper_trades)")
+    columns = [row['name'] for row in cursor.fetchall()]
 
     # Insert sample signals
     signal_types = ['velocity_spike', 'insider_buy', 'technical_breakout']
@@ -94,11 +98,29 @@ def sample_signal_data(test_db):
         if i % 3 == 0:
             signal_id = cursor.lastrowid
             pnl = (i % 2) * 200 - 100  # Alternating wins/losses
-            cursor.execute("""
-                INSERT INTO paper_trades
-                (signal_id, ticker, entry_price, exit_price, shares, pnl, entry_date, exit_date)
-                VALUES (?, ?, ?, ?, ?, ?, datetime('now', '-' || ? || ' days'), datetime('now', '-' || ? || ' days'))
-            """, (signal_id, f'SIG{i}', 100.0, 100.0 + pnl/10, 10, pnl, i % 90, (i % 90) - 1))
+
+            entry_date = datetime.now() - timedelta(days=i % 90)
+            exit_date = datetime.now() - timedelta(days=(i % 90) - 1)
+
+            if "signal_id" in columns:
+                if "profit_loss" in columns:
+                    cursor.execute("""
+                        INSERT INTO paper_trades
+                        (signal_id, ticker, entry_price, exit_price, shares, profit_loss, entry_date, exit_date, position_size, conviction, signal_types)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (signal_id, f'SIG{i}', 100.0, 100.0 + pnl/10, 10, pnl, entry_date, exit_date, 1000.0, 60, "[]"))
+                else:
+                    cursor.execute("""
+                        INSERT INTO paper_trades
+                        (signal_id, ticker, entry_price, exit_price, shares, pnl, entry_date, exit_date)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (signal_id, f'SIG{i}', 100.0, 100.0 + pnl/10, 10, pnl, entry_date, exit_date))
+            else:
+                cursor.execute("""
+                    INSERT INTO paper_trades
+                    (ticker, entry_price, exit_price, shares, profit_loss, entry_date, exit_date, position_size, conviction, signal_types)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (f'SIG{i}', 100.0, 100.0 + pnl/10, 10, pnl, entry_date, exit_date, 1000.0, 60, "[]"))
 
     conn.commit()
     return test_db
@@ -231,9 +253,9 @@ class TestMacroIndicatorQueries:
         for i in range(30):
             cursor.execute("""
                 INSERT INTO macro_indicators
-                (indicator_name, value, collected_at)
-                VALUES (?, ?, datetime('now', '-' || ? || ' days'))
-            """, ('VIX', 20.0 + i*0.5, i))
+                (indicator_name, series_id, value, observation_date, collected_at)
+                VALUES (?, ?, ?, date('now', '-' || ? || ' days'), datetime('now', '-' || ? || ' days'))
+            """, ('VIX', 'VIXCLS', 20.0 + i*0.5, i, i))
 
         conn.commit()
 

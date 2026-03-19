@@ -90,7 +90,7 @@ class FREDCollector:
         # Reset counter every minute
         current_time = time.time()
         if current_time - self.last_request_time >= 60:
-            self.request_count = 0
+            self.request_count = 1  # current request
             self.last_request_time = current_time
 
         # If approaching limit, sleep
@@ -99,7 +99,7 @@ class FREDCollector:
             if sleep_time > 0:
                 logger.info(f"Rate limit approaching, sleeping for {sleep_time:.1f}s")
                 time.sleep(sleep_time)
-                self.request_count = 0
+                self.request_count = 1  # current request after sleep
                 self.last_request_time = time.time()
 
     def get_latest_observation(self, series_id: str, days_back: int = 30) -> Optional[Dict]:
