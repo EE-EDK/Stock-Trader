@@ -39,17 +39,18 @@ class FinnhubCollector:
         @brief Implement rate limiting to stay under API limits
         @details Tracks requests per minute and sleeps if limit is reached
         """
-        self._request_count += 1
         elapsed = time.time() - self._minute_start
+        if elapsed >= 60:
+            # Reset counter after 1 minute
+            self._request_count = 0
+            self._minute_start = time.time()
+
+        self._request_count += 1
 
         if elapsed < 60 and self._request_count >= self.rate_limit:
             sleep_time = 60 - elapsed + 1
             logger.debug(f"Rate limit reached, sleeping {sleep_time:.1f}s")
             time.sleep(sleep_time)
-            self._request_count = 0
-            self._minute_start = time.time()
-        elif elapsed >= 60:
-            # Reset counter after 1 minute
             self._request_count = 1
             self._minute_start = time.time()
 
