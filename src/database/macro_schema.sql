@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS macro_indicators (
     indicator_name TEXT NOT NULL,              -- VIX, UNEMPLOYMENT, etc.
     series_id TEXT NOT NULL,                   -- FRED series ID (e.g., 'VIXCLS')
     value REAL NOT NULL,                       -- Indicator value
+    date DATE,                                 -- Date of observation
     observation_date DATE NOT NULL,            -- Date of observation
     collected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(indicator_name, observation_date)   -- One value per indicator per day

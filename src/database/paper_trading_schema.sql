@@ -4,6 +4,7 @@
 -- Main paper trades table
 CREATE TABLE IF NOT EXISTS paper_trades (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    signal_id INTEGER,
     ticker TEXT NOT NULL,
 
     -- Entry details
@@ -25,6 +26,7 @@ CREATE TABLE IF NOT EXISTS paper_trades (
 
     -- Performance metrics
     return_pct REAL,
+    pnl REAL,
     profit_loss REAL,
     days_held INTEGER,
 

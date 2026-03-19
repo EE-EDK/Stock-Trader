@@ -75,22 +75,33 @@ def calculate_ema(prices: List[float], period: int) -> Optional[float]:
     return float(ema)
 
 
+def _get_ma_cross_data(prices: List[float], short_window: int = 50, long_window: int = 200) -> Optional[tuple]:
+    """Helper to get current and previous moving averages for cross detection."""
+    if len(prices) < long_window:
+        return None
+
+    ma_short_current = calculate_moving_average(prices[-short_window:], short_window)
+    ma_long_current = calculate_moving_average(prices[-long_window:], long_window)
+    ma_short_prev = calculate_moving_average(prices[-(short_window+1):-1], short_window)
+    ma_long_prev = calculate_moving_average(prices[-(long_window+1):-1], long_window)
+
+    if None in [ma_short_current, ma_long_current, ma_short_prev, ma_long_prev]:
+        return None
+
+    return (ma_short_current, ma_long_current, ma_short_prev, ma_long_prev)
+
+
 def detect_golden_cross(prices: List[float]) -> bool:
     """
     @brief Detect bullish golden cross (50 MA crosses above 200 MA)
     @param prices List of closing prices (need at least 200)
     @return True if golden cross detected
     """
-    if len(prices) < 200:
+    data = _get_ma_cross_data(prices)
+    if not data:
         return False
 
-    ma50_current = calculate_moving_average(prices[-50:], 50)
-    ma200_current = calculate_moving_average(prices[-200:], 200)
-    ma50_prev = calculate_moving_average(prices[-51:-1], 50)
-    ma200_prev = calculate_moving_average(prices[-201:-1], 200)
-
-    if None in [ma50_current, ma200_current, ma50_prev, ma200_prev]:
-        return False
+    ma50_current, ma200_current, ma50_prev, ma200_prev = data
 
     # Golden cross: 50 MA crosses above 200 MA
     return ma50_prev <= ma200_prev and ma50_current > ma200_current
@@ -102,16 +113,11 @@ def detect_death_cross(prices: List[float]) -> bool:
     @param prices List of closing prices (need at least 200)
     @return True if death cross detected
     """
-    if len(prices) < 200:
+    data = _get_ma_cross_data(prices)
+    if not data:
         return False
 
-    ma50_current = calculate_moving_average(prices[-50:], 50)
-    ma200_current = calculate_moving_average(prices[-200:], 200)
-    ma50_prev = calculate_moving_average(prices[-51:-1], 50)
-    ma200_prev = calculate_moving_average(prices[-201:-1], 200)
-
-    if None in [ma50_current, ma200_current, ma50_prev, ma200_prev]:
-        return False
+    ma50_current, ma200_current, ma50_prev, ma200_prev = data
 
     # Death cross: 50 MA crosses below 200 MA
     return ma50_prev >= ma200_prev and ma50_current < ma200_current
@@ -129,8 +135,8 @@ def calculate_bollinger_bands(prices: List[float], period: int = 20, std_dev: fl
         return None
 
     recent_prices = prices[-period:]
-    middle_band = np.mean(recent_prices)
-    std = np.std(recent_prices)
+    middle_band = float(np.mean(recent_prices))
+    std = float(np.std(recent_prices))
 
     upper_band = middle_band + (std_dev * std)
     lower_band = middle_band - (std_dev * std)
@@ -144,12 +150,12 @@ def calculate_bollinger_bands(prices: List[float], period: int = 20, std_dev: fl
         band_position = 0.5
 
     return {
-        'upper': float(upper_band),
-        'middle': float(middle_band),
-        'lower': float(lower_band),
-        'current': float(current_price),
-        'position': float(band_position),  # 0-1, where >0.8 = overbought, <0.2 = oversold
-        'width': float(upper_band - lower_band)
+        'upper': upper_band,
+        'middle': middle_band,
+        'lower': lower_band,
+        'current': current_price,
+        'position': band_position,  # 0-1, where >0.8 = overbought, <0.2 = oversold
+        'width': upper_band - lower_band
     }
 
 

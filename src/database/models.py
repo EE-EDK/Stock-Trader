@@ -128,6 +128,7 @@ class Database:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 ticker TEXT NOT NULL,
                 mention_velocity_24h REAL,
+                price_velocity_24h REAL,
                 mention_velocity_7d REAL,
                 sentiment_velocity REAL,
                 volume_price_divergence REAL,
@@ -175,6 +176,7 @@ class Database:
                     indicator_name TEXT NOT NULL,
                     series_id TEXT NOT NULL,
                     value REAL NOT NULL,
+                    date DATE NOT NULL,
                     observation_date DATE NOT NULL,
                     collected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(indicator_name, observation_date)
