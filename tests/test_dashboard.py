@@ -25,26 +25,27 @@ def test_db(tmp_path):
     for i in range(10):
         cursor.execute("""
             INSERT INTO velocity
-            (ticker, mention_velocity_24h, price_velocity_24h, sentiment_velocity, composite_score, calculated_at)
-            VALUES (?, ?, ?, ?, ?, datetime('now', '-' || ? || ' hours'))
-        """, (f'VEL{i}', 10.0 + i, 5.0 + i, 0.5, 50.0 + i*5, i))
+            (ticker, mention_velocity_24h, sentiment_velocity, composite_score, calculated_at)
+            VALUES (?, ?, ?, ?, datetime('now', '-' || ? || ' hours'))
+        """, (f'VEL{i}', 10.0 + i, 0.5, 50.0 + i*5, i))
 
     # Insider trades
     for i in range(10):
         trade_type = 'Purchase' if i % 2 == 0 else 'Sale'
         cursor.execute("""
-            INSERT INTO insider_trades
+            INSERT INTO insiders
             (ticker, insider_name, trade_type, value, trade_date, collected_at)
             VALUES (?, ?, ?, ?, date('now', '-' || ? || ' days'), datetime('now'))
         """, (f'INS{i}', f'Insider {i}', trade_type, 100000 + i*10000, i))
 
     # Social mentions
     for i in range(10):
+        # We don't have viral_score column in mentions, we calculate it on the fly
         cursor.execute("""
-            INSERT INTO social_mentions
-            (ticker, mention_count, upvotes, viral_score, collected_at)
-            VALUES (?, ?, ?, ?, datetime('now', '-' || ? || ' hours'))
-        """, (f'SOC{i}', 100 + i*10, 50 + i*5, 75.0 + i*2, i))
+            INSERT INTO mentions
+            (ticker, mentions, upvotes, collected_at)
+            VALUES (?, ?, ?, datetime('now', '-' || ? || ' hours'))
+        """, (f'SOC{i}', 100 + i*10, 50 + i*5, i))
 
     # Signals
     signal_types = ['velocity_spike', 'insider_buy', 'technical_breakout']
@@ -62,23 +63,23 @@ def test_db(tmp_path):
             pnl = (i % 2) * 200 - 100
             cursor.execute("""
                 INSERT INTO paper_trades
-                (signal_id, ticker, entry_price, exit_price, shares, pnl, entry_date, exit_date)
-                VALUES (?, ?, ?, ?, ?, ?, datetime('now', '-' || ? || ' days'), datetime('now', '-' || ? || ' days'))
-            """, (signal_id, f'SIG{i}', 100.0, 100.0 + pnl/10, 10, pnl, i % 90, (i % 90) - 1))
+                (ticker, entry_price, exit_price, shares, profit_loss, entry_date, exit_date, conviction, signal_types, position_size)
+                VALUES (?, ?, ?, ?, ?, datetime('now', '-' || ? || ' days'), datetime('now', '-' || ? || ' days'), ?, ?, ?)
+            """, (f'SIG{i}', 100.0, 100.0 + pnl/10, 10, pnl, i % 90, (i % 90) - 1, 60.0 + i, '["test"]', 1000.0))
 
     # Macro indicators
     for i in range(30):
         cursor.execute("""
             INSERT INTO macro_indicators
-            (indicator_name, value, collected_at)
-            VALUES (?, ?, datetime('now', '-' || ? || ' days'))
-        """, ('VIX', 20.0 + i*0.5, i))
+            (indicator_name, series_id, value, observation_date)
+            VALUES (?, ?, ?, date('now', '-' || ? || ' days'))
+        """, ('VIX', 'VIXCLS', 20.0 + i*0.5, i))
 
         cursor.execute("""
             INSERT INTO macro_indicators
-            (indicator_name, value, collected_at)
-            VALUES (?, ?, datetime('now', '-' || ? || ' days'))
-        """, ('TREASURY_10Y', 4.0 + i*0.01, i))
+            (indicator_name, series_id, value, observation_date)
+            VALUES (?, ?, ?, date('now', '-' || ? || ' days'))
+        """, ('TREASURY_10Y', 'DGS10', 4.0 + i*0.01, i))
 
     conn.commit()
     yield db
@@ -238,8 +239,8 @@ class TestDashboardGeneration:
             assert 'Insider Trading Activity' in html
             assert 'Technical Analysis Deep Dive' in html
             assert 'Historical Performance' in html
-            assert 'Sentiment Breakdown' in html
-            assert 'Macro Trends' in html
+            assert 'Sentiment Analysis' in html
+            assert 'Macro Economic Trends' in html
             assert 'Social Media Insights' in html
 
             # Check for Chart.js inclusion
@@ -283,7 +284,7 @@ class TestDashboardSections:
     def test_top_movers_section(self, dashboard_generator):
         """Test top movers section generation"""
         velocity_gainers = [
-            {'ticker': 'TEST1', 'composite_score': 85.5, 'mention_velocity_24h': 15, 'price_velocity_24h': 5, 'sentiment_velocity': 0.8}
+            {'ticker': 'TEST1', 'composite_score': 85.5, 'mention_velocity_24h': 15, 'sentiment_velocity': 0.8}
         ]
         insider_trades = [
             {'ticker': 'TEST2', 'trade_type': 'Purchase', 'value': 150000, 'trade_date': '2024-01-01', 'insider_name': 'John Doe'}
@@ -336,7 +337,7 @@ class TestDashboardSections:
         assert 'Technical Analysis Deep Dive' in html
         assert 'RSI Distribution' in html
         assert 'MACD Signals' in html
-        assert 'rsiChart' in html  # Chart.js chart
+        assert 'rsiDistChart' in html  # Chart.js chart
 
     def test_performance_section(self, dashboard_generator):
         """Test historical performance section"""
@@ -344,13 +345,14 @@ class TestDashboardSections:
             {
                 'signal_type': 'velocity_spike',
                 'signal_count': 25,
+                'trades_executed': 10,
                 'win_rate': 65.0,
                 'avg_pnl': 125.50
             }
         ]
         equity_curve = [
-            {'date': '2024-01-01', 'cumulative_pnl': 500},
-            {'date': '2024-01-02', 'cumulative_pnl': 650}
+            {'date': '2024-01-01', 'total_equity': 500},
+            {'date': '2024-01-02', 'total_equity': 650}
         ]
         paper_trading_stats = {
             'total_trades': 50,
@@ -363,7 +365,7 @@ class TestDashboardSections:
 
         assert 'Historical Performance' in html
         assert 'velocity_spike' in html
-        assert 'equityChart' in html  # Chart.js chart
+        assert 'equityCurveChart' in html  # Chart.js chart
 
     def test_sentiment_breakdown(self, dashboard_generator, sample_sentiment_data):
         """Test sentiment breakdown section"""
@@ -380,8 +382,8 @@ class TestDashboardSections:
             sample_sentiment_data, sentiment_shifts
         )
 
-        assert 'Sentiment Breakdown' in html
-        assert 'sentimentChart' in html  # Chart.js chart
+        assert 'Sentiment Analysis' in html
+        assert 'sentimentDistChart' in html  # Chart.js chart
 
     def test_macro_trends(self, dashboard_generator):
         """Test macro trends section"""
@@ -400,7 +402,7 @@ class TestDashboardSections:
             vix_history, treasury_history, macro_indicators, market_assessment
         )
 
-        assert 'Macro Trends' in html
+        assert 'Macro Economic Trends' in html
         assert 'vixChart' in html  # Chart.js chart
         assert 'treasuryChart' in html  # Chart.js chart
 
