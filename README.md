@@ -888,6 +888,14 @@ MIT License - See LICENSE file for details
 
 ## 📚 Version History
 
+### v1.3.2 (2026-03-19) - Windows Compatibility & Upstream Integration
+- **Full Upstream Integration** - Merged all 8 unmerged Jules branches from upstream (rate limiting, dashboard v2, signals refactor, backtester optimizations).
+- **Windows File Locking Fixes** - Updated `PaperTradingManager` and `Backtester` tests to properly close `NamedTemporaryFile` handles before SQLite access, eliminating `PermissionError` [WinError 32].
+- **Unicode Encoding Fixes** - Enforced `utf-8` encoding in `DashboardGenerator` tests and file operations to prevent `UnicodeDecodeError` on Windows when processing reports with special characters/emojis.
+- **Database Connection Optimization** - Implemented `contextlib.closing` across `PaperTradingManager` to ensure reliable database connection teardown.
+- **Test Suite Verification** - Successfully verified all 238+ tests passing on Windows 11 environment after full integration.
+- **Schema Alignment** - Fixed test fixtures to match updated database columns (`series_id`, `rank`, `collected_at`).
+
 ### v1.3.1 (2025-12-28) - Type Safety & Bug Fixes
 - **Critical Bug Fixes** - Fixed 15 NoneType comparison errors
   - ✅ finnhub.py - prev_close None check before division
