@@ -103,6 +103,17 @@ def volume_price_divergence(mention_changes: List[float],
     return float(np.mean(divergence))
 
 
+def _normalize_score(x: float, scale: float) -> float:
+    """
+    @brief Sigmoid-like normalization to 0-100 scale
+    @param x Input value
+    @param scale Scaling factor for steepness
+    @return Normalized value between 0 and 100
+    """
+    # Clip input to prevent overflow in exp()
+    clipped = np.clip(x / scale, -500, 500)
+    return 100 / (1 + np.exp(-clipped))
+
 def composite_score(mention_vel_24h: float,
                     mention_vel_7d: float,
                     sentiment_vel: float,
@@ -126,23 +137,12 @@ def composite_score(mention_vel_24h: float,
             'divergence': 0.15
         }
 
-    def normalize(x: float, scale: float) -> float:
-        """
-        @brief Sigmoid-like normalization to 0-100 scale
-        @param x Input value
-        @param scale Scaling factor for steepness
-        @return Normalized value between 0 and 100
-        """
-        # Clip input to prevent overflow in exp()
-        clipped = np.clip(x / scale, -500, 500)
-        return 100 / (1 + np.exp(-clipped))
-
     try:
         score = (
-            weights['mention_24h'] * normalize(mention_vel_24h, 100) +
-            weights['mention_7d'] * normalize(mention_vel_7d, 10) +
-            weights['sentiment'] * normalize(sentiment_vel * 100, 20) +
-            weights['divergence'] * normalize(divergence * 50, 25)
+            weights['mention_24h'] * _normalize_score(mention_vel_24h, 100) +
+            weights['mention_7d'] * _normalize_score(mention_vel_7d, 10) +
+            weights['sentiment'] * _normalize_score(sentiment_vel * 100, 20) +
+            weights['divergence'] * _normalize_score(divergence * 50, 25)
         )
 
         return min(100, max(0, score))

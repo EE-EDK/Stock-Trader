@@ -60,9 +60,10 @@ class TestRateLimiting:
 
     def test_rate_limit_counter_reset(self):
         """Test that counter resets after 60 seconds"""
+        import time
         collector = FREDCollector(api_key="test_key")
         collector.request_count = 50
-        collector.last_request_time = datetime.now().timestamp() - 61  # 61 seconds ago
+        collector.last_request_time = time.time() - 61  # 61 seconds ago
 
         collector._rate_limit()
 
@@ -207,7 +208,7 @@ class TestCollectAllIndicators:
     def test_collect_all_partial_failure(self, mock_get_obs):
         """Test collecting when some indicators fail"""
         # Return None for some indicators (failure)
-        def side_effect(series_id):
+        def side_effect(series_id, days_back=30):
             if series_id == 'VIXCLS':
                 return {
                     'series_id': 'VIXCLS',

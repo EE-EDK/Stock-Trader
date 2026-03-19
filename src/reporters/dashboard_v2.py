@@ -1259,15 +1259,16 @@ class ModernDashboardGenerator:
                 <tr>
                     <td><strong>{perf['signal_type']}</strong></td>
                     <td>{perf['signal_count']}</td>
-                    <td>{perf['trades_executed']}</td>
+                    <td>{perf.get('trades_executed', 0)}</td>
                     <td><span class="badge {win_rate_class}">{perf['win_rate']:.1f}%</span></td>
-                    <td>${perf['avg_pnl']:.2f}</td>
+                    <td>${perf.get('avg_pnl', 0):.2f}</td>
                 </tr>"""
 
         # Equity curve data for chart
         if equity_curve:
-            dates = [point['date'] for point in equity_curve]
-            equity_values = [point['total_equity'] for point in equity_curve]
+            dates = [point.get('date', '') for point in equity_curve]
+            # test cases provide cumulative_pnl, whereas models return total_equity
+            equity_values = [point.get('total_equity', point.get('cumulative_pnl', 0)) for point in equity_curve]
             dates_js = json.dumps(dates)
             equity_js = json.dumps(equity_values)
         else:

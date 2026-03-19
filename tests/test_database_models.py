@@ -47,7 +47,7 @@ def sample_insider_data(test_db):
     for i in range(20):
         trade_type = 'Purchase' if i % 2 == 0 else 'Sale'
         cursor.execute("""
-            INSERT INTO insider_trades
+            INSERT INTO insiders
             (ticker, insider_name, trade_type, value, trade_date, collected_at)
             VALUES (?, ?, ?, ?, date('now', '-' || ? || ' days'), datetime('now'))
         """, (f'TICK{i}', f'Insider {i}', trade_type, 100000 + i*10000, i))
@@ -65,10 +65,10 @@ def sample_social_data(test_db):
     # Insert sample social mentions
     for i in range(15):
         cursor.execute("""
-            INSERT INTO social_mentions
-            (ticker, mention_count, upvotes, viral_score, collected_at)
+            INSERT INTO mentions
+            (ticker, mentions, upvotes, rank, collected_at)
             VALUES (?, ?, ?, ?, datetime('now', '-' || ? || ' hours'))
-        """, (f'SOC{i}', 100 + i*10, 50 + i*5, 75.0 + i*2, i))
+        """, (f'SOC{i}', 100 + i*10, 50 + i*5, 1, i))
 
     conn.commit()
     return test_db
@@ -96,8 +96,8 @@ def sample_signal_data(test_db):
             pnl = (i % 2) * 200 - 100  # Alternating wins/losses
             cursor.execute("""
                 INSERT INTO paper_trades
-                (signal_id, ticker, entry_price, exit_price, shares, pnl, entry_date, exit_date)
-                VALUES (?, ?, ?, ?, ?, ?, datetime('now', '-' || ? || ' days'), datetime('now', '-' || ? || ' days'))
+                (signal_id, ticker, entry_price, exit_price, shares, pnl, entry_date, exit_date, conviction, signal_types, position_size)
+                VALUES (?, ?, ?, ?, ?, ?, datetime('now', '-' || ? || ' days'), datetime('now', '-' || ? || ' days'), 50, '[]', 1000)
             """, (signal_id, f'SIG{i}', 100.0, 100.0 + pnl/10, 10, pnl, i % 90, (i % 90) - 1))
 
     conn.commit()
@@ -231,9 +231,9 @@ class TestMacroIndicatorQueries:
         for i in range(30):
             cursor.execute("""
                 INSERT INTO macro_indicators
-                (indicator_name, value, collected_at)
-                VALUES (?, ?, datetime('now', '-' || ? || ' days'))
-            """, ('VIX', 20.0 + i*0.5, i))
+                (indicator_name, series_id, value, date, observation_date, collected_at)
+                VALUES (?, ?, ?, ?, ?, datetime('now', '-' || ? || ' days'))
+            """, ('VIX', 'VIXCLS', 20.0 + i*0.5, f"2023-01-{i+1:02d}", f"2023-01-{i+1:02d}", i))
 
         conn.commit()
 
