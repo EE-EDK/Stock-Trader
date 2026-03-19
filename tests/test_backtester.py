@@ -114,10 +114,8 @@ class TestGetHistoricalPrice:
 
         # Insert test prices
         test_date = datetime(2025, 1, 15)
-        cursor.execute("INSERT INTO prices VALUES (?, ?, ?)",
-                      ('AAPL', 150.0, test_date))
-        cursor.execute("INSERT INTO prices VALUES (?, ?, ?)",
-                      ('AAPL', 155.0, test_date + timedelta(days=1)))
+        cursor.execute("INSERT INTO prices VALUES (?, ?, ?)", ('AAPL', 150.0, test_date.strftime('%Y-%m-%d %H:%M:%S')))
+        cursor.execute("INSERT INTO prices VALUES (?, ?, ?)", ('AAPL', 155.0, (test_date + timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')))
 
         conn.commit()
         conn.close()
@@ -181,8 +179,7 @@ class TestSimulateTrade:
         base_date = datetime(2025, 1, 1)
         prices = [100, 105, 110, 115, 120, 125, 130, 135, 140, 145]  # Uptrend
         for i, price in enumerate(prices):
-            cursor.execute("INSERT INTO prices VALUES (?, ?, ?)",
-                          ('AAPL', price, base_date + timedelta(days=i)))
+            cursor.execute("INSERT INTO prices VALUES (?, ?, ?)", ('AAPL', price, (base_date + timedelta(days=i)).strftime('%Y-%m-%d %H:%M:%S')))
 
         conn.commit()
         conn.close()
@@ -292,10 +289,10 @@ class TestGetHistoricalSignals:
         # Insert test signals
         base_date = datetime(2025, 1, 1)
         signals = [
-            ('AAPL', 80, '["velocity_spike"]', 150.0, base_date),
-            ('TSLA', 65, '["insider_buy"]', 200.0, base_date + timedelta(days=1)),
-            ('MSFT', 90, '["multi_signal"]', 300.0, base_date + timedelta(days=2)),
-            ('AMD', 45, '["weak_signal"]', 100.0, base_date + timedelta(days=3)),  # Low conviction
+            ('AAPL', 80, '["velocity_spike"]', 150.0, base_date.strftime('%Y-%m-%d %H:%M:%S')),
+            ('TSLA', 65, '["insider_buy"]', 200.0, (base_date + timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')),
+            ('MSFT', 90, '["multi_signal"]', 300.0, (base_date + timedelta(days=2)).strftime('%Y-%m-%d %H:%M:%S')),
+            ('AMD', 45, '["weak_signal"]', 100.0, (base_date + timedelta(days=3)).strftime('%Y-%m-%d %H:%M:%S')),  # Low conviction
         ]
 
         for signal in signals:
@@ -443,20 +440,16 @@ class TestRunBacktest:
         base_date = datetime(2025, 1, 1)
 
         # Signal for AAPL
-        cursor.execute("INSERT INTO signals VALUES (?, ?, ?, ?, ?)",
-                      ('AAPL', 80, '["test"]', 100.0, base_date))
+        cursor.execute("INSERT INTO signals VALUES (?, ?, ?, ?, ?)", ('AAPL', 80, '["test"]', 100.0, base_date.strftime('%Y-%m-%d %H:%M:%S')))
 
         # Price series for AAPL (goes up 25% over 10 days - hits take profit)
         for i in range(15):
             price = 100 + (i * 2)  # 100, 102, 104... 128
-            cursor.execute("INSERT INTO prices VALUES (?, ?, ?)",
-                          ('AAPL', price, base_date + timedelta(days=i)))
+            cursor.execute("INSERT INTO prices VALUES (?, ?, ?)", ('AAPL', price, (base_date + timedelta(days=i)).strftime('%Y-%m-%d %H:%M:%S')))
 
         # SPY for benchmark
-        cursor.execute("INSERT INTO prices VALUES (?, ?, ?)",
-                      ('SPY', 400.0, base_date))
-        cursor.execute("INSERT INTO prices VALUES (?, ?, ?)",
-                      ('SPY', 420.0, base_date + timedelta(days=30)))
+        cursor.execute("INSERT INTO prices VALUES (?, ?, ?)", ('SPY', 400.0, base_date.strftime('%Y-%m-%d %H:%M:%S')))
+        cursor.execute("INSERT INTO prices VALUES (?, ?, ?)", ('SPY', 420.0, (base_date + timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S')))
 
         conn.commit()
         conn.close()
