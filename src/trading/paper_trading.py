@@ -115,7 +115,7 @@ class PaperTradingManager:
                 (ticker, entry_date, entry_price, shares, conviction, signal_types,
                  position_size, stop_loss, target_price, status)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')
-            """, (ticker, entry_date, entry_price, shares, conviction,
+            """, (ticker, entry_date.isoformat(), entry_price, shares, conviction,
                   json.dumps(signal_types), actual_position_size, stop_loss, target_price))
 
             trade_id = cursor.lastrowid
@@ -141,7 +141,7 @@ class PaperTradingManager:
         cursor.execute("""
             SELECT id FROM paper_trades
             WHERE ticker = ? AND entry_date = ?
-        """, (ticker, entry_date))
+        """, (ticker, entry_date.isoformat()))
         exists = cursor.fetchone() is not None
         conn.close()
         return exists
@@ -179,7 +179,7 @@ class PaperTradingManager:
             trade_id, ticker, entry_date_str, entry_price, shares, stop_loss, target_price = trade
 
             # Get current price (extract from dict)
-            price_data = current_prices.get(ticker)
+            price_data = current_prices.get(ticker, {})
             if not price_data or not isinstance(price_data, dict) or 'price' not in price_data:
                 logger.warning(f"No current price for {ticker}, skipping update")
                 continue
@@ -195,7 +195,7 @@ class PaperTradingManager:
                     INSERT OR REPLACE INTO paper_trade_snapshots
                     (trade_id, snapshot_date, current_price, unrealized_pnl, unrealized_pct)
                     VALUES (?, ?, ?, ?, ?)
-                """, (trade_id, current_date, current_price, unrealized_pnl, unrealized_pct))
+                """, (trade_id, current_date.isoformat(), current_price, unrealized_pnl, unrealized_pct))
             except Exception as e:
                 logger.error(f"Failed to create snapshot for trade {trade_id}: {e}")
 
@@ -230,7 +230,7 @@ class PaperTradingManager:
             SET exit_date = ?, exit_price = ?, exit_reason = ?, status = 'closed',
                 profit_loss = ?, return_pct = ?, days_held = ?
             WHERE id = ?
-        """, (exit_date, exit_price, exit_reason, profit_loss, return_pct, days_held, trade_id))
+        """, (exit_date.isoformat() if exit_date else None, exit_price, exit_reason, profit_loss, return_pct, days_held, trade_id))
 
         logger.info(f"Closed paper trade {trade_id}: {exit_reason} | "
                    f"P/L: ${profit_loss:.2f} ({return_pct:+.1f}%) | {days_held} days")
@@ -255,7 +255,7 @@ class PaperTradingManager:
             FROM signals
             WHERE created_at >= ? AND conviction_score >= ?
             ORDER BY created_at ASC
-        """, (cutoff_date, self.min_conviction))
+        """, (cutoff_date.isoformat(), self.min_conviction))
 
         signals = cursor.fetchall()
         conn.close()
@@ -302,7 +302,7 @@ class PaperTradingManager:
             WHERE ticker = ? AND collected_at >= ? AND collected_at < ?
             ORDER BY collected_at ASC
             LIMIT 1
-        """, (ticker, date, date + timedelta(days=1)))
+        """, (ticker, date.isoformat(), (date + timedelta(days=1)).isoformat()))
 
         result = cursor.fetchone()
         conn.close()
@@ -401,7 +401,7 @@ class PaperTradingManager:
             WHERE status = 'closed' AND exit_date >= ?
             ORDER BY exit_date DESC
             LIMIT 10
-        """, (cutoff_date,))
+        """, (cutoff_date.isoformat(),))
 
         rows = cursor.fetchall()
         conn.close()
