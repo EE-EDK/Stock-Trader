@@ -37,3 +37,12 @@ pyinstaller main.spec
 - SQLite for persistence, never flat files for time-series data
 - Rate limiting is mandatory for all API collectors
 - Tests use pytest with fixtures
+
+## TODO
+- [ ] Python 3.8+, SQLite, Flask (dashboard server)
+- [ ] PyQt5 (GUI), PyInstaller (distribution)
+- [ ] pandas, numpy, yfinance, reportlab
+- [ ] All API keys go in `config/config.yaml` or `.env` — never hardcode
+- [ ] SQLite for persistence, never flat files for time-series data
+- [ ] Rate limiting is mandatory for all API collectors
+- [ ] Tests use pytest with fixtures

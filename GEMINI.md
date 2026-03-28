@@ -18,3 +18,10 @@ This document extends the root `ENGINEERING-PROJECTS/GEMINI.md` for this project
 - VADER sentiment analysis runs locally (offline) — no external NLP API dependencies.
 - Paper trading mode must be used for all testing — never connect to live brokers.
 - Dashboard HTML reports are generated artifacts (gitignored via `*.html` pattern, except `web/templates/`).
+
+## TODO
+- [ ] Run `pytest` before any commit touching signal logic or collectors.
+- [ ] Backtester results must be reproducible given the same database state.
+- [ ] VADER sentiment analysis runs locally (offline) — no external NLP API dependencies.
+- [ ] Paper trading mode must be used for all testing — never connect to live brokers.
+- [ ] Dashboard HTML reports are generated artifacts (gitignored via `*.html` pattern, except `web/templates/`).
