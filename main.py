@@ -281,6 +281,15 @@ def run_pipeline(config: dict, skip_email: bool = False):
                 elif mentions:
                     db.insert_mentions(mentions)
                     logger.info(f"  [OK] ApeWisdom: {len(mentions)} tickers collected")
+                    
+                    # Update tracked_tickers for subsequent collectors in THIS run
+                    # Filter for only tickers with enough volume/activity
+                    new_tickers = [m['ticker'] for m in mentions if m.get('mentions', 0) > 0]
+                    if new_tickers:
+                        # Combine with existing if any
+                        tracked_tickers = list(set(tracked_tickers) | set(new_tickers))
+                        top_tickers = [m['ticker'] for m in mentions[:20]]
+                        logger.info(f"  [OK] Tracked tickers updated: now tracking {len(tracked_tickers)} stocks")
                 else:
                     logger.warning("  [WARN] ApeWisdom: No data collected")
             
@@ -539,7 +548,7 @@ def run_pipeline(config: dict, skip_email: bool = False):
         logger.info(f"  - Top signal: {signals[0].ticker} (conviction: {signals[0].conviction_score:.0f})")
         logger.info("  - Top 5 signals:")
         for s in signals[:5]:
-            logger.info(f"    • {s.ticker}: {s.conviction_score:.0f} - {s.notes}")
+            logger.info(f"    - {s.ticker}: {s.conviction_score:.0f} - {s.notes}")
 
     logger.info("=" * 60)
 

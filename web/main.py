@@ -84,8 +84,9 @@ async def dashboard(request: Request):
     path = get_latest_dashboard_path()
     has_report = path is not None and path.exists()
     return templates.TemplateResponse(
-        "wrap_dashboard.html",
-        {"request": request, "has_report": has_report},
+        request=request,
+        name="wrap_dashboard.html",
+        context={"has_report": has_report},
     )
 
 
@@ -100,23 +101,23 @@ async def api_dashboard_latest():
 
 @app.get("/run", response_class=HTMLResponse)
 async def run_page(request: Request):
-    return templates.TemplateResponse("run.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="run.html")
 
 
 @app.get("/config", response_class=HTMLResponse)
 async def config_page(request: Request):
     config = get_config()
-    return templates.TemplateResponse("config.html", {"request": request, "config": config})
+    return templates.TemplateResponse(request=request, name="config.html", context={"config": config})
 
 
 @app.get("/utilities", response_class=HTMLResponse)
 async def utilities_page(request: Request):
-    return templates.TemplateResponse("utilities.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="utilities.html")
 
 
 @app.get("/backtest", response_class=HTMLResponse)
 async def backtest_page(request: Request):
-    return templates.TemplateResponse("backtest.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="backtest.html")
 
 
 # ---------- API: Config ----------

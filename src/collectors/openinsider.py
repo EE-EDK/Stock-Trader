@@ -133,17 +133,18 @@ class OpenInsiderCollector:
                         continue
 
                     # Parse trade data with flexible column handling
+                    # Updated indices for 2026 website structure (17 columns total)
                     trade_data = {
                         'ticker': ticker,
                         'filing_date': self._parse_date(cells[1].text.strip()) if len(cells) > 1 else datetime.now(),
                         'trade_date': self._parse_date(cells[2].text.strip()) if len(cells) > 2 else datetime.now(),
-                        'insider_name': cells[4].text.strip() if len(cells) > 4 else '',
-                        'insider_title': cells[5].text.strip() if len(cells) > 5 else '',
-                        'trade_type': cells[6].text.strip() if len(cells) > 6 else '',  # P = Purchase, S = Sale
-                        'price': self._parse_float(cells[7].text) if len(cells) > 7 else 0.0,
-                        'shares': self._parse_int(cells[8].text) if len(cells) > 8 else 0,
-                        'value': self._parse_int(cells[9].text) if len(cells) > 9 else 0,
-                        'ownership_change_pct': self._parse_float(cells[10].text) if len(cells) > 10 else 0.0,
+                        'insider_name': cells[5].text.strip() if not is_cluster and len(cells) > 5 else '',
+                        'insider_title': cells[6].text.strip() if not is_cluster and len(cells) > 6 else '',
+                        'trade_type': cells[7].text.strip() if len(cells) > 7 else '',  # P - Purchase
+                        'price': self._parse_float(cells[8].text) if len(cells) > 8 else 0.0,
+                        'shares': self._parse_int(cells[9].text) if len(cells) > 9 else 0,
+                        'value': self._parse_int(cells[12].text) if len(cells) > 12 else 0,
+                        'ownership_change_pct': self._parse_float(cells[11].text) if len(cells) > 11 else 0.0,
                         'is_cluster_buy': is_cluster,
                         'collected_at': datetime.now()
                     }
@@ -152,8 +153,11 @@ class OpenInsiderCollector:
                     if row_idx == 0:
                         logger.debug(f"First row parsed: {ticker}, type={trade_data['trade_type']}, value={trade_data['value']}")
 
-                    # Only collect purchases (P = Purchase)
-                    if trade_data['trade_type'] == 'P' and trade_data['value'] > 0:
+                    # Only collect purchases (P - Purchase)
+                    trade_type_full = trade_data['trade_type'].upper()
+                    if ('P' in trade_type_full or 'PURCHASE' in trade_type_full) and trade_data['value'] > 0:
+                        # Normalize trade_type to 'P' for database consistency
+                        trade_data['trade_type'] = 'P'
                         results.append(trade_data)
 
                 except (IndexError, ValueError, AttributeError) as e:

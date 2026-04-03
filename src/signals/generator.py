@@ -156,7 +156,8 @@ class SignalGenerator:
             conviction = min(100, conviction)
 
             # Generate signal if triggers exist and conviction meets minimum
-            if triggers and conviction >= 40:
+            min_sig_conviction = self.thresholds.get("minimum_conviction", 40)
+            if triggers and conviction >= min_sig_conviction:
                 notes_text = self._generate_notes(
                     ticker, vel, insiders, triggers, tech, sentiment
                 )

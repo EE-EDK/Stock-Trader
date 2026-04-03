@@ -571,7 +571,7 @@ class Database:
         cursor.execute("""
             SELECT ticker, insider_name, trade_type, shares, value, trade_date, filing_date
             FROM insiders
-            WHERE trade_date >= date('now', '-' || ? || ' days')
+            WHERE date(trade_date) >= date('now', '-' || ? || ' days')
             ORDER BY value DESC
             LIMIT ?
         """, (days, limit))
@@ -597,17 +597,17 @@ class Database:
         cursor.execute("""
             SELECT trade_type, COUNT(*) as count
             FROM insiders
-            WHERE trade_date >= date('now', '-' || ? || ' days')
+            WHERE date(trade_date) >= date('now', '-' || ? || ' days')
             GROUP BY trade_type
         """, (days,))
 
         result = {'buy': 0, 'sell': 0}
         for row in cursor.fetchall():
             trade_type = row[0].lower() if row[0] else 'unknown'
-            if 'buy' in trade_type or 'purchase' in trade_type:
-                result['buy'] = row[1]
-            elif 'sell' in trade_type or 'sale' in trade_type:
-                result['sell'] = row[1]
+            if 'buy' in trade_type or 'purchase' in trade_type or trade_type == 'p':
+                result['buy'] += row[1]
+            elif 'sell' in trade_type or 'sale' in trade_type or trade_type == 's':
+                result['sell'] += row[1]
         return result
 
     def get_top_social_mentions(self, limit: int = 10, hours: int = 24) -> List[Dict[str, Any]]:

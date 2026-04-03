@@ -1036,7 +1036,8 @@ class ModernDashboardGenerator:
         # Top 5 insider activity
         insider_html = ""
         for i, trade in enumerate(insider_unique, 1):
-            trade_class = "positive" if 'buy' in trade['trade_type'].lower() or 'purchase' in trade['trade_type'].lower() else "negative"
+            trade_type_lower = trade['trade_type'].lower()
+            trade_class = "positive" if 'buy' in trade_type_lower or 'purchase' in trade_type_lower or trade_type_lower == 'p' else "negative"
             insider_html += f"""
                 <div class="mover-item">
                     <span class="rank">#{i}</span>
@@ -1096,7 +1097,8 @@ class ModernDashboardGenerator:
         # Build trades table
         trades_html = ""
         for trade in insider_trades[:10]:
-            trade_type_class = "positive" if 'buy' in trade['trade_type'].lower() or 'purchase' in trade['trade_type'].lower() else "negative"
+            trade_type_lower = trade['trade_type'].lower()
+            trade_type_class = "positive" if 'buy' in trade_type_lower or 'purchase' in trade_type_lower or trade_type_lower == 'p' else "negative"
             trades_html += f"""
                 <tr>
                     <td><strong>{trade['ticker']}</strong></td>
