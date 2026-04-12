@@ -25,3 +25,7 @@ This document extends the root `ENGINEERING-PROJECTS/GEMINI.md` for this project
 - [ ] VADER sentiment analysis runs locally (offline) — no external NLP API dependencies.
 - [ ] Paper trading mode must be used for all testing — never connect to live brokers.
 - [ ] Dashboard HTML reports are generated artifacts (gitignored via `*.html` pattern, except `web/templates/`).
+
+## Conversation History Archive
+
+Past AI conversations (217 total) are archived at the workspace root: `.claude/conversation-history/`. Search `index.json` by keyword or browse `index.md` for topic-grouped context on prior decisions, approaches, and project history.
