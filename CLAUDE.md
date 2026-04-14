@@ -50,3 +50,8 @@ pyinstaller main.spec
 ## Conversation History Archive
 
 Past AI conversations (217 total) are archived at the workspace root: `.claude/conversation-history/`. Search `index.json` by keyword or browse `index.md` for topic-grouped context on prior decisions, approaches, and project history.
+
+
+## Auto-Commit & Push
+
+After completing each task, automatically commit all relevant changes with a descriptive message and push to `origin main`. Report what was committed. This is standing authorization — no confirmation needed.
