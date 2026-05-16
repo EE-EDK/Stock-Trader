@@ -70,3 +70,7 @@ type_check_report.txt
 
 # GUI settings (user-specific)
 .gui_settings.yaml
+
+# Ephemeral graph outputs (root GEMINI — do not commit)
+graphify-out/
+**/graphify-out/
