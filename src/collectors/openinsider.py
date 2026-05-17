@@ -69,6 +69,97 @@ class OpenInsiderCollector:
         logger.info(f"Scraping insider purchases from screener")
         return self._scrape_table(url, is_cluster=False)
 
+    # Default hardcoded column indices (fallback when header detection fails)
+    _DEFAULT_COLUMN_MAP: Dict[str, int] = {
+        'filing_date': 1,
+        'trade_date': 2,
+        'ticker': 3,
+        'insider_name': 5,
+        'insider_title': 6,
+        'trade_type': 7,
+        'price': 8,
+        'shares': 9,
+        'ownership_change_pct': 11,
+        'value': 12,
+    }
+
+    # Mapping from canonical field names to possible header text patterns
+    _HEADER_PATTERNS: Dict[str, List[str]] = {
+        'filing_date': ['filing date', 'filing\ndate', 'filingdate'],
+        'trade_date': ['trade date', 'trade\ndate', 'tradedate'],
+        'ticker': ['ticker'],
+        'insider_name': ['insider name', 'insider\nname', 'insidername', 'owner name', 'owner\nname'],
+        'insider_title': ['title'],
+        'trade_type': ['trade type', 'trade\ntype', 'tradetype', 'type'],
+        'price': ['price'],
+        'shares': ['qty', 'shares', 'quantity'],
+        'ownership_change_pct': ['owned', 'δown', 'own change', 'ownchange', '%own'],
+        'value': ['value', 'value (usd)', 'value(usd)'],
+    }
+
+    def _detect_column_map(self, table) -> Dict[str, int]:
+        """
+        @brief Detect column indices by reading the table header row.
+        @param table BeautifulSoup table element
+        @return Mapping from canonical field name to column index.
+                Falls back to _DEFAULT_COLUMN_MAP if detection fails.
+        """
+        # Try <thead> first, then fall back to first <tr>
+        header_row = None
+        thead = table.find('thead')
+        if thead:
+            header_row = thead.find('tr')
+        if not header_row:
+            first_row = table.find('tr')
+            if first_row and first_row.find('th'):
+                header_row = first_row
+
+        if not header_row:
+            logger.warning("OpenInsider: no header row detected, using hardcoded column indices")
+            return dict(self._DEFAULT_COLUMN_MAP)
+
+        header_cells = header_row.find_all(['th', 'td'])
+        if not header_cells:
+            logger.warning("OpenInsider: header row has no cells, using hardcoded column indices")
+            return dict(self._DEFAULT_COLUMN_MAP)
+
+        # Normalize header text: lowercase, collapse whitespace
+        headers = []
+        for cell in header_cells:
+            text = cell.get_text(separator=' ').strip().lower()
+            # Collapse multiple spaces / newlines into single space
+            text = ' '.join(text.split())
+            headers.append(text)
+
+        logger.debug(f"OpenInsider detected headers ({len(headers)} cols): {headers}")
+
+        # Build the mapping
+        column_map: Dict[str, int] = {}
+        for field, patterns in self._HEADER_PATTERNS.items():
+            for idx, header_text in enumerate(headers):
+                if any(pat in header_text for pat in patterns):
+                    column_map[field] = idx
+                    break
+
+        # Validate: we need at least ticker, trade_date, and value to be useful
+        required = {'ticker', 'trade_date', 'value'}
+        missing = required - set(column_map.keys())
+        if missing:
+            logger.warning(
+                f"OpenInsider: header detection missing required columns {missing}, "
+                f"falling back to hardcoded indices. Detected: {column_map}"
+            )
+            return dict(self._DEFAULT_COLUMN_MAP)
+
+        # Fill any non-required missing fields from defaults
+        for field, default_idx in self._DEFAULT_COLUMN_MAP.items():
+            if field not in column_map:
+                logger.debug(f"OpenInsider: column '{field}' not found in headers, using default index {default_idx}")
+                column_map[field] = default_idx
+
+        logger.info(f"OpenInsider: header detection successful, mapped {len(column_map)} columns")
+        return column_map
+
     def _scrape_table(self, url: str, is_cluster: bool = False) -> List[Dict]:
         """
         @brief Parse insider trading table from OpenInsider page
@@ -91,6 +182,9 @@ class OpenInsiderCollector:
                 logger.warning(f"No table found at {url}")
                 return []
 
+            # Detect column layout from header row
+            col = self._detect_column_map(table)
+
             results = []
             rows = table.find_all('tr')[1:]  # Skip header row
 
@@ -105,17 +199,17 @@ class OpenInsiderCollector:
                     continue
 
                 try:
-                    # Extract ticker from link - try multiple columns as structure may have changed
+                    # Extract ticker using detected column index
                     ticker = None
                     ticker_link = None
 
-                    # Try standard location first (column 3)
-                    if len(cells) > 3:
-                        ticker_link = cells[3].find('a')
+                    ticker_idx = col.get('ticker', 3)
+                    if len(cells) > ticker_idx:
+                        ticker_link = cells[ticker_idx].find('a')
                         if ticker_link:
                             ticker = ticker_link.text.strip().upper()
 
-                    # If not found, search all cells for a ticker-like link
+                    # If not found at detected index, search all cells for a ticker-like link
                     if not ticker:
                         for cell in cells[:8]:  # Check first 8 columns
                             link = cell.find('a')
@@ -132,22 +226,28 @@ class OpenInsiderCollector:
                             logger.debug(f"No ticker found in row {row_idx}")
                         continue
 
-                    # Parse trade data with flexible column handling
-                    # Updated indices for 2026 website structure (17 columns total)
+                    # Parse trade data using detected column mapping
                     trade_data = {
                         'ticker': ticker,
-                        'filing_date': self._parse_date(cells[1].text.strip()) if len(cells) > 1 else datetime.now(),
-                        'trade_date': self._parse_date(cells[2].text.strip()) if len(cells) > 2 else datetime.now(),
-                        'insider_name': cells[5].text.strip() if not is_cluster and len(cells) > 5 else '',
-                        'insider_title': cells[6].text.strip() if not is_cluster and len(cells) > 6 else '',
-                        'trade_type': cells[7].text.strip() if len(cells) > 7 else '',  # P - Purchase
-                        'price': self._parse_float(cells[8].text) if len(cells) > 8 else 0.0,
-                        'shares': self._parse_int(cells[9].text) if len(cells) > 9 else 0,
-                        'value': self._parse_int(cells[12].text) if len(cells) > 12 else 0,
-                        'ownership_change_pct': self._parse_float(cells[11].text) if len(cells) > 11 else 0.0,
+                        'filing_date': self._parse_date(cells[col['filing_date']].text.strip()) if len(cells) > col['filing_date'] else None,
+                        'trade_date': self._parse_date(cells[col['trade_date']].text.strip()) if len(cells) > col['trade_date'] else None,
+                        'insider_name': cells[col['insider_name']].text.strip() if not is_cluster and len(cells) > col['insider_name'] else '',
+                        'insider_title': cells[col['insider_title']].text.strip() if not is_cluster and len(cells) > col['insider_title'] else '',
+                        'trade_type': cells[col['trade_type']].text.strip() if len(cells) > col['trade_type'] else '',
+                        'price': self._parse_float(cells[col['price']].text) if len(cells) > col['price'] else 0.0,
+                        'shares': self._parse_int(cells[col['shares']].text) if len(cells) > col['shares'] else 0,
+                        'value': self._parse_int(cells[col['value']].text) if len(cells) > col['value'] else 0,
+                        'ownership_change_pct': self._parse_float(cells[col['ownership_change_pct']].text) if len(cells) > col['ownership_change_pct'] else 0.0,
                         'is_cluster_buy': is_cluster,
                         'collected_at': datetime.now()
                     }
+
+                    # Skip rows where trade_date could not be parsed —
+                    # a None trade_date would otherwise appear as "today",
+                    # triggering false signals on malformed historical rows.
+                    if trade_data['trade_date'] is None:
+                        logger.debug(f"Skipping row {row_idx}: unparseable trade_date")
+                        continue
 
                     # Debug first parsed row
                     if row_idx == 0:
@@ -174,18 +274,18 @@ class OpenInsiderCollector:
             logger.error(f"Unexpected error scraping OpenInsider: {e}")
             return []
 
-    def _parse_date(self, date_str: str) -> datetime:
+    def _parse_date(self, date_str: str) -> Optional[datetime]:
         """
         @brief Parse date string from OpenInsider
         @param date_str Date string in YYYY-MM-DD format
-        @return datetime object
+        @return datetime object, or None if parsing fails
         """
         try:
             cleaned = date_str.strip()
             return datetime.strptime(cleaned, '%Y-%m-%d')
         except (ValueError, AttributeError):
             logger.debug(f"Could not parse date: {date_str}")
-            return datetime.now()
+            return None
 
     def _parse_float(self, value_str: str) -> float:
         """

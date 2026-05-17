@@ -5,7 +5,7 @@
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Optional
 import time
 
@@ -55,26 +55,26 @@ class YFinanceCollector:
 
                 results.append({
                     'ticker': ticker_symbol,
-                    'company_name': info.get('longName', ''),
-                    'sector': info.get('sector', ''),
-                    'industry': info.get('industry', ''),
-                    'market_cap': info.get('marketCap', 0),
-                    'pe_ratio': info.get('trailingPE', 0),
-                    'forward_pe': info.get('forwardPE', 0),
-                    'peg_ratio': info.get('pegRatio', 0),
-                    'price_to_book': info.get('priceToBook', 0),
-                    'dividend_yield': info.get('dividendYield', 0),
-                    'beta': info.get('beta', 0),
-                    'fifty_day_avg': info.get('fiftyDayAverage', 0),
-                    'two_hundred_day_avg': info.get('twoHundredDayAverage', 0),
-                    'analyst_recommendation': info.get('recommendationKey', 'none'),
-                    'target_price': info.get('targetMeanPrice', 0),
-                    'num_analyst_opinions': info.get('numberOfAnalystOpinions', 0),
+                    'company_name': (info.get('longName') or ''),
+                    'sector': (info.get('sector') or ''),
+                    'industry': (info.get('industry') or ''),
+                    'market_cap': (info.get('marketCap') or 0),
+                    'pe_ratio': (info.get('trailingPE') or 0),
+                    'forward_pe': (info.get('forwardPE') or 0),
+                    'peg_ratio': (info.get('pegRatio') or 0),
+                    'price_to_book': (info.get('priceToBook') or 0),
+                    'dividend_yield': (info.get('dividendYield') or 0),
+                    'beta': (info.get('beta') or 0),
+                    'fifty_day_avg': (info.get('fiftyDayAverage') or 0),
+                    'two_hundred_day_avg': (info.get('twoHundredDayAverage') or 0),
+                    'analyst_recommendation': (info.get('recommendationKey') or 'none'),
+                    'target_price': (info.get('targetMeanPrice') or 0),
+                    'num_analyst_opinions': (info.get('numberOfAnalystOpinions') or 0),
                     'earnings_date': self._parse_earnings_date(info.get('earningsTimestamp')),
                     'collected_at': datetime.now()
                 })
 
-                logger.debug(f"Collected info for {ticker_symbol}: PE={info.get('trailingPE')}, MCap=${info.get('marketCap', 0):,}")
+                logger.debug(f"Collected info for {ticker_symbol}: PE={info.get('trailingPE')}, MCap=${(info.get('marketCap') or 0):,}")
 
             except Exception as e:
                 logger.error(f"Error collecting data for {ticker_symbol}: {e}")
@@ -97,15 +97,15 @@ class YFinanceCollector:
                 info = ticker.info
 
                 # Get recommendations
-                recommendation = info.get('recommendationKey', 'none')
-                target_high = info.get('targetHighPrice', 0)
-                target_low = info.get('targetLowPrice', 0)
-                target_mean = info.get('targetMeanPrice', 0)
-                current_price = info.get('currentPrice', 0)
+                recommendation = (info.get('recommendationKey') or 'none')
+                target_high = (info.get('targetHighPrice') or 0)
+                target_low = (info.get('targetLowPrice') or 0)
+                target_mean = (info.get('targetMeanPrice') or 0)
+                current_price = (info.get('currentPrice') or 0)
 
                 # Calculate upside potential
                 upside = 0
-                if current_price is not None and current_price > 0 and target_mean is not None and target_mean > 0:
+                if current_price > 0 and target_mean > 0:
                     upside = ((target_mean - current_price) / current_price) * 100
 
                 results.append({
@@ -116,7 +116,7 @@ class YFinanceCollector:
                     'target_mean': target_mean,
                     'current_price': current_price,
                     'upside_potential': round(upside, 2),
-                    'num_analysts': info.get('numberOfAnalystOpinions', 0),
+                    'num_analysts': (info.get('numberOfAnalystOpinions') or 0),
                     'collected_at': datetime.now()
                 })
 
@@ -142,20 +142,20 @@ class YFinanceCollector:
 
                 results.append({
                     'ticker': ticker_symbol,
-                    'revenue': info.get('totalRevenue', 0),
-                    'gross_profit': info.get('grossProfits', 0),
-                    'ebitda': info.get('ebitda', 0),
-                    'net_income': info.get('netIncomeToCommon', 0),
-                    'earnings_growth': info.get('earningsGrowth', 0),
-                    'revenue_growth': info.get('revenueGrowth', 0),
-                    'operating_margin': info.get('operatingMargins', 0),
-                    'profit_margin': info.get('profitMargins', 0),
-                    'return_on_equity': info.get('returnOnEquity', 0),
-                    'return_on_assets': info.get('returnOnAssets', 0),
-                    'debt_to_equity': info.get('debtToEquity', 0),
-                    'current_ratio': info.get('currentRatio', 0),
-                    'quick_ratio': info.get('quickRatio', 0),
-                    'free_cash_flow': info.get('freeCashflow', 0),
+                    'revenue': (info.get('totalRevenue') or 0),
+                    'gross_profit': (info.get('grossProfits') or 0),
+                    'ebitda': (info.get('ebitda') or 0),
+                    'net_income': (info.get('netIncomeToCommon') or 0),
+                    'earnings_growth': (info.get('earningsGrowth') or 0),
+                    'revenue_growth': (info.get('revenueGrowth') or 0),
+                    'operating_margin': (info.get('operatingMargins') or 0),
+                    'profit_margin': (info.get('profitMargins') or 0),
+                    'return_on_equity': (info.get('returnOnEquity') or 0),
+                    'return_on_assets': (info.get('returnOnAssets') or 0),
+                    'debt_to_equity': (info.get('debtToEquity') or 0),
+                    'current_ratio': (info.get('currentRatio') or 0),
+                    'quick_ratio': (info.get('quickRatio') or 0),
+                    'free_cash_flow': (info.get('freeCashflow') or 0),
                     'collected_at': datetime.now()
                 })
 
@@ -248,7 +248,7 @@ class YFinanceCollector:
             return None
 
         try:
-            return datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d')
+            return datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime('%Y-%m-%d')
         except Exception:
             return None
 

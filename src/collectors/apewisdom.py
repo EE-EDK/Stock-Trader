@@ -33,12 +33,12 @@ class ApeWisdomCollector:
             'Accept': 'application/json'
         })
 
-    def collect(self, top_n: int = 100) -> List[Dict]:
+    def collect(self, top_n: int = 100) -> Optional[List[Dict]]:
         """
         @brief Fetch top mentioned stocks from ApeWisdom
         @param top_n Number of top tickers to return
-        @return List of dictionaries containing ticker mention data
-        @throws requests.RequestException on API errors
+        @return List of dictionaries containing ticker mention data,
+                empty list for legitimate empty results, or None on error
         """
         try:
             response = self.session.get(
@@ -70,10 +70,10 @@ class ApeWisdomCollector:
 
         except requests.RequestException as e:
             logger.error(f"ApeWisdom API error: {e}")
-            return []
+            return None
         except (KeyError, ValueError, TypeError) as e:
             logger.error(f"ApeWisdom data parsing error: {e}")
-            return []
+            return None
 
     def get_ticker_details(self, ticker: str) -> Optional[Dict]:
         """

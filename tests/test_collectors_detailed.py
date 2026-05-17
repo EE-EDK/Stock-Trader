@@ -64,13 +64,13 @@ class TestApeWisdomCollector:
 
     @patch('requests.Session.get')
     def test_collect_api_error(self, mock_get):
-        """Test API error handling"""
+        """Test API error handling — returns None (not []) to distinguish from empty"""
         mock_get.side_effect = requests.RequestException("API Error")
 
         collector = ApeWisdomCollector()
         results = collector.collect(top_n=10)
 
-        assert results == []
+        assert results is None
 
     @patch('requests.Session.get')
     def test_collect_empty_response(self, mock_get):
@@ -157,9 +157,9 @@ class TestOpenInsiderCollector:
         date = collector._parse_date('2024-01-15')
         assert isinstance(date, datetime)
 
-        # Invalid date
+        # Invalid date should return None
         date = collector._parse_date('invalid')
-        assert isinstance(date, datetime)  # Should return current datetime
+        assert date is None
 
     def test_parse_float_helper(self):
         """Test float parsing"""
@@ -360,17 +360,17 @@ class TestEdgeCasesAndIntegration:
             assert isinstance(results, list)
 
     def test_network_timeout(self):
-        """Test network timeout handling"""
+        """Test network timeout handling — returns None on request error"""
         with patch('requests.Session.get') as mock_get:
             mock_get.side_effect = requests.Timeout("Request timed out")
 
             collector = ApeWisdomCollector()
             results = collector.collect(top_n=10)
 
-            assert results == []
+            assert results is None
 
     def test_malformed_json_response(self):
-        """Test malformed JSON response"""
+        """Test malformed JSON response — returns None on parse error"""
         with patch('requests.Session.get') as mock_get:
             mock_response = Mock()
             mock_response.status_code = 200
@@ -380,7 +380,7 @@ class TestEdgeCasesAndIntegration:
             collector = ApeWisdomCollector()
             results = collector.collect(top_n=10)
 
-            assert results == []
+            assert results is None
 
 
 if __name__ == '__main__':

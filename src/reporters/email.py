@@ -4,6 +4,7 @@
 @details Creates and sends formatted email reports with signals and velocity data
 """
 
+import html
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -37,23 +38,85 @@ class EmailReporter:
     def generate_report(self,
                        signals: List[Any],
                        velocity_data: Dict[str, Dict[str, float]],
-                       include_charts: bool = True,
-                       watchlist_size: int = 20) -> str:
+                       watchlist_size: int = 20,
+                       technical_data: Optional[Dict[str, Dict]] = None,
+                       sentiment_data: Optional[Dict[str, Dict]] = None,
+                       macro_indicators: Optional[Dict] = None,
+                       market_assessment: Optional[Dict] = None,
+                       paper_trading_stats: Optional[Dict] = None) -> str:
         """
         @brief Generate HTML email content
         @param signals List of Signal objects to include
         @param velocity_data Dictionary of velocity metrics by ticker
-        @param include_charts Whether to include chart images
         @param watchlist_size Number of tickers to include in watchlist
+        @param technical_data Technical analysis data by ticker
+        @param sentiment_data Sentiment analysis data by ticker
+        @param macro_indicators FRED macro economic indicators
+        @param market_assessment Market risk assessment from FRED data
+        @param paper_trading_stats Paper trading performance statistics
         @return HTML content as string
         """
-        html = self._generate_header()
-        html += self._generate_signals_section(signals)
-        html += self._generate_velocity_watchlist(velocity_data, watchlist_size)
-        html += self._generate_footer()
+        content = self._generate_header()
+        content += self._generate_enriched_summary(
+            technical_data=technical_data,
+            sentiment_data=sentiment_data,
+            macro_indicators=macro_indicators,
+            market_assessment=market_assessment,
+            paper_trading_stats=paper_trading_stats,
+        )
+        content += self._generate_signals_section(signals)
+        content += self._generate_velocity_watchlist(velocity_data, watchlist_size)
+        content += self._generate_footer()
 
         logger.info(f"Generated email report with {len(signals)} signals")
-        return html
+        return content
+
+    def _generate_enriched_summary(self,
+                                   technical_data: Optional[Dict[str, Dict]] = None,
+                                   sentiment_data: Optional[Dict[str, Dict]] = None,
+                                   macro_indicators: Optional[Dict] = None,
+                                   market_assessment: Optional[Dict] = None,
+                                   paper_trading_stats: Optional[Dict] = None) -> str:
+        """
+        @brief Generate a brief summary section for enriched data when available
+        @param technical_data Technical analysis data by ticker
+        @param sentiment_data Sentiment analysis data by ticker
+        @param macro_indicators FRED macro economic indicators
+        @param market_assessment Market risk assessment from FRED data
+        @param paper_trading_stats Paper trading performance statistics
+        @return HTML string (empty if no enriched data is present)
+        """
+        lines: List[str] = []
+
+        if market_assessment and market_assessment.get('risk_level'):
+            lines.append(f"Market Risk: {html.escape(str(market_assessment['risk_level']))}")
+
+        if technical_data:
+            lines.append(f"Technical analysis available for {len(technical_data)} tickers")
+
+        if sentiment_data:
+            lines.append(f"Sentiment data available for {len(sentiment_data)} tickers")
+
+        if macro_indicators:
+            lines.append(f"Macro indicators tracked: {len(macro_indicators)}")
+
+        if paper_trading_stats and paper_trading_stats.get('closed_trades'):
+            closed = paper_trading_stats['closed_trades']
+            count = closed.get('count', 0)
+            if count:
+                win_rate = closed.get('win_rate', 0)
+                lines.append(f"Paper trading: {count} closed trades, {win_rate:.0f}% win rate")
+
+        if not lines:
+            return ""
+
+        items_html = "".join(f"<li>{line}</li>" for line in lines)
+        return (
+            '<div style="background:#f0f4ff;border-radius:8px;padding:15px;margin-bottom:20px;">'
+            '<h3 style="margin:0 0 8px 0;color:#1a1a2e;">Market Overview</h3>'
+            f'<ul style="margin:0;padding-left:20px;color:#444;">{items_html}</ul>'
+            '</div>'
+        )
 
     def _generate_header(self) -> str:
         """
@@ -170,22 +233,22 @@ class EmailReporter:
         @param signals List of Signal objects
         @return HTML string
         """
-        html = "<h2>🎯 Today's Signals</h2>"
+        content = "<h2>🎯 Today's Signals</h2>"
 
         if not signals:
-            html += """
+            content += """
             <div class="signal-card">
                 <p style="text-align: center; color: #666;">No signals met conviction threshold today.</p>
             </div>
             """
-            return html
+            return content
 
         for signal in signals:
             conviction_class = 'high' if signal.conviction_score >= 70 else \
                               'medium' if signal.conviction_score >= 50 else 'low'
 
             triggers_html = ''.join([
-                f'<span class="trigger">{t.replace("_", " ").title()}</span>'
+                f'<span class="trigger">{html.escape(t.replace("_", " ").title())}</span>'
                 for t in signal.triggers
             ])
 
@@ -194,19 +257,22 @@ class EmailReporter:
             if signal.price_at_signal is not None:
                 price_display = f'<div style="margin-top: 10px; font-size: 13px; color: #999;">Price at signal: ${signal.price_at_signal:.2f}</div>'
 
-            html += f"""
+            escaped_ticker = html.escape(signal.ticker)
+            escaped_notes = html.escape(str(signal.notes or ''))
+
+            content += f"""
             <div class="signal-card">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span class="ticker">{signal.ticker}</span>
+                    <span class="ticker">{escaped_ticker}</span>
                     <span class="conviction {conviction_class}">{signal.conviction_score:.0f}</span>
                 </div>
                 <div class="triggers">{triggers_html}</div>
-                <div class="notes">{signal.notes}</div>
+                <div class="notes">{escaped_notes}</div>
                 {price_display}
             </div>
             """
 
-        return html
+        return content
 
     def _generate_velocity_watchlist(self,
                                      velocity_data: Dict[str, Dict[str, float]],
@@ -217,8 +283,8 @@ class EmailReporter:
         @param size Number of top tickers to show
         @return HTML string
         """
-        html = "<h2>📈 Velocity Watchlist (Top 20)</h2>"
-        html += """
+        content = "<h2>📈 Velocity Watchlist (Top 20)</h2>"
+        content += """
         <table class="velocity-table">
             <tr>
                 <th>Ticker</th>
@@ -231,25 +297,27 @@ class EmailReporter:
         # Sort by composite score and take top N
         sorted_velocity = sorted(
             velocity_data.items(),
-            key=lambda x: x[1].get('composite_score', 0),
+            key=lambda x: x[1].get('composite_score') or 0,
             reverse=True
         )[:size]
 
         for ticker, vel in sorted_velocity:
-            vel_24h = vel.get('mention_velocity_24h', 0)
+            vel_24h = vel.get('mention_velocity_24h') or 0
             vel_class = 'positive' if vel_24h > 0 else 'negative'
+            vel_7d = vel.get('mention_velocity_7d') or 0
+            composite = vel.get('composite_score') or 0
 
-            html += f"""
+            content += f"""
             <tr>
-                <td><strong>{ticker}</strong></td>
+                <td><strong>{html.escape(ticker)}</strong></td>
                 <td class="{vel_class}">{vel_24h:+.0f}%</td>
-                <td>{vel.get('mention_velocity_7d', 0):+.1f}</td>
-                <td>{vel.get('composite_score', 0):.0f}</td>
+                <td>{vel_7d:+.1f}</td>
+                <td>{composite:.0f}</td>
             </tr>
             """
 
-        html += "</table>"
-        return html
+        content += "</table>"
+        return content
 
     def _generate_footer(self) -> str:
         """

@@ -5,6 +5,7 @@
 """
 
 import sqlite3
+import json
 import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -67,7 +68,8 @@ class Database:
                 mentions_24h_ago INTEGER,
                 rank_24h_ago INTEGER,
                 collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                source TEXT DEFAULT 'apewisdom'
+                source TEXT DEFAULT 'apewisdom',
+                UNIQUE(ticker, collected_at, source)
             )
         """)
         cursor.execute("""
@@ -114,7 +116,8 @@ class Database:
                 bearish_pct REAL,
                 buzz_score REAL,
                 articles_week INTEGER,
-                collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(ticker, collected_at)
             )
         """)
         cursor.execute("""
@@ -133,7 +136,8 @@ class Database:
                 sentiment_velocity REAL,
                 volume_price_divergence REAL,
                 composite_score REAL,
-                calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(ticker, calculated_at)
             )
         """)
         cursor.execute("""
@@ -154,7 +158,8 @@ class Database:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 outcome_price REAL,
                 outcome_date DATE,
-                outcome_pct REAL
+                outcome_pct REAL,
+                UNIQUE(ticker, created_at)
             )
         """)
         cursor.execute("""
@@ -176,15 +181,31 @@ class Database:
                     indicator_name TEXT NOT NULL,
                     series_id TEXT NOT NULL,
                     value REAL NOT NULL,
-                    date DATE NOT NULL,
+                    date DATE,
                     observation_date DATE NOT NULL,
                     collected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(indicator_name, observation_date)
                 )
             """)
             cursor.execute("""
+                CREATE TABLE IF NOT EXISTS market_assessments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    assessment_date DATE NOT NULL UNIQUE,
+                    risk_level TEXT NOT NULL,
+                    risk_score INTEGER NOT NULL,
+                    conditions TEXT,
+                    warnings TEXT,
+                    recommendations TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_macro_indicator_date
                 ON macro_indicators(indicator_name, observation_date DESC)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_assessment_date
+                ON market_assessments(assessment_date DESC)
             """)
 
         # Paper trading tables (Phase 2)
@@ -211,7 +232,7 @@ class Database:
 
         for mention in mentions:
             cursor.execute("""
-                INSERT INTO mentions (ticker, mentions, upvotes, rank, mentions_24h_ago,
+                INSERT OR IGNORE INTO mentions (ticker, mentions, upvotes, rank, mentions_24h_ago,
                                      rank_24h_ago, collected_at, source)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (
@@ -276,7 +297,7 @@ class Database:
 
         for price in prices:
             cursor.execute("""
-                INSERT INTO prices (ticker, price, change_pct, high, low, open, prev_close,
+                INSERT OR IGNORE INTO prices (ticker, price, change_pct, high, low, open, prev_close,
                                    news_sentiment, bullish_pct, bearish_pct, buzz_score,
                                    articles_week, collected_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -312,7 +333,7 @@ class Database:
 
         for ticker, metrics in velocity_data.items():
             cursor.execute("""
-                INSERT INTO velocity (ticker, mention_velocity_24h, mention_velocity_7d,
+                INSERT OR IGNORE INTO velocity (ticker, mention_velocity_24h, mention_velocity_7d,
                                      sentiment_velocity, volume_price_divergence,
                                      composite_score, calculated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -342,7 +363,7 @@ class Database:
 
         for signal in signals:
             cursor.execute("""
-                INSERT INTO signals (ticker, signal_type, conviction_score, price_at_signal,
+                INSERT OR IGNORE INTO signals (ticker, signal_type, conviction_score, price_at_signal,
                                     triggers, notes, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (
@@ -350,7 +371,7 @@ class Database:
                 signal.signal_type,
                 signal.conviction_score,
                 signal.price_at_signal,
-                ','.join(signal.triggers),
+                json.dumps(signal.triggers),
                 signal.notes,
                 signal.created_at
             ))
@@ -650,9 +671,11 @@ class Database:
             LEFT JOIN prices p1 ON v.ticker = p1.ticker
                 AND p1.collected_at = (SELECT MAX(collected_at) FROM prices WHERE ticker = v.ticker)
             LEFT JOIN prices p2 ON v.ticker = p2.ticker
-                AND p2.collected_at = (SELECT MAX(collected_at) FROM prices WHERE ticker = v.ticker
-                    AND collected_at < datetime('now', '-' || ? || ' days'))
+                AND p2.collected_at = (SELECT collected_at FROM prices WHERE ticker = v.ticker
+                    AND collected_at <= datetime('now', '-' || ? || ' days')
+                    ORDER BY collected_at DESC LIMIT 1)
             WHERE ABS(v.sentiment_velocity) >= ?
+            GROUP BY v.ticker
             ORDER BY ABS(v.sentiment_velocity) DESC
             LIMIT 20
         """, (days, min_change))

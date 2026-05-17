@@ -123,15 +123,22 @@ def get_db_path(config: dict) -> str:
 
 # Parallel collection helper functions
 def collect_apewisdom(config):
-    """Collect ApeWisdom data in parallel"""
+    """Collect ApeWisdom data in parallel.
+
+    Returns ('apewisdom', list, None) on success (list may be empty),
+    or ('apewisdom', None, error_msg) on error.
+    """
     try:
         ape = ApeWisdomCollector()
         top_n = config.get('collection', {}).get('apewisdom', {}).get('top_n', 100)
         mentions = ape.collect(top_n=top_n)
         ape.close()
+        # collect() returns None on error, [] on legitimate empty
+        if mentions is None:
+            return ('apewisdom', None, 'ApeWisdom collector returned None (API/parse error)')
         return ('apewisdom', mentions, None)
     except Exception as e:
-        return ('apewisdom', [], str(e))
+        return ('apewisdom', None, str(e))
 
 
 def collect_openinsider(config):
@@ -237,323 +244,332 @@ def run_pipeline(config: dict, skip_email: bool = False):
     db.initialize()
     logger.info(f"Database initialized at {db_path}")
 
-    # Initialize paper trading manager
-    paper_trading = PaperTradingManager(db_path, config)
-    if paper_trading.enabled:
-        logger.info("Paper trading system enabled")
-        # Backfill on first run (idempotent - safe to run multiple times)
-        paper_trading.backfill_from_signals(days=config.get('paper_trading', {}).get('backfill_days', 30))
-
-    # Initialize optional data collection variables (Phase 3)
-    macro_indicators = {}
-    market_assessment = {}
-
-    # ========== Step 1: Collect Data IN PARALLEL ==========
-    logger.info("Step 1: Collecting data from sources (PARALLEL MODE)...")
-    
-    # Get tracked tickers first (needed by multiple collectors)
-    tracked_tickers = db.get_tracked_tickers(days=7)
-    top_tickers = list(tracked_tickers)[:20]
-    
-    # Run initial collectors in parallel
-    mentions = []
-    trades = []
-    prices = []
-    alpha_sentiment = {}
-    yfinance_data = {}
-    vader_sentiment = {}
-    macro_indicators = {}
-    market_assessment = {}
-    
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        # Submit initial collection tasks
-        future_ape = executor.submit(collect_apewisdom, config)
-        future_insider = executor.submit(collect_openinsider, config)
-        
-        # Wait for results
-        for future in as_completed([future_ape, future_insider]):
-            collector_name, data, error = future.result()
-            
-            if collector_name == 'apewisdom':
-                mentions = data
-                if error:
-                    logger.error(f"  [ERROR] ApeWisdom failed: {error}")
-                elif mentions:
-                    db.insert_mentions(mentions)
-                    logger.info(f"  [OK] ApeWisdom: {len(mentions)} tickers collected")
-                    
-                    # Update tracked_tickers for subsequent collectors in THIS run
-                    # Filter for only tickers with enough volume/activity
-                    new_tickers = [m['ticker'] for m in mentions if m.get('mentions', 0) > 0]
-                    if new_tickers:
-                        # Combine with existing if any
-                        tracked_tickers = list(set(tracked_tickers) | set(new_tickers))
-                        top_tickers = [m['ticker'] for m in mentions[:20]]
-                        logger.info(f"  [OK] Tracked tickers updated: now tracking {len(tracked_tickers)} stocks")
-                else:
-                    logger.warning("  [WARN] ApeWisdom: No data collected")
-            
-            elif collector_name == 'openinsider':
-                trades = data
-                if error:
-                    logger.error(f"  [ERROR] OpenInsider failed: {error}")
-                elif trades:
-                    db.insert_insiders(trades)
-                    logger.info(f"  [OK] OpenInsider: {len(trades)} trades collected")
-                else:
-                    logger.warning("  [WARN] OpenInsider: No trades collected")
-    
-    # Finnhub (still sequential as it needs tracked_tickers immediately)
     try:
-        finnhub_key = config['api_keys'].get('finnhub')
-        if finnhub_key and finnhub_key != 'YOUR_FINNHUB_KEY':
-            logger.info(f"  Fetching data for {len(tracked_tickers)} tracked tickers")
-            finnhub = FinnhubCollector(api_key=finnhub_key)
-            prices = finnhub.combine_price_and_sentiment(tracked_tickers)
-            if prices:
-                db.insert_prices(prices)
-                logger.info(f"  [OK] Finnhub: {len(prices)} ticker data points collected")
-        else:
-            logger.warning("  [WARN] Finnhub: API key not configured, skipping")
-    except Exception as e:
-        logger.error(f"  [ERROR] Finnhub failed: {e}")
-    
-    # ========== Step 1b: Collect FREE data sources IN PARALLEL ==========
-    logger.info("Step 1b: Collecting FREE data sources (PARALLEL MODE)...")
-    
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        # Submit all free data collectors in parallel
-        future_yf = executor.submit(collect_yfinance, tracked_tickers)
-        future_fred = executor.submit(collect_fred, config)
-        future_alpha = executor.submit(collect_alphavantage, config, top_tickers)
-        
-        # Collect YFinance first as VADER depends on it
-        collector_name, data, error = future_yf.result()
-        yfinance_data = data
-        if error:
-            logger.error(f"  [ERROR] YFinance failed: {error}")
-        elif yfinance_data:
-            logger.info(f"  [OK] YFinance: {len(yfinance_data)} stock info records")
-        
-        # Now submit VADER with yfinance_data
-        future_vader = executor.submit(collect_vader, top_tickers, yfinance_data, config)
-        
-        # Collect remaining results
-        for future in as_completed([future_alpha, future_fred, future_vader]):
-            result = future.result()
-            
-            if result[0] == 'alphavantage':
-                _, alpha_sentiment, error = result
-                if error:
-                    logger.error(f"  [ERROR] Alpha Vantage failed: {error}")
-                elif alpha_sentiment:
-                    logger.info(f"  [OK] Alpha Vantage: {len(alpha_sentiment)} sentiment analyses")
-                else:
-                    logger.info("  [SKIP] Alpha Vantage: API key not configured")
-            
-            elif result[0] == 'vader':
-                _, vader_sentiment, error = result
-                if error:
-                    logger.error(f"  [ERROR] VADER Sentiment failed: {error}")
-                else:
-                    logger.info(f"  [OK] VADER Sentiment: {len(vader_sentiment)} tickers analyzed")
-            
-            elif result[0] == 'fred':
-                _, macro_indicators, market_assessment, error = result
-                if error:
-                    logger.error(f"  [ERROR] FRED failed: {error}")
-                elif macro_indicators:
-                    db.insert_macro_indicators(macro_indicators)
-                    logger.info(f"  [OK] FRED: {len(macro_indicators)} macro indicators")
-                    if market_assessment:
-                        db.insert_market_assessment(market_assessment)
-                        logger.info(f"  [OK] FRED: Market risk level {market_assessment.get('risk_level')}")
-                else:
-                    logger.info("  [SKIP] FRED: API key not configured")
-    
-    
-    # ========== Update Paper Trading Positions ==========
-    if paper_trading.enabled:
-        logger.info("Updating paper trading positions with current prices...")
+
+        # Initialize paper trading manager
+        paper_trading = PaperTradingManager(db_path, config)
+        if paper_trading.enabled:
+            logger.info("Paper trading system enabled")
+            # Backfill on first run (idempotent - safe to run multiple times)
+            paper_trading.backfill_from_signals(days=config.get('paper_trading', {}).get('backfill_days', 30))
+
+        # Initialize optional data collection variables (Phase 3)
+        macro_indicators = {}
+        market_assessment = {}
+
+        # ========== Step 1: Collect Data IN PARALLEL ==========
+        logger.info("Step 1: Collecting data from sources (PARALLEL MODE)...")
+
+        # Get tracked tickers first (needed by multiple collectors)
+        tracked_tickers = db.get_tracked_tickers(days=7)
+        top_tickers = list(tracked_tickers)[:20]
+
+        # Run initial collectors in parallel
+        mentions = []
+        trades = []
+        prices = []
+        alpha_sentiment = {}
+        yfinance_data = {}
+        vader_sentiment = {}
+        macro_indicators = {}
+        market_assessment = {}
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            # Submit initial collection tasks
+            future_ape = executor.submit(collect_apewisdom, config)
+            future_insider = executor.submit(collect_openinsider, config)
+
+            # Wait for results
+            for future in as_completed([future_ape, future_insider]):
+                collector_name, data, error = future.result()
+
+                if collector_name == 'apewisdom':
+                    if data is None:
+                        # Error path: collector failed (API error or parse error)
+                        logger.error(f"  [ERROR] ApeWisdom failed: {error}")
+                    elif data:
+                        mentions = data
+                        db.insert_mentions(mentions)
+                        logger.info(f"  [OK] ApeWisdom: {len(mentions)} tickers collected")
+
+                        # Update tracked_tickers for subsequent collectors in THIS run
+                        # Filter for only tickers with enough volume/activity
+                        new_tickers = [m['ticker'] for m in mentions if m.get('mentions', 0) > 0]
+                        if new_tickers:
+                            # Combine with existing if any
+                            tracked_tickers = list(set(tracked_tickers) | set(new_tickers))
+                            top_tickers = [m['ticker'] for m in mentions[:20]]
+                            logger.info(f"  [OK] Tracked tickers updated: now tracking {len(tracked_tickers)} stocks")
+                    else:
+                        # data is [] — legitimate empty result (no trending stocks)
+                        logger.warning("  [WARN] ApeWisdom: No data collected (empty result, API OK)")
+
+                elif collector_name == 'openinsider':
+                    trades = data
+                    if error:
+                        logger.error(f"  [ERROR] OpenInsider failed: {error}")
+                    elif trades:
+                        db.insert_insiders(trades)
+                        logger.info(f"  [OK] OpenInsider: {len(trades)} trades collected")
+                    else:
+                        logger.warning("  [WARN] OpenInsider: No trades collected")
+
+        # Finnhub (still sequential as it needs tracked_tickers immediately)
         try:
-            # Get latest prices for all open positions
-            current_prices = db.get_latest_prices()
-            paper_trading.update_positions(current_prices, datetime.now())
-            logger.info(f"  [OK] Paper trading positions updated")
+            finnhub_key = config['api_keys'].get('finnhub')
+            if finnhub_key and finnhub_key != 'YOUR_FINNHUB_KEY':
+                logger.info(f"  Fetching data for {len(tracked_tickers)} tracked tickers")
+                finnhub = FinnhubCollector(api_key=finnhub_key)
+                prices = finnhub.combine_price_and_sentiment(tracked_tickers)
+                if prices:
+                    db.insert_prices(prices)
+                    logger.info(f"  [OK] Finnhub: {len(prices)} ticker data points collected")
+            else:
+                logger.warning("  [WARN] Finnhub: API key not configured, skipping")
         except Exception as e:
-            logger.error(f"  [ERROR] Paper trading update failed: {e}")
+            logger.error(f"  [ERROR] Finnhub failed: {e}")
 
-    # ========== Step 2: Calculate Velocity Metrics ==========
-    logger.info("Step 2: Calculating velocity metrics...")
+        # ========== Step 1b: Collect FREE data sources IN PARALLEL ==========
+        logger.info("Step 1b: Collecting FREE data sources (PARALLEL MODE)...")
 
-    velocity_data = {}
-    try:
-        calc = VelocityCalculator(db)
-        velocity_data = calc.calculate_all_velocities()
-        if velocity_data:
-            db.insert_velocity(velocity_data)
-            logger.info(f"  [OK] Calculated velocity for {len(velocity_data)} tickers")
-        else:
-            logger.warning("  [WARN] No velocity data calculated")
-    except Exception as e:
-        logger.error(f"  [ERROR] Velocity calculation failed: {e}")
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            # Submit all free data collectors in parallel
+            future_yf = executor.submit(collect_yfinance, tracked_tickers)
+            future_fred = executor.submit(collect_fred, config)
+            future_alpha = executor.submit(collect_alphavantage, config, top_tickers)
 
-    # ========== NEW: Technical Analysis (Zero API calls!) ==========
-    logger.info("Step 2b: Running technical analysis...")
+            # Collect YFinance first as VADER depends on it
+            collector_name, data, error = future_yf.result()
+            yfinance_data = data
+            if error:
+                logger.error(f"  [ERROR] YFinance failed: {error}")
+            elif yfinance_data:
+                logger.info(f"  [OK] YFinance: {len(yfinance_data)} stock info records")
 
-    technical_data = {}
-    if config.get('collection', {}).get('technical_analysis', {}).get('enabled', True):
+            # Now submit VADER with yfinance_data
+            future_vader = executor.submit(collect_vader, top_tickers, yfinance_data, config)
+
+            # Collect remaining results
+            for future in as_completed([future_alpha, future_fred, future_vader]):
+                result = future.result()
+
+                if result[0] == 'alphavantage':
+                    _, alpha_sentiment, error = result
+                    if error:
+                        logger.error(f"  [ERROR] Alpha Vantage failed: {error}")
+                    elif alpha_sentiment:
+                        logger.info(f"  [OK] Alpha Vantage: {len(alpha_sentiment)} sentiment analyses")
+                    else:
+                        logger.info("  [SKIP] Alpha Vantage: API key not configured")
+
+                elif result[0] == 'vader':
+                    _, vader_sentiment, error = result
+                    if error:
+                        logger.error(f"  [ERROR] VADER Sentiment failed: {error}")
+                    else:
+                        logger.info(f"  [OK] VADER Sentiment: {len(vader_sentiment)} tickers analyzed")
+
+                elif result[0] == 'fred':
+                    _, macro_indicators, market_assessment, error = result
+                    if error:
+                        logger.error(f"  [ERROR] FRED failed: {error}")
+                    elif macro_indicators:
+                        db.insert_macro_indicators(macro_indicators)
+                        logger.info(f"  [OK] FRED: {len(macro_indicators)} macro indicators")
+                        if market_assessment:
+                            db.insert_market_assessment(market_assessment)
+                            logger.info(f"  [OK] FRED: Market risk level {market_assessment.get('risk_level')}")
+                    else:
+                        logger.info("  [SKIP] FRED: API key not configured")
+
+
+        # ========== Update Paper Trading Positions ==========
+        if paper_trading.enabled:
+            logger.info("Updating paper trading positions with current prices...")
+            try:
+                # Get latest prices for all open positions
+                current_prices = db.get_latest_prices()
+                paper_trading.update_positions(current_prices, datetime.now())
+                logger.info(f"  [OK] Paper trading positions updated")
+            except Exception as e:
+                logger.error(f"  [ERROR] Paper trading update failed: {e}")
+
+        # ========== Step 2: Calculate Velocity Metrics ==========
+        logger.info("Step 2: Calculating velocity metrics...")
+
+        velocity_data = {}
         try:
-            tech_analyzer = TechnicalAnalyzer(db)
-            for ticker in velocity_data.keys():
-                tech_analysis = tech_analyzer.analyze_ticker(ticker)
-                if tech_analysis:
-                    tech_score = tech_analyzer.get_technical_score(tech_analysis)
-                    tech_analysis['technical_score'] = tech_score
-                    technical_data[ticker] = tech_analysis
-            logger.info(f"  [OK] Technical analysis for {len(technical_data)} tickers")
+            calc = VelocityCalculator(db)
+            velocity_data = calc.calculate_all_velocities()
+            if velocity_data:
+                db.insert_velocity(velocity_data)
+                logger.info(f"  [OK] Calculated velocity for {len(velocity_data)} tickers")
+            else:
+                logger.warning("  [WARN] No velocity data calculated")
         except Exception as e:
-            logger.error(f"  [ERROR] Technical analysis failed: {e}")
+            logger.error(f"  [ERROR] Velocity calculation failed: {e}")
 
-    # ========== Step 3: Generate Signals with FREE Data ==========
-    logger.info("Step 3: Generating signals with FREE data sources...")
+        # ========== NEW: Technical Analysis (Zero API calls!) ==========
+        logger.info("Step 2b: Running technical analysis...")
 
-    # Merge sentiment data (prefer Alpha Vantage, fallback to VADER)
-    sentiment_data = {}
-    for ticker in velocity_data.keys():
-        if ticker in alpha_sentiment:
-            sentiment_data[ticker] = alpha_sentiment[ticker]
-        elif ticker in vader_sentiment:
-            sentiment_data[ticker] = vader_sentiment[ticker]
+        technical_data = {}
+        if config.get('collection', {}).get('technical_analysis', {}).get('enabled', True):
+            try:
+                tech_analyzer = TechnicalAnalyzer(db)
+                for ticker in velocity_data.keys():
+                    tech_analysis = tech_analyzer.analyze_ticker(ticker)
+                    if tech_analysis:
+                        tech_score = tech_analyzer.get_technical_score(tech_analysis)
+                        tech_analysis['technical_score'] = tech_score
+                        technical_data[ticker] = tech_analysis
+                logger.info(f"  [OK] Technical analysis for {len(technical_data)} tickers")
+            except Exception as e:
+                logger.error(f"  [ERROR] Technical analysis failed: {e}")
 
-    signals = []
-    all_signals = []
-    try:
-        gen = SignalGenerator(thresholds=config.get('thresholds', {}))
-        all_signals = gen.generate_signals(
-            velocity_data=velocity_data,
-            insider_data=db.get_recent_insiders(days=14),
-            price_data=db.get_latest_prices(),
-            technical_data=technical_data,      # NEW!
-            sentiment_data=sentiment_data,      # NEW!
-        )
+        # ========== Step 3: Generate Signals with FREE Data ==========
+        logger.info("Step 3: Generating signals with FREE data sources...")
 
-        # Insert ALL signals into database for historical analysis
-        if all_signals:
-            db.insert_signals(all_signals)
-            logger.info(f"  [OK] Inserted {len(all_signals)} signals into database")
+        # Merge sentiment data (prefer Alpha Vantage, fallback to VADER)
+        sentiment_data = {}
+        for ticker in velocity_data.keys():
+            if ticker in alpha_sentiment:
+                sentiment_data[ticker] = alpha_sentiment[ticker]
+            elif ticker in vader_sentiment:
+                sentiment_data[ticker] = vader_sentiment[ticker]
 
-        # Filter by minimum conviction for reporting/trading
-        min_conviction = config.get('thresholds', {}).get('minimum_conviction', 40)
-        signals = gen.filter_by_conviction(all_signals, min_conviction=min_conviction)
-
-        if signals:
-            logger.info(f"  [OK] {len(signals)} signals meet {min_conviction} conviction threshold")
-        else:
-            logger.info("  [INFO] No signals met conviction threshold for trading")
-    except Exception as e:
-        logger.error(f"  [ERROR] Signal generation failed: {e}")
-
-    # ========== Create Paper Trades from Signals ==========
-    if paper_trading.enabled and signals:
-        logger.info("Creating paper trades from new signals...")
+        signals = []
+        all_signals = []
         try:
-            created_count = 0
-            for signal in signals:
-                # Check if signal meets paper trading conviction threshold
-                if signal.conviction_score >= paper_trading.min_conviction:
-                    # Get current price for this ticker
-                    price_data = db.get_latest_prices().get(signal.ticker)
-                    if price_data and 'price' in price_data:
-                        trade_id = paper_trading.create_paper_trade(
-                            ticker=signal.ticker,
-                            entry_price=price_data['price'],
-                            conviction=int(signal.conviction_score),
-                            signal_types=signal.triggers,
-                            entry_date=datetime.now()
-                        )
-                        if trade_id:
-                            created_count += 1
-            logger.info(f"  [OK] Created {created_count} new paper trades")
-        except Exception as e:
-            logger.error(f"  [ERROR] Paper trade creation failed: {e}")
-
-    # ========== Step 4: Generate and Send Report ==========
-    logger.info("Step 4: Generating report...")
-
-    if skip_email:
-        logger.info("  [INFO] Email sending skipped (--skip-email flag)")
-    elif not config.get('email', {}).get('enabled', False):
-        logger.info("  [INFO] Email disabled in config")
-    elif not signals:
-        logger.info("  [INFO] No signals to report")
-    else:
-        try:
-            reporter = EmailReporter(config['email'])
-            report_section = config.get('report', {})
-            report = reporter.generate_report(
-                signals=signals[:report_section.get('max_signals', 10)],
+            gen = SignalGenerator(thresholds=config.get('thresholds', {}))
+            all_signals = gen.generate_signals(
                 velocity_data=velocity_data,
-                include_charts=report_section.get('include_charts', False),
-                watchlist_size=report_section.get('watchlist_size', 20)
+                insider_data=db.get_recent_insiders(days=14),
+                price_data=db.get_latest_prices(),
+                technical_data=technical_data,      # NEW!
+                sentiment_data=sentiment_data,      # NEW!
             )
 
-            if reporter.send(report):
-                logger.info("  [OK] Email report sent successfully")
+            # Insert ALL signals into database for historical analysis
+            if all_signals:
+                db.insert_signals(all_signals)
+                logger.info(f"  [OK] Inserted {len(all_signals)} signals into database")
+
+            # Filter by minimum conviction for reporting/trading
+            min_conviction = config.get('thresholds', {}).get('minimum_conviction', 40)
+            signals = gen.filter_by_conviction(all_signals, min_conviction=min_conviction)
+
+            if signals:
+                logger.info(f"  [OK] {len(signals)} signals meet {min_conviction} conviction threshold")
             else:
-                logger.error("  [ERROR] Failed to send email report")
+                logger.info("  [INFO] No signals met conviction threshold for trading")
         except Exception as e:
-            logger.error(f"  [ERROR] Report generation/sending failed: {e}")
+            logger.error(f"  [ERROR] Signal generation failed: {e}")
 
-    # ========== NEW: Generate HTML Dashboard ==========
-    logger.info("Step 4b: Generating HTML dashboard...")
-    try:
-        # Get paper trading stats for dashboard
-        paper_trading_stats = {}
-        if paper_trading.enabled:
-            paper_trading_stats = paper_trading.get_performance_summary()
+        # ========== Create Paper Trades from Signals ==========
+        if paper_trading.enabled and signals:
+            logger.info("Creating paper trades from new signals...")
+            try:
+                created_count = 0
+                for signal in signals:
+                    # Check if signal meets paper trading conviction threshold
+                    if signal.conviction_score >= paper_trading.min_conviction:
+                        # Get current price for this ticker
+                        price_data = db.get_latest_prices().get(signal.ticker)
+                        if price_data and 'price' in price_data:
+                            trade_id = paper_trading.create_paper_trade(
+                                ticker=signal.ticker,
+                                entry_price=price_data['price'],
+                                conviction=int(signal.conviction_score),
+                                signal_types=signal.triggers,
+                                entry_date=datetime.now()
+                            )
+                            if trade_id:
+                                created_count += 1
+                logger.info(f"  [OK] Created {created_count} new paper trades")
+            except Exception as e:
+                logger.error(f"  [ERROR] Paper trade creation failed: {e}")
 
-        # Determine project root for dashboard
-        import os
-        project_root = os.path.dirname(os.path.abspath(__file__))
+        # ========== Step 4: Generate and Send Report ==========
+        logger.info("Step 4: Generating report...")
 
-        dashboard = DashboardGenerator(output_dir="reports", project_root=project_root)
-        dashboard_path = dashboard.generate(
-            signals=signals,
-            velocity_data=velocity_data,
-            technical_data=technical_data,
-            sentiment_data=sentiment_data,
-            paper_trading_stats=paper_trading_stats,
-            macro_indicators=macro_indicators,
-            market_assessment=market_assessment,
-            db=db
-        )
-        logger.info(f"  [OK] Dashboard saved to: {dashboard_path}")
-        logger.info(f"  [TIP] Open {dashboard_path} in your browser to view results!")
-    except Exception as e:
-        import traceback
-        logger.error(f"  [ERROR] Dashboard generation failed: {e}")
-        logger.error(f"  [TRACEBACK] {traceback.format_exc()}")
+        if skip_email:
+            logger.info("  [INFO] Email sending skipped (--skip-email flag)")
+        elif not config.get('email', {}).get('enabled', False):
+            logger.info("  [INFO] Email disabled in config")
+        elif not signals:
+            logger.info("  [INFO] No signals to report")
+        else:
+            try:
+                reporter = EmailReporter(config['email'])
+                report_section = config.get('report', {})
+                report = reporter.generate_report(
+                    signals=signals[:report_section.get('max_signals', 10)],
+                    velocity_data=velocity_data,
+                    watchlist_size=report_section.get('watchlist_size', 20),
+                    technical_data=technical_data,
+                    sentiment_data=sentiment_data,
+                    macro_indicators=macro_indicators,
+                    market_assessment=market_assessment,
+                    paper_trading_stats=paper_trading.get_performance_summary() if paper_trading.enabled else None,
+                )
 
-    # ========== Step 5: Output Summary ==========
-    logger.info("=" * 60)
-    logger.info("Pipeline complete. Summary:")
-    logger.info(f"  - Mentions collected: {len(mentions)}")
-    logger.info(f"  - Insider trades collected: {len(trades)}")
-    logger.info(f"  - Price data points: {len(prices)}")
-    logger.info(f"  - Velocity calculations: {len(velocity_data)}")
-    logger.info(f"  - Signals generated: {len(signals)}")
+                if reporter.send(report):
+                    logger.info("  [OK] Email report sent successfully")
+                else:
+                    logger.error("  [ERROR] Failed to send email report")
+            except Exception as e:
+                logger.error(f"  [ERROR] Report generation/sending failed: {e}")
 
-    if signals:
-        logger.info(f"  - Top signal: {signals[0].ticker} (conviction: {signals[0].conviction_score:.0f})")
-        logger.info("  - Top 5 signals:")
-        for s in signals[:5]:
-            logger.info(f"    - {s.ticker}: {s.conviction_score:.0f} - {s.notes}")
+        # ========== NEW: Generate HTML Dashboard ==========
+        logger.info("Step 4b: Generating HTML dashboard...")
+        try:
+            # Get paper trading stats for dashboard
+            paper_trading_stats = {}
+            if paper_trading.enabled:
+                paper_trading_stats = paper_trading.get_performance_summary()
 
-    logger.info("=" * 60)
+            # Determine project root for dashboard
+            import os
+            project_root = os.path.dirname(os.path.abspath(__file__))
 
-    db.close()
-    return signals
+            dashboard = DashboardGenerator(output_dir="reports", project_root=project_root)
+            dashboard_path = dashboard.generate(
+                signals=signals,
+                velocity_data=velocity_data,
+                technical_data=technical_data,
+                sentiment_data=sentiment_data,
+                paper_trading_stats=paper_trading_stats,
+                macro_indicators=macro_indicators,
+                market_assessment=market_assessment,
+                db=db
+            )
+            logger.info(f"  [OK] Dashboard saved to: {dashboard_path}")
+            logger.info(f"  [TIP] Open {dashboard_path} in your browser to view results!")
+        except Exception as e:
+            import traceback
+            logger.error(f"  [ERROR] Dashboard generation failed: {e}")
+            logger.error(f"  [TRACEBACK] {traceback.format_exc()}")
+
+        # ========== Step 5: Output Summary ==========
+        logger.info("=" * 60)
+        logger.info("Pipeline complete. Summary:")
+        logger.info(f"  - Mentions collected: {len(mentions)}")
+        logger.info(f"  - Insider trades collected: {len(trades)}")
+        logger.info(f"  - Price data points: {len(prices)}")
+        logger.info(f"  - Velocity calculations: {len(velocity_data)}")
+        logger.info(f"  - Signals generated: {len(signals)}")
+
+        if signals:
+            logger.info(f"  - Top signal: {signals[0].ticker} (conviction: {signals[0].conviction_score:.0f})")
+            logger.info("  - Top 5 signals:")
+            for s in signals[:5]:
+                logger.info(f"    - {s.ticker}: {s.conviction_score:.0f} - {s.notes}")
+
+        logger.info("=" * 60)
+
+        return signals
+    finally:
+        db.close()
 
 
 def get_project_root():

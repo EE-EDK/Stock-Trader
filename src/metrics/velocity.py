@@ -129,6 +129,11 @@ def composite_score(mention_vel_24h: float,
     @return Composite score on 0-100 scale
     @details Uses sigmoid-like transformation to handle outliers and normalize to 0-100
     """
+    # Guard: return 0 for data-starved tickers where all inputs are near zero
+    if (abs(mention_vel_24h) < 0.01 and abs(mention_vel_7d) < 0.01
+            and abs(sentiment_vel) < 0.01 and abs(divergence) < 0.01):
+        return 0.0
+
     if weights is None:
         weights = {
             'mention_24h': 0.35,
@@ -206,9 +211,9 @@ class VelocityCalculator:
 
             if len(price_history) >= 2:
                 for i in range(1, len(price_history)):
-                    curr_price = price_history[i].get('price', 0)
-                    prev_price = price_history[i-1].get('price', 0)
-                    if prev_price is not None and prev_price > 0:
+                    curr_price = (price_history[i].get('price') or 0)
+                    prev_price = (price_history[i-1].get('price') or 0)
+                    if prev_price > 0:
                         price_changes.append(((curr_price - prev_price) / prev_price) * 100)
 
             # Make sure arrays are same length for divergence

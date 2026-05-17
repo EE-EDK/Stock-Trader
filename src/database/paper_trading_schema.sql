@@ -26,7 +26,6 @@ CREATE TABLE IF NOT EXISTS paper_trades (
 
     -- Performance metrics
     return_pct REAL,
-    pnl REAL,
     profit_loss REAL,
     days_held INTEGER,
 

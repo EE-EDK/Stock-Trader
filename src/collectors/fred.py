@@ -267,6 +267,46 @@ class FREDCollector:
                 risk_points += 15
                 assessment['warnings'].append("High rates - consider bonds over stocks")
 
+        # Inflation (CPI) assessment
+        if 'INFLATION' in indicators:
+            cpi = indicators['INFLATION']['value']
+            max_points += 15
+
+            if cpi < 2.0:
+                assessment['conditions'].append("Low inflation (healthy)")
+                risk_points += 0
+            elif cpi < 4.0:
+                assessment['conditions'].append("Moderate inflation")
+                risk_points += 5
+            elif cpi < 6.0:
+                assessment['conditions'].append("High inflation")
+                risk_points += 10
+                assessment['warnings'].append("High inflation eroding purchasing power")
+            else:
+                assessment['conditions'].append("Very high inflation")
+                risk_points += 15
+                assessment['warnings'].append("Very high inflation - Fed tightening likely, risk to equities")
+
+        # USD/EUR exchange rate assessment
+        if 'USD_EUR' in indicators:
+            rate = indicators['USD_EUR']['value']
+            max_points += 10
+
+            if rate < 1.0:
+                # USD stronger than EUR (below parity)
+                assessment['conditions'].append("Strong dollar (below parity vs EUR)")
+                risk_points += 8
+                assessment['warnings'].append("Strong dollar may pressure multinational earnings")
+            elif rate < 1.05:
+                assessment['conditions'].append("Very strong dollar vs EUR")
+                risk_points += 5
+            elif rate < 1.15:
+                assessment['conditions'].append("Normal USD/EUR exchange rate")
+                risk_points += 2
+            else:
+                assessment['conditions'].append("Weak dollar vs EUR")
+                risk_points += 0
+
         # Calculate final risk score
         if max_points > 0:
             assessment['risk_score'] = int((risk_points / max_points) * 100)

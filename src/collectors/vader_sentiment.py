@@ -48,10 +48,12 @@ class VaderSentimentAnalyzer:
         return {
             'text': text,
             'compound': scores['compound'],  # -1 (negative) to 1 (positive)
+            'sentiment_score': scores['compound'],
             'positive': scores['pos'],
             'neutral': scores['neu'],
             'negative': scores['neg'],
-            'sentiment_label': self._classify_sentiment(scores['compound']),
+            'sentiment_label': self._signal_label(scores['compound']),
+            'detail_label': self._classify_sentiment(scores['compound']),
             'analyzed_at': datetime.now()
         }
 
@@ -71,15 +73,24 @@ class VaderSentimentAnalyzer:
         negative_count = sum(1 for s in scores if s < -0.05)
         neutral_count = len(scores) - positive_count - negative_count
 
+        # Normalize percentages to 0-1 scale to match Alpha Vantage format
+        pos_ratio = round(positive_count / len(headlines), 4)
+        neg_ratio = round(negative_count / len(headlines), 4)
+
         return {
             'avg_sentiment': round(avg_score, 3),
-            'sentiment_label': self._classify_sentiment(avg_score),
+            'sentiment_score': round(avg_score, 3),  # alias for signal generator compat
+            'sentiment_label': self._signal_label(avg_score),
             'positive_count': positive_count,
             'negative_count': negative_count,
             'neutral_count': neutral_count,
             'total_headlines': len(headlines),
-            'positive_pct': round((positive_count / len(headlines)) * 100, 1),
-            'negative_pct': round((negative_count / len(headlines)) * 100, 1),
+            # 0-1 scale keys matching Alpha Vantage convention
+            'bullish_pct': pos_ratio,
+            'bearish_pct': neg_ratio,
+            # backward-compat aliases (same 0-1 values)
+            'positive_pct': pos_ratio,
+            'negative_pct': neg_ratio,
             'analyzed_at': datetime.now()
         }
 
@@ -233,9 +244,9 @@ class VaderSentimentAnalyzer:
 
     def _classify_sentiment(self, compound_score: float) -> str:
         """
-        @brief Classify compound score into sentiment label
+        @brief Classify compound score into granular sentiment label
         @param compound_score VADER compound score (-1 to 1)
-        @return Sentiment label
+        @return Granular sentiment label (internal use)
         """
         if compound_score >= 0.5:
             return 'very_positive'
@@ -248,15 +259,31 @@ class VaderSentimentAnalyzer:
         else:
             return 'very_negative'
 
+    def _signal_label(self, compound_score: float) -> str:
+        """
+        @brief Map compound score to signal-generator-compatible label
+        @param compound_score VADER compound score (-1 to 1)
+        @return "Bullish", "Bearish", or "Neutral" matching Alpha Vantage convention
+        """
+        if compound_score > 0.15:
+            return 'Bullish'
+        elif compound_score < -0.15:
+            return 'Bearish'
+        else:
+            return 'Neutral'
+
     def _empty_result(self, ticker: str = None) -> Dict:
         """Return empty sentiment result"""
         result = {
             'avg_sentiment': 0,
-            'sentiment_label': 'neutral',
+            'sentiment_score': 0,
+            'sentiment_label': 'Neutral',
             'positive_count': 0,
             'negative_count': 0,
             'neutral_count': 0,
             'total_headlines': 0,
+            'bullish_pct': 0,
+            'bearish_pct': 0,
             'positive_pct': 0,
             'negative_pct': 0,
             'analyzed_at': datetime.now()

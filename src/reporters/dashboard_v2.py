@@ -7,6 +7,7 @@
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
 from pathlib import Path
+import html
 import json
 
 
@@ -772,6 +773,8 @@ class ModernDashboardGenerator:
         ):
             condition_text = 'Moderate volatility'
 
+        recommendation_text = html.escape(recommendations[0]) if recommendations else 'Proceed with normal risk management'
+
         return f"""<div class="header">
         <h1>Trading Signals</h1>
         <p>{datetime.now().strftime('%B %d, %Y • %I:%M %p')}</p>
@@ -786,9 +789,9 @@ class ModernDashboardGenerator:
             </div>
         </div>
         <div class="score-info">
-            <h3>{risk_emoji} Market Risk: {risk_level}</h3>
-            <p>{condition_text}</p>
-            <p style="opacity: 0.7;">{recommendations[0] if recommendations else 'Proceed with normal risk management'}</p>
+            <h3>{risk_emoji} Market Risk: {html.escape(risk_level)}</h3>
+            <p>{html.escape(condition_text)}</p>
+            <p style="opacity: 0.7;">{recommendation_text}</p>
         </div>
     </div>"""
 
@@ -797,9 +800,10 @@ class ModernDashboardGenerator:
         high_conviction = len([s for s in signals if s.conviction_score >= 70])
         avg_conviction = sum(s.conviction_score for s in signals) / len(signals) if signals else 0
 
-        total_trades = paper_stats.get('total_trades', 0)
-        win_rate = paper_stats.get('win_rate', 0)
-        total_pl = paper_stats.get('total_pl', 0)
+        closed = paper_stats.get('closed_trades') or {}
+        total_trades = closed.get('count') or 0
+        win_rate = closed.get('win_rate') or 0
+        total_pl = closed.get('total_pnl') or 0
 
         active_tickers = len(velocity_data)
 
@@ -856,26 +860,28 @@ class ModernDashboardGenerator:
             # Get triggers
             triggers_html = ""
             for trigger in signal.triggers:
-                triggers_html += f'<span class="trigger-tag">{trigger}</span>'
+                triggers_html += f'<span class="trigger-tag">{html.escape(str(trigger))}</span>'
 
             # Get technical and sentiment data
             tech = technical_data.get(signal.ticker, {})
             sent = sentiment_data.get(signal.ticker, {})
 
-            rsi = tech.get('rsi_14', 'N/A')
+            rsi = tech.get('rsi_14') if tech.get('rsi_14') is not None else 'N/A'
             # Determine trend from momentum
-            momentum = tech.get('momentum_10d', 0)
+            momentum = tech.get('momentum_10d') or 0
             if momentum > 5:
                 trend = 'Up'
             elif momentum < -5:
                 trend = 'Down'
             else:
                 trend = 'Neutral'
-            sentiment_score = sent.get('avg_sentiment', 0)
+            sentiment_score = sent.get('avg_sentiment') or 0
+
+            escaped_ticker = html.escape(signal.ticker)
 
             signal_cards += f"""<div class="signal-card">
                 <div class="signal-header">
-                    <div class="signal-ticker">{signal.ticker}</div>
+                    <div class="signal-ticker">{escaped_ticker}</div>
                     <div class="conviction-badge {conviction_class}">{signal.conviction_score:.0f}</div>
                 </div>
                 <div class="signal-triggers">{triggers_html}</div>
@@ -904,8 +910,8 @@ class ModernDashboardGenerator:
     def _generate_mini_chart(self, velocity: Dict) -> str:
         """Generate mini velocity chart (sparkline)"""
         # Create a simple bar chart showing velocity over time
-        mention_velocity = velocity.get('mention_velocity_24h', 0)
-        composite_score = velocity.get('composite_score', 0)
+        mention_velocity = velocity.get('mention_velocity_24h') or 0
+        composite_score = velocity.get('composite_score') or 0
 
         # Generate 10 bars with some variation for visual effect
         base_height = 30
@@ -1026,11 +1032,12 @@ class ModernDashboardGenerator:
         # Top 5 velocity gainers
         velocity_html = ""
         for i, v in enumerate(velocity_unique, 1):
+            composite = v.get('composite_score') or 0
             velocity_html += f"""
                 <div class="mover-item">
                     <span class="rank">#{i}</span>
-                    <span class="ticker-name">{v['ticker']}</span>
-                    <span class="mover-value positive">↑ {v['composite_score']:.1f}</span>
+                    <span class="ticker-name">{html.escape(v['ticker'])}</span>
+                    <span class="mover-value positive">↑ {composite:.1f}</span>
                 </div>"""
 
         # Top 5 insider activity
@@ -1038,11 +1045,12 @@ class ModernDashboardGenerator:
         for i, trade in enumerate(insider_unique, 1):
             trade_type_lower = trade['trade_type'].lower()
             trade_class = "positive" if 'buy' in trade_type_lower or 'purchase' in trade_type_lower or trade_type_lower == 'p' else "negative"
+            trade_value = (trade.get('value') or 0) / 1000
             insider_html += f"""
                 <div class="mover-item">
                     <span class="rank">#{i}</span>
-                    <span class="ticker-name">{trade['ticker']}</span>
-                    <span class="mover-value {trade_class}">${trade['value']/1000:.0f}K</span>
+                    <span class="ticker-name">{html.escape(trade['ticker'])}</span>
+                    <span class="mover-value {trade_class}">${trade_value:.0f}K</span>
                 </div>"""
 
         # Top 5 social mentions
@@ -1051,20 +1059,21 @@ class ModernDashboardGenerator:
             social_html += f"""
                 <div class="mover-item">
                     <span class="rank">#{i}</span>
-                    <span class="ticker-name">{mention['ticker']}</span>
-                    <span class="mover-value">{mention['mention_count']} mentions</span>
+                    <span class="ticker-name">{html.escape(mention['ticker'])}</span>
+                    <span class="mover-value">{mention.get('mention_count') or 0} mentions</span>
                 </div>"""
 
         # Top 5 sentiment shifts
         sentiment_html = ""
         for i, shift in enumerate(sentiment_unique, 1):
-            shift_class = "positive" if shift['sentiment_change'] > 0 else "negative"
-            arrow = "↑" if shift['sentiment_change'] > 0 else "↓"
+            change = shift.get('sentiment_change') or 0
+            shift_class = "positive" if change > 0 else "negative"
+            arrow = "↑" if change > 0 else "↓"
             sentiment_html += f"""
                 <div class="mover-item">
                     <span class="rank">#{i}</span>
-                    <span class="ticker-name">{shift['ticker']}</span>
-                    <span class="mover-value {shift_class}">{arrow} {abs(shift['sentiment_change']):.2f}</span>
+                    <span class="ticker-name">{html.escape(shift['ticker'])}</span>
+                    <span class="mover-value {shift_class}">{arrow} {abs(change):.2f}</span>
                 </div>"""
 
         return f"""<div class="section">
@@ -1099,13 +1108,15 @@ class ModernDashboardGenerator:
         for trade in insider_trades[:10]:
             trade_type_lower = trade['trade_type'].lower()
             trade_type_class = "positive" if 'buy' in trade_type_lower or 'purchase' in trade_type_lower or trade_type_lower == 'p' else "negative"
+            trade_value = (trade.get('value') or 0) / 1000
+            insider_name = html.escape(str(trade.get('insider_name') or 'Unknown')[:30])
             trades_html += f"""
                 <tr>
-                    <td><strong>{trade['ticker']}</strong></td>
-                    <td>{trade['insider_name'][:30]}</td>
-                    <td><span class="badge {trade_type_class}">{trade['trade_type']}</span></td>
-                    <td>${trade['value']/1000:.0f}K</td>
-                    <td>{trade['trade_date']}</td>
+                    <td><strong>{html.escape(trade['ticker'])}</strong></td>
+                    <td>{insider_name}</td>
+                    <td><span class="badge {trade_type_class}">{html.escape(trade['trade_type'])}</span></td>
+                    <td>${trade_value:.0f}K</td>
+                    <td>{html.escape(str(trade.get('trade_date') or ''))}</td>
                 </tr>"""
 
         # Buy/Sell ratio pie chart
@@ -1188,17 +1199,20 @@ class ModernDashboardGenerator:
         # MACD signals table
         macd_signals_html = ""
         macd_count = 0
-        for ticker, data in sorted(technical_data.items(), key=lambda x: x[1].get('technical_score', 0) or 0, reverse=True)[:10]:
+        for ticker, data in sorted(technical_data.items(), key=lambda x: x[1].get('technical_score') or 0, reverse=True)[:10]:
             if data.get('macd'):
-                macd = data.get('macd', {})
-                macd_hist = macd.get('histogram', 0) if isinstance(macd, dict) else 0
+                macd = data.get('macd') or {}
+                macd_hist = macd.get('histogram') or 0 if isinstance(macd, dict) else 0
                 signal_class = "positive" if macd_hist > 0 else "negative"
+                rsi_display = data.get('rsi_14')
+                rsi_display = f"{rsi_display:.1f}" if rsi_display is not None else 'N/A'
+                tech_score = data.get('technical_score') or 0
                 macd_signals_html += f"""
                     <tr>
-                        <td><strong>{ticker}</strong></td>
+                        <td><strong>{html.escape(ticker)}</strong></td>
                         <td><span class="badge {signal_class}">{'Bullish' if macd_hist > 0 else 'Bearish'}</span></td>
-                        <td>{data.get('rsi_14', 'N/A') if data.get('rsi_14') else 'N/A'}</td>
-                        <td>{data.get('technical_score', 0):.0f}/100</td>
+                        <td>{rsi_display}</td>
+                        <td>{tech_score:.0f}/100</td>
                     </tr>"""
                 macd_count += 1
 
@@ -1256,15 +1270,16 @@ class ModernDashboardGenerator:
         # Signal performance table
         perf_html = ""
         for perf in signal_performance[:8]:
-            win_rate = perf.get('win_rate', 0)
+            win_rate = perf.get('win_rate') or 0
             win_rate_class = "positive" if win_rate > 50 else "negative" if win_rate < 50 else ""
+            avg_pnl = perf.get('avg_pnl') or 0
             perf_html += f"""
                 <tr>
-                    <td><strong>{perf.get('signal_type', 'N/A')}</strong></td>
-                    <td>{perf.get('signal_count', 0)}</td>
-                    <td>{perf.get('trades_executed', 0)}</td>
+                    <td><strong>{html.escape(str(perf.get('signal_type') or 'N/A'))}</strong></td>
+                    <td>{perf.get('signal_count') or 0}</td>
+                    <td>{perf.get('trades_executed') or 0}</td>
                     <td><span class="badge {win_rate_class}">{win_rate:.1f}%</span></td>
-                    <td>${perf.get('avg_pnl', 0):.2f}</td>
+                    <td>${avg_pnl:.2f}</td>
                 </tr>"""
 
         # Equity curve data for chart
@@ -1276,6 +1291,43 @@ class ModernDashboardGenerator:
         else:
             dates_js = "[]"
             equity_js = "[]"
+
+        # Paper trading stats summary
+        closed = paper_stats.get('closed_trades') or {}
+        open_pos = paper_stats.get('open_positions') or {}
+        pt_closed_count = closed.get('count') or 0
+        pt_win_rate = closed.get('win_rate') or 0
+        pt_total_pnl = closed.get('total_pnl') or 0
+        pt_avg_return = closed.get('avg_return_pct') or 0
+        pt_open_count = open_pos.get('count') or 0
+        pt_total_deployed = open_pos.get('total_deployed') or 0
+        pt_unrealized_pnl = open_pos.get('unrealized_pnl') or 0
+
+        pnl_class = "positive" if pt_total_pnl >= 0 else "negative"
+        ur_class = "positive" if pt_unrealized_pnl >= 0 else "negative"
+        wr_class = "positive" if pt_win_rate >= 50 else "negative" if pt_win_rate > 0 else ""
+
+        paper_stats_html = f"""
+                <div class="card">
+                    <h3 class="card-title">Paper Trading Summary</h3>
+                    <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
+                        <div class="stat-card">
+                            <div class="stat-label">Closed Trades</div>
+                            <div class="stat-value">{pt_closed_count}</div>
+                            <div class="stat-change {wr_class}">{pt_win_rate:.1f}% win rate</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Realized P/L</div>
+                            <div class="stat-value {pnl_class}">${pt_total_pnl:,.2f}</div>
+                            <div class="stat-change">avg return {pt_avg_return:.1f}%</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Open Positions</div>
+                            <div class="stat-value">{pt_open_count}</div>
+                            <div class="stat-change {ur_class}">${pt_total_deployed:,.0f} deployed / ${pt_unrealized_pnl:,.2f} unrealized</div>
+                        </div>
+                    </div>
+                </div>""" if paper_stats else ""
 
         return f"""<div class="section">
             <h2 class="section-title">📊 Historical Performance (90 Days)</h2>
@@ -1304,6 +1356,7 @@ class ModernDashboardGenerator:
                     </div>
                 </div>
             </div>
+            {paper_stats_html}
             <script>
                 new Chart(document.getElementById('equityCurveChart'), {{
                     type: 'line',
@@ -1342,14 +1395,17 @@ class ModernDashboardGenerator:
         # Sentiment shifts table
         shifts_html = ""
         for shift in sentiment_shifts[:10]:
-            shift_class = "positive" if shift['sentiment_change'] > 0 else "negative"
-            arrow = "↑" if shift['sentiment_change'] > 0 else "↓"
+            change = shift.get('sentiment_change') or 0
+            prev_sent = shift.get('previous_sentiment') or 0
+            curr_sent = shift.get('current_sentiment') or 0
+            shift_class = "positive" if change > 0 else "negative"
+            arrow = "↑" if change > 0 else "↓"
             shifts_html += f"""
                 <tr>
-                    <td><strong>{shift['ticker']}</strong></td>
-                    <td>{shift['previous_sentiment']:.2f}</td>
-                    <td>{shift['current_sentiment']:.2f}</td>
-                    <td><span class="badge {shift_class}">{arrow} {abs(shift['sentiment_change']):.2f}</span></td>
+                    <td><strong>{html.escape(shift['ticker'])}</strong></td>
+                    <td>{prev_sent:.2f}</td>
+                    <td>{curr_sent:.2f}</td>
+                    <td><span class="badge {shift_class}">{arrow} {abs(change):.2f}</span></td>
                 </tr>"""
 
         # Sentiment distribution (None treated as 0 for neutral)
@@ -1448,8 +1504,8 @@ class ModernDashboardGenerator:
             treasury_values_js = "[]"
 
         # Current macro values
-        current_vix = vix_history[-1]['value'] if vix_history else 0
-        current_treasury = treasury_history[-1]['value'] if treasury_history else 0
+        current_vix = (vix_history[-1].get('value') or 0) if vix_history else 0
+        current_treasury = (treasury_history[-1].get('value') or 0) if treasury_history else 0
 
         return f"""<div class="section">
             <h2 class="section-title">🌍 Macro Economic Trends (30 Days)</h2>
@@ -1537,13 +1593,14 @@ class ModernDashboardGenerator:
         # Top social mentions table
         social_html = ""
         for i, mention in enumerate(social_unique[:10], 1):
+            viral_score = mention.get('viral_score') or 0
             social_html += f"""
                 <tr>
                     <td>#{i}</td>
-                    <td><strong>{mention['ticker']}</strong></td>
-                    <td>{mention['mention_count']}</td>
-                    <td>{mention['upvotes']}</td>
-                    <td>{mention['viral_score']:.1f}</td>
+                    <td><strong>{html.escape(mention['ticker'])}</strong></td>
+                    <td>{mention.get('mention_count') or 0}</td>
+                    <td>{mention.get('upvotes') or 0}</td>
+                    <td>{viral_score:.1f}</td>
                 </tr>"""
 
         # Emerging tickers
@@ -1551,8 +1608,8 @@ class ModernDashboardGenerator:
         for ticker in emerging_tickers[:8]:
             emerging_html += f"""
                 <div class="emerging-ticker">
-                    <span class="ticker-badge">{ticker['ticker']}</span>
-                    <span class="mention-count">{ticker['mention_count']} mentions</span>
+                    <span class="ticker-badge">{html.escape(ticker['ticker'])}</span>
+                    <span class="mention-count">{ticker.get('mention_count') or 0} mentions</span>
                     <span class="new-badge">NEW</span>
                 </div>"""
 

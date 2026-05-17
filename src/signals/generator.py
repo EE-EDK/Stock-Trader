@@ -4,6 +4,7 @@
 @details Analyzes velocity and insider data to generate ranked trading signals
 """
 
+import copy
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -62,8 +63,14 @@ class SignalGenerator:
         @brief Initialize signal generator
         @param thresholds Optional custom threshold configuration
         """
-        defaults = self.DEFAULT_THRESHOLDS.copy()
-        self.thresholds = thresholds if thresholds else defaults
+        defaults = copy.deepcopy(self.DEFAULT_THRESHOLDS)
+        if thresholds:
+            for key, val in thresholds.items():
+                if isinstance(val, dict) and key in defaults and isinstance(defaults[key], dict):
+                    defaults[key].update(val)
+                else:
+                    defaults[key] = val
+        self.thresholds = defaults
 
     def generate_signals(
         self,
@@ -103,38 +110,36 @@ class SignalGenerator:
             # Check velocity spike
             if self._check_velocity_spike(vel):
                 triggers.append("velocity_spike")
-                conviction += 30
+                conviction += 20
 
             # Check insider cluster
             if self._check_insider_cluster(insiders):
                 triggers.append("insider_cluster")
-                conviction += 40
+                conviction += 25
 
             # Check sentiment flip
             if self._check_sentiment_flip(vel):
                 triggers.append("sentiment_flip")
-                conviction += 20
+                conviction += 10
 
-            # NEW: Technical breakout detection
+            # Technical breakout detection
             if tech and self._check_technical_breakout(tech):
                 triggers.append("technical_breakout")
-                conviction += 25
+                conviction += 15
 
-            # NEW: RSI oversold signal
+            # RSI oversold signal
             if tech and self._check_rsi_oversold(tech):
                 triggers.append("rsi_oversold")
-                conviction += 15
+                conviction += 10
 
-            # NEW: Golden cross
+            # Golden cross
             if tech and tech.get("golden_cross"):
                 triggers.append("golden_cross")
-                conviction += 20
+                conviction += 10
 
-            # NEW: Positive news sentiment
+            # Positive news sentiment
             if sentiment and self._check_positive_sentiment(sentiment):
                 triggers.append("news_sentiment_bullish")
-                conviction += 15
-
                 conviction += 10
 
             # Add technical score contribution (0-100 scale)
@@ -143,20 +148,20 @@ class SignalGenerator:
                 and "technical_score" in tech
                 and tech["technical_score"] is not None
             ):
-                conviction += tech["technical_score"] * 0.2  # 20% weight
+                conviction += tech["technical_score"] * 0.15  # 15% weight
 
             # Boost for combined signals
             if len(triggers) >= 2:
-                conviction += 15
+                conviction += 10
 
             # Add base composite score contribution
-            conviction += vel.get("composite_score", 0) * 0.3
+            conviction += (vel.get("composite_score") or 0) * 0.2
 
             # Cap at 100
             conviction = min(100, conviction)
 
             # Generate signal if triggers exist and conviction meets minimum
-            min_sig_conviction = self.thresholds.get("minimum_conviction", 40)
+            min_sig_conviction = (self.thresholds.get("minimum_conviction") or 40)
             if triggers and conviction >= min_sig_conviction:
                 notes_text = self._generate_notes(
                     ticker, vel, insiders, triggers, tech, sentiment
@@ -168,7 +173,7 @@ class SignalGenerator:
                         ticker=ticker,
                         signal_type=sig_type,
                         conviction_score=conviction,
-                        price_at_signal=price.get("price", 0.0),
+                        price_at_signal=(price.get("price") or 0.0),
                         triggers=triggers,
                         notes=notes_text,
                         created_at=created,
@@ -191,10 +196,10 @@ class SignalGenerator:
         @return True if velocity spike criteria are met
         """
         threshold = self.thresholds.get("velocity_spike", {})
-        vel_24h = vel.get("mention_velocity_24h", 0)
-        vel_min = threshold.get("mention_vel_24h_min", 100)
-        comp_score = vel.get("composite_score", 0)
-        comp_min = threshold.get("composite_score_min", 60)
+        vel_24h = (vel.get("mention_velocity_24h") or 0)
+        vel_min = (threshold.get("mention_vel_24h_min") or 100)
+        comp_score = (vel.get("composite_score") or 0)
+        comp_min = (threshold.get("composite_score_min") or 60)
 
         return vel_24h >= vel_min and comp_score >= comp_min
 
@@ -208,9 +213,9 @@ class SignalGenerator:
             return False
 
         threshold = self.thresholds.get("insider_cluster", {})
-        lookback_days = threshold.get("lookback_days", 14)
-        min_insiders = threshold.get("min_insiders", 2)
-        min_value_total = threshold.get("min_value_total", 100000)
+        lookback_days = (threshold.get("lookback_days") or 14)
+        min_insiders = (threshold.get("min_insiders") or 2)
+        min_value_total = (threshold.get("min_value_total") or 100000)
 
         cutoff = datetime.now() - timedelta(days=lookback_days)
 
@@ -233,8 +238,8 @@ class SignalGenerator:
         if len(recent_buys) < min_insiders:
             return False
 
-        total_value = sum(buy.get("value", 0) or 0 for buy in recent_buys)
-        return total_value is not None and total_value >= min_value_total
+        total_value = sum((buy.get("value") or 0) for buy in recent_buys)
+        return total_value >= min_value_total
 
     def _check_sentiment_flip(self, vel: Dict[str, float]) -> bool:
         """
@@ -243,9 +248,9 @@ class SignalGenerator:
         @return True if sentiment flip criteria are met
         """
         threshold = self.thresholds.get("sentiment_flip", {})
-        sentiment_delta_min = threshold.get("sentiment_delta_min", 0.3)
+        sentiment_delta_min = (threshold.get("sentiment_delta_min") or 0.3)
 
-        return abs(vel.get("sentiment_velocity", 0)) >= sentiment_delta_min
+        return abs(vel.get("sentiment_velocity") or 0) >= sentiment_delta_min
 
     def _generate_notes(
         self,
@@ -269,17 +274,17 @@ class SignalGenerator:
         notes = []
 
         if "velocity_spike" in triggers:
-            vel_24h = vel.get("mention_velocity_24h", 0)
+            vel_24h = (vel.get("mention_velocity_24h") or 0)
             notes.append(f"Mentions up {vel_24h:.0f}% in 24h")
 
         if "insider_cluster" in triggers:
             purchases = [i for i in insiders if i.get("trade_type") == "P"]
             buy_count = len(purchases)
-            total_val = sum(i.get("value", 0) for i in purchases)
+            total_val = sum((i.get("value") or 0) for i in purchases)
             notes.append(f"{buy_count} insiders bought ${total_val:,.0f}")
 
         if "sentiment_flip" in triggers:
-            sent_vel = vel.get("sentiment_velocity", 0)
+            sent_vel = (vel.get("sentiment_velocity") or 0)
             direction = "bullish" if sent_vel > 0 else "bearish"
             notes.append(f"Sentiment flipping {direction}")
 
@@ -287,18 +292,18 @@ class SignalGenerator:
             notes.append("Technical breakout detected")
 
         if "rsi_oversold" in triggers and tech:
-            rsi = tech.get("rsi_14", 0)
+            rsi = (tech.get("rsi_14") or 0)
             notes.append(f"RSI oversold ({rsi:.1f})")
 
         if "golden_cross" in triggers:
             notes.append("Golden cross (SMA)")
 
         if "news_sentiment_bullish" in triggers and sentiment:
-            score = sentiment.get("sentiment_score", 0)
+            score = (sentiment.get("sentiment_score") or 0)
             notes.append(f"News bullish ({score:.2f})")
 
         # Add composite score
-        comp_score = vel.get("composite_score", 0)
+        comp_score = (vel.get("composite_score") or 0)
         notes.append(f"Composite: {comp_score:.0f}")
 
         return " | ".join(notes)

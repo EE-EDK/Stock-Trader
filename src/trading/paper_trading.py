@@ -68,7 +68,8 @@ class PaperTradingManager:
         return self.base_position_size * multiplier
 
     def create_paper_trade(self, ticker: str, entry_price: float, conviction: int,
-                          signal_types: List[str], entry_date: datetime) -> Optional[int]:
+                          signal_types: List[str], entry_date: datetime,
+                          signal_id: Optional[int] = None) -> Optional[int]:
         """
         @brief Create a new paper trade position
         @param ticker Stock ticker symbol
@@ -76,6 +77,7 @@ class PaperTradingManager:
         @param conviction Signal conviction score
         @param signal_types List of signal trigger types
         @param entry_date Date of entry
+        @param signal_id Optional ID of the originating signal
         @return Trade ID if created, None if skipped
         """
         if not self.enabled:
@@ -107,10 +109,11 @@ class PaperTradingManager:
                 cursor.execute("""
                     INSERT INTO paper_trades
                     (ticker, entry_date, entry_price, shares, conviction, signal_types,
-                     position_size, stop_loss, target_price, status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')
+                     position_size, stop_loss, target_price, signal_id, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')
                 """, (ticker, entry_date.isoformat(), entry_price, shares, conviction,
-                      json.dumps(signal_types), actual_position_size, stop_loss, target_price))
+                      json.dumps(signal_types), actual_position_size, stop_loss, target_price,
+                      signal_id))
 
                 trade_id = cursor.lastrowid
                 conn.commit()
@@ -255,11 +258,11 @@ class PaperTradingManager:
         for signal in signals:
             ticker, conviction, triggers_json, created_at_str = signal
 
-            # Parse triggers JSON safely (handle empty strings and invalid JSON)
+            # Parse triggers: try JSON first, fall back to CSV for legacy data
             try:
                 signal_types = json.loads(triggers_json) if triggers_json and triggers_json.strip() else []
-            except (json.JSONDecodeError, ValueError):
-                signal_types = []
+            except (json.JSONDecodeError, TypeError):
+                signal_types = [t.strip() for t in triggers_json.split(',')] if triggers_json else []
 
             created_at = datetime.fromisoformat(created_at_str)
 

@@ -138,7 +138,8 @@ class DatabaseQueries:
 
         cursor.execute("""
             SELECT p1.ticker, p1.price, p1.change_pct, p1.news_sentiment,
-                   p1.bullish_pct, p1.bearish_pct, p1.collected_at
+                   p1.bullish_pct, p1.bearish_pct, p1.collected_at,
+                   p1.high, p1.low, p1.open, p1.prev_close
             FROM prices p1
             INNER JOIN (
                 SELECT ticker, MAX(collected_at) as max_time
@@ -155,7 +156,11 @@ class DatabaseQueries:
                 'news_sentiment': row[3],
                 'bullish_pct': row[4],
                 'bearish_pct': row[5],
-                'collected_at': row[6]
+                'collected_at': row[6],
+                'high': row[7],
+                'low': row[8],
+                'open': row[9],
+                'prev_close': row[10]
             }
 
         return result
@@ -172,7 +177,7 @@ class DatabaseQueries:
 
         cursor.execute("""
             SELECT collected_at, price, change_pct, news_sentiment,
-                   bullish_pct, bearish_pct
+                   bullish_pct, bearish_pct, high, low, open, prev_close
             FROM prices
             WHERE ticker = ? AND collected_at >= ?
             ORDER BY collected_at ASC
@@ -186,7 +191,11 @@ class DatabaseQueries:
                 'change_pct': row[2],
                 'news_sentiment': row[3],
                 'bullish_pct': row[4],
-                'bearish_pct': row[5]
+                'bearish_pct': row[5],
+                'high': row[6],
+                'low': row[7],
+                'open': row[8],
+                'prev_close': row[9]
             })
 
         return result

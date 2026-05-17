@@ -66,6 +66,12 @@ class AlphaVantageCollector:
 
                 self._call_count += 1
 
+                # Detect rate-limit / information responses from Alpha Vantage
+                rate_limit_msg = data.get('Note') or data.get('Information')
+                if rate_limit_msg:
+                    logger.warning(f"Alpha Vantage rate limit hit: {rate_limit_msg}")
+                    break  # Stop further calls — remaining tickers would also be rejected
+
                 # Parse sentiment data
                 if 'feed' in data and data['feed']:
                     ticker_sentiment = self._calculate_aggregate_sentiment(ticker, data['feed'])

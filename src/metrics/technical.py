@@ -30,9 +30,14 @@ def calculate_rsi(prices: List[float], period: int = 14) -> Optional[float]:
     gains = np.where(deltas > 0, deltas, 0)
     losses = np.where(deltas < 0, -deltas, 0)
 
-    # Calculate average gain and loss
-    avg_gain = np.mean(gains[-period:])
-    avg_loss = np.mean(losses[-period:])
+    # Wilder smoothing: seed with simple mean of first `period` changes,
+    # then apply exponential smoothing for subsequent changes.
+    avg_gain = float(np.mean(gains[:period]))
+    avg_loss = float(np.mean(losses[:period]))
+
+    for i in range(period, len(gains)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
 
     if avg_loss == 0:
         return 100.0
@@ -209,7 +214,7 @@ class TechnicalAnalyzer:
         """
         self.db = database
 
-    def analyze_ticker(self, ticker: str, days: int = 30) -> Dict:
+    def analyze_ticker(self, ticker: str, days: int = 250) -> Dict:
         """
         @brief Perform comprehensive technical analysis on a ticker
         @param ticker Stock ticker symbol
@@ -222,7 +227,7 @@ class TechnicalAnalyzer:
         if not price_history:
             return {}
 
-        prices = [p['price'] for p in price_history if p['price'] > 0]
+        prices = [p['price'] for p in price_history if p.get('price') is not None and p['price'] > 0]
 
         if len(prices) < 5:
             logger.debug(f"Insufficient price data for {ticker}")
@@ -239,6 +244,8 @@ class TechnicalAnalyzer:
             'ema_12': calculate_ema(prices, 12),
             'bollinger': calculate_bollinger_bands(prices, 20),
             'breakout_detected': detect_breakout(prices, 20),
+            'golden_cross': detect_golden_cross(prices) if len(prices) >= 200 else False,
+            'death_cross': detect_death_cross(prices) if len(prices) >= 200 else False,
             'analyzed_at': datetime.now()
         }
 

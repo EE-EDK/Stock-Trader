@@ -117,6 +117,7 @@ class TestPaperTradingInit:
                             position_size REAL NOT NULL,
                             stop_loss REAL,
                             target_price REAL,
+                            signal_id INTEGER,
                             exit_date DATETIME,
                             exit_price REAL,
                             exit_reason TEXT,
@@ -243,6 +244,7 @@ class TestCreatePaperTrade:
                 position_size REAL NOT NULL,
                 stop_loss REAL,
                 target_price REAL,
+                signal_id INTEGER,
                 exit_date DATETIME,
                 exit_price REAL,
                 exit_reason TEXT,
@@ -447,6 +449,7 @@ class TestUpdatePositions:
                 position_size REAL NOT NULL,
                 stop_loss REAL,
                 target_price REAL,
+                signal_id INTEGER,
                 exit_date DATETIME,
                 exit_price REAL,
                 exit_reason TEXT,
@@ -627,6 +630,7 @@ class TestBackfillFromSignals:
                 position_size REAL NOT NULL,
                 stop_loss REAL,
                 target_price REAL,
+                signal_id INTEGER,
                 exit_date DATETIME,
                 exit_price REAL,
                 exit_reason TEXT,
@@ -793,6 +797,7 @@ class TestPerformanceSummary:
                 position_size REAL NOT NULL,
                 stop_loss REAL,
                 target_price REAL,
+                signal_id INTEGER,
                 exit_date DATETIME,
                 exit_price REAL,
                 exit_reason TEXT,
@@ -946,6 +951,7 @@ class TestEdgeCases:
                 position_size REAL,
                 stop_loss REAL,
                 target_price REAL,
+                signal_id INTEGER,
                 status TEXT DEFAULT 'open'
             );
         """)

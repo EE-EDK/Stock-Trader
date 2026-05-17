@@ -62,13 +62,13 @@ class TestApeWisdomCollector:
 
     @patch('src.collectors.apewisdom.requests.Session.get')
     def test_collect_api_error(self, mock_get):
-        """Test handling of API errors"""
+        """Test handling of API errors — returns None (not []) to distinguish from empty"""
         mock_get.side_effect = requests.RequestException("API error")
 
         collector = ApeWisdomCollector()
         results = collector.collect()
 
-        assert results == []
+        assert results is None
 
     @patch('src.collectors.apewisdom.requests.Session.get')
     def test_collect_invalid_data(self, mock_get):
@@ -131,9 +131,9 @@ class TestOpenInsiderCollector:
         assert result.month == 1
         assert result.day == 15
 
-        # Invalid date should return current date
+        # Invalid date should return None
         result = collector._parse_date('invalid')
-        assert isinstance(result, datetime)
+        assert result is None
 
 
 class TestFinnhubCollector:

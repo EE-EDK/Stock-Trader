@@ -188,7 +188,7 @@ class TestSignalGenerator:
         velocity_data = {
             "AAPL": {
                 "mention_velocity_24h": 150,
-                "composite_score": 70,
+                "composite_score": 100,
                 "sentiment_velocity": 0.1,
             }
         }
@@ -200,7 +200,7 @@ class TestSignalGenerator:
         assert len(signals) == 1
         assert signals[0].ticker == "AAPL"
         assert "velocity_spike" in signals[0].triggers
-        assert signals[0].conviction_score > 40
+        assert signals[0].conviction_score >= 40
 
     def test_generate_signals_combined(self):
         """Test signal generation with multiple triggers"""
@@ -461,7 +461,7 @@ class TestSignalGenerator:
         velocity_data = {
             "MSFT": {
                 "mention_velocity_24h": 0,
-                "composite_score": 10,
+                "composite_score": 50,
             }
         }
         insider_data = {}
@@ -469,7 +469,7 @@ class TestSignalGenerator:
         technical_data = {
             "MSFT": {"technical_score": 100, "breakout_detected": True}
         }
-        # Score calculation is 25 (breakout) + 20 (tech score) + 3 (comp) = 48.
+        # Score: 15 (breakout) + 15 (tech score 100*0.15) + 10 (comp 50*0.2) = 40.
         signals = gen.generate_signals(
             velocity_data, insider_data, price_data, technical_data
         )
