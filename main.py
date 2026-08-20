@@ -25,6 +25,7 @@ from src.signals.generator import SignalGenerator
 from src.reporters.email import EmailReporter
 from src.reporters.dashboard_v2 import ModernDashboardGenerator as DashboardGenerator
 from src.trading.paper_trading import PaperTradingManager
+from src.utils.single_instance import acquire_lock, release_lock
 
 # Setup logging first (before other imports that may need it)
 def setup_logging(log_level: str = 'INFO', project_root: str = '.'):
@@ -700,8 +701,15 @@ def main():
             logger.info("Database initialized successfully")
             sys.exit(0)
 
-        # Run full pipeline
-        signals = run_pipeline(config, skip_email=args.skip_email)
+        # Run full pipeline (single instance at a time)
+        lock_path = os.path.join(project_root, "data", "pipeline.lock")
+        if not acquire_lock(lock_path):
+            logger.error("Another pipeline instance is already running (data/pipeline.lock). Exiting.")
+            sys.exit(2)
+        try:
+            signals = run_pipeline(config, skip_email=args.skip_email)
+        finally:
+            release_lock(lock_path)
         sys.exit(0)
 
     except FileNotFoundError as e:
