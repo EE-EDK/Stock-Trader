@@ -401,12 +401,10 @@ def run_pipeline(config: dict, skip_email: bool = False):
 
         # ========== Update Paper Trading Positions ==========
         if paper_trading.enabled:
-            logger.info("Updating paper trading positions with current prices...")
+            logger.info("Updating paper trading positions against daily bars...")
             try:
-                # Get latest prices for all open positions
-                current_prices = db.get_latest_prices()
-                paper_trading.update_positions(current_prices, datetime.now())
-                logger.info(f"  [OK] Paper trading positions updated")
+                paper_trading.update_positions_from_bars(db, datetime.now())
+                logger.info("  [OK] Paper trading positions updated")
             except Exception as e:
                 logger.error(f"  [ERROR] Paper trading update failed: {e}")
 
