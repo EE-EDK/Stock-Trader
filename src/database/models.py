@@ -167,6 +167,21 @@ class Database:
             ON signals(ticker, created_at)
         """)
 
+        # Daily OHLCV bars - the market-date spine (see docs/superpowers/plans/2026-08-19-market-date-spine-spec.md)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS price_bars (
+                ticker TEXT NOT NULL,
+                date TEXT NOT NULL,
+                open REAL, high REAL, low REAL, close REAL,
+                volume INTEGER,
+                source TEXT DEFAULT 'yfinance',
+                PRIMARY KEY (ticker, date)
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_price_bars_date ON price_bars(date)
+        """)
+
         # Macro indicators tables (Phase 2 - enhanced)
         macro_schema_path = Path(__file__).parent / "macro_schema.sql"
         if macro_schema_path.exists():
@@ -440,6 +455,53 @@ class Database:
         from src.database.queries import DatabaseQueries
         queries = DatabaseQueries(self.connect())
         return queries.get_sentiment_history(ticker, days)
+
+    def insert_price_bars(self, bars: List[Dict[str, Any]]) -> int:
+        """
+        @brief Upsert daily OHLCV bars into the market-date spine.
+        @param bars Dicts with ticker, date ('YYYY-MM-DD'), open, high, low, close, volume
+        @return Number of bars written
+        """
+        if not bars:
+            return 0
+        conn = self.connect()
+        cursor = conn.cursor()
+        cursor.executemany("""
+            INSERT OR REPLACE INTO price_bars (ticker, date, open, high, low, close, volume)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, [(b['ticker'], b['date'], b.get('open'), b.get('high'),
+               b.get('low'), b.get('close'), b.get('volume')) for b in bars])
+        conn.commit()
+        return len(bars)
+
+    def get_last_bar_date(self, ticker: str) -> Optional[str]:
+        """@brief Most recent bar date for a ticker, or None."""
+        cursor = self.connect().cursor()
+        cursor.execute("SELECT MAX(date) FROM price_bars WHERE ticker = ?", (ticker,))
+        row = cursor.fetchone()
+        return row[0] if row else None
+
+    def get_close_history(self, ticker: str, days: int = 250) -> List[float]:
+        """@brief Closing prices ascending by date over the last `days` calendar days."""
+        cutoff = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+        cursor = self.connect().cursor()
+        cursor.execute("""
+            SELECT close FROM price_bars
+            WHERE ticker = ? AND date >= ? AND close IS NOT NULL
+            ORDER BY date ASC
+        """, (ticker, cutoff))
+        return [row[0] for row in cursor.fetchall()]
+
+    def get_bars_since(self, ticker: str, start_date: str) -> List[Dict[str, Any]]:
+        """@brief Bars strictly after start_date ('YYYY-MM-DD'), ascending."""
+        cursor = self.connect().cursor()
+        cursor.execute("""
+            SELECT date, open, high, low, close, volume FROM price_bars
+            WHERE ticker = ? AND date > ?
+            ORDER BY date ASC
+        """, (ticker, start_date))
+        return [{'date': r[0], 'open': r[1], 'high': r[2], 'low': r[3],
+                 'close': r[4], 'volume': r[5]} for r in cursor.fetchall()]
 
     def insert_macro_indicators(self, indicators: Dict[str, Dict[str, Any]]):
         """
