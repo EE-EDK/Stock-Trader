@@ -49,6 +49,13 @@ class Database:
             self.conn.close()
             self.conn = None
 
+    @staticmethod
+    def _ensure_column(cursor, table: str, column: str, decl: str):
+        """@brief Add a column if it doesn't exist (idempotent migration)."""
+        cols = [r[1] for r in cursor.execute(f"PRAGMA table_info({table})").fetchall()]
+        if column not in cols:
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+
     def initialize(self):
         """
         @brief Initialize database schema
@@ -181,6 +188,11 @@ class Database:
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_price_bars_date ON price_bars(date)
         """)
+
+        # Forward-return outcome columns (learning loop)
+        self._ensure_column(cursor, 'signals', 'fwd_return_5d', 'REAL')
+        self._ensure_column(cursor, 'signals', 'fwd_return_10d', 'REAL')
+        self._ensure_column(cursor, 'signals', 'fwd_return_30d', 'REAL')
 
         # Macro indicators tables (Phase 2 - enhanced)
         macro_schema_path = Path(__file__).parent / "macro_schema.sql"

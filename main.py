@@ -27,6 +27,7 @@ from src.reporters.dashboard_v2 import ModernDashboardGenerator as DashboardGene
 from src.trading.paper_trading import PaperTradingManager
 from src.utils.single_instance import acquire_lock, release_lock
 from src.collectors.bars_backfill import backfill_price_bars
+from src.analysis.outcomes import update_signal_outcomes
 
 # Setup logging first (before other imports that may need it)
 def setup_logging(log_level: str = 'INFO', project_root: str = '.'):
@@ -398,6 +399,13 @@ def run_pipeline(config: dict, skip_email: bool = False):
                 logger.error(f"  [ERROR] Bar backfill failed: {e}")
         else:
             logger.warning("  [WARN] yfinance not available - price_bars not updated")
+
+        # Backfill signal outcomes now that bars are current (learning loop)
+        try:
+            n = update_signal_outcomes(db)
+            logger.info(f"  [OK] Signal outcomes updated for {n} signals")
+        except Exception as e:
+            logger.error(f"  [ERROR] Outcome backfill failed: {e}")
 
         # ========== Update Paper Trading Positions ==========
         if paper_trading.enabled:
