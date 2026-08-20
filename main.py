@@ -464,8 +464,9 @@ def run_pipeline(config: dict, skip_email: bool = False):
             )
 
             # Insert ALL signals into database for historical analysis
+            signal_ids = {}
             if all_signals:
-                db.insert_signals(all_signals)
+                signal_ids = db.insert_signals(all_signals)
                 logger.info(f"  [OK] Inserted {len(all_signals)} signals into database")
 
             # Filter by minimum conviction for reporting/trading
@@ -495,7 +496,8 @@ def run_pipeline(config: dict, skip_email: bool = False):
                                 entry_price=price_data['price'],
                                 conviction=int(signal.conviction_score),
                                 signal_types=signal.triggers,
-                                entry_date=datetime.now()
+                                entry_date=datetime.now(),
+                                signal_id=signal_ids.get(signal.ticker)
                             )
                             if trade_id:
                                 created_count += 1

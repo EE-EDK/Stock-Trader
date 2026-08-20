@@ -365,13 +365,14 @@ class Database:
         conn.commit()
         logger.info(f"Inserted {len(velocity_data)} velocity records")
 
-    def insert_signals(self, signals: List[Any]):
+    def insert_signals(self, signals: List[Any]) -> Dict[str, int]:
         """
         @brief Insert generated signals
         @param signals List of Signal objects
+        @return Dict mapping ticker -> signals.id for this batch (for trade linkage)
         """
         if not signals:
-            return
+            return {}
 
         conn = self.connect()
         cursor = conn.cursor()
@@ -392,7 +393,16 @@ class Database:
             ))
 
         conn.commit()
+
+        ids: Dict[str, int] = {}
+        for signal in signals:
+            row = cursor.execute(
+                "SELECT id FROM signals WHERE ticker = ? AND created_at = ?",
+                (signal.ticker, signal.created_at)).fetchone()
+            if row:
+                ids[signal.ticker] = row[0]
         logger.info(f"Inserted {len(signals)} signal records")
+        return ids
 
     def get_tracked_tickers(self, days: int = 7) -> List[str]:
         """

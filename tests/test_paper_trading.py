@@ -901,3 +901,42 @@ class TestEdgeCases:
         )
 
         assert trade_id is not None
+
+
+class TestBookHygiene:
+    """One open position per ticker, zero-share guard, signal_id linkage"""
+
+    def _mgr(self, tmp_path):
+        from src.database.models import Database
+        db = Database(str(tmp_path / "t.db"))
+        db.initialize()
+        config = {'paper_trading': {'enabled': True, 'min_conviction': 25,
+                                    'position_size': 1000, 'max_open_positions': 10,
+                                    'hold_days': 30, 'stop_loss_pct': -10,
+                                    'take_profit_pct': 20}}
+        return db, PaperTradingManager(db.db_path, config)
+
+    def test_second_open_position_same_ticker_rejected(self, tmp_path):
+        db, mgr = self._mgr(tmp_path)
+        t1 = mgr.create_paper_trade('DUP', 10.0, 50, ['insider_cluster'], datetime(2026, 8, 1))
+        t2 = mgr.create_paper_trade('DUP', 10.5, 50, ['insider_cluster'],
+                                    datetime(2026, 8, 1) + timedelta(minutes=5))
+        assert t1 is not None and t2 is None
+        db.close()
+
+    def test_zero_share_trade_rejected(self, tmp_path):
+        db, mgr = self._mgr(tmp_path)
+        # conviction 25 -> $500 position; price $679 -> 0 shares (the VOO case)
+        assert mgr.create_paper_trade('VOO', 679.46, 25, ['news_sentiment_bullish'],
+                                      datetime(2026, 8, 1)) is None
+        db.close()
+
+    def test_signal_id_is_stored(self, tmp_path):
+        db, mgr = self._mgr(tmp_path)
+        tid = mgr.create_paper_trade('LNK', 10.0, 50, ['insider_cluster'],
+                                     datetime(2026, 8, 1), signal_id=77)
+        import contextlib
+        with contextlib.closing(sqlite3.connect(mgr.db_path)) as conn:
+            sid = conn.execute("SELECT signal_id FROM paper_trades WHERE id=?", (tid,)).fetchone()[0]
+        assert sid == 77
+        db.close()

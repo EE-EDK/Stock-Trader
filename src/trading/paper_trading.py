@@ -94,6 +94,11 @@ class PaperTradingManager:
             logger.debug(f"Paper trade already exists for {ticker} on {entry_date}, skipping")
             return None
 
+        # One open position per ticker - a second signal doesn't double the bet
+        if self._has_open_position(ticker):
+            logger.info(f"Open position already exists for {ticker}, skipping new trade")
+            return None
+
         # Check max open positions
         open_count = self._count_open_positions()
         if open_count >= self.max_open_positions:
@@ -103,6 +108,10 @@ class PaperTradingManager:
         # Calculate position details
         position_size = self.calculate_position_size(conviction)
         shares = int(position_size / entry_price)
+        if shares == 0:
+            logger.warning(f"Position size ${position_size:.2f} buys 0 shares of "
+                           f"{ticker} @ ${entry_price:.2f}, skipping")
+            return None
         actual_position_size = shares * entry_price
 
         # Calculate exit prices
@@ -146,6 +155,14 @@ class PaperTradingManager:
             """, (ticker, entry_date.isoformat()))
             exists = cursor.fetchone() is not None
         return exists
+
+    def _has_open_position(self, ticker: str) -> bool:
+        """@brief True if an open paper trade already exists for this ticker."""
+        with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM paper_trades WHERE ticker = ? AND status = 'open' LIMIT 1",
+                           (ticker,))
+            return cursor.fetchone() is not None
 
     def _count_open_positions(self) -> int:
         """Count currently open positions"""

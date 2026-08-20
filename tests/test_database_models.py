@@ -266,3 +266,17 @@ class TestQueryEdgeCases:
         results = sample_velocity_data.get_top_velocity_gainers(limit=10, hours=0)
         # Should return empty or very recent data
         assert isinstance(results, list)
+
+
+def test_insert_signals_returns_ids(tmp_path):
+    from datetime import datetime
+    from src.database.models import Database
+    from src.signals.generator import Signal
+    db = Database(str(tmp_path / "t.db"))
+    db.initialize()
+    now = datetime(2026, 8, 19, 21, 30)
+    sigs = [Signal(ticker='AAA', signal_type='insider_cluster', conviction_score=50,
+                   price_at_signal=10.0, triggers=['insider_cluster'], notes='n', created_at=now)]
+    ids = db.insert_signals(sigs)
+    assert set(ids.keys()) == {'AAA'} and isinstance(ids['AAA'], int)
+    db.close()
