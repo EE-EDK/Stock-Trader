@@ -13,6 +13,20 @@
 
 ## 📊 System Architecture
 
+### Market-Date Spine (2026-08)
+
+All time-series logic keys on **market dates**, not pipeline-run timestamps. The `price_bars`
+table (daily OHLCV per ticker, backfilled from yfinance on every run in Step 1c) is the canonical
+spine: technical indicators compute on real daily closes, paper-trade exits replay every bar since
+the last evaluation through the shared engine (`src/trading/engine.py` — the same rules the
+backtester uses), and every signal is graded with +5/+10/+30 trading-day forward returns
+(`src/analysis/outcomes.py`), surfaced as the per-trigger edge table in the dashboard. Runs are
+gap-tolerant — skip a week and the next run fills every missed trading day and applies exits where
+a resting order would actually have filled. A single-instance lock (`data/pipeline.lock`) prevents
+concurrent runs; `utils/register_daily_task.ps1` registers a weekday 6:30 PM scheduled run;
+`utils/revalidate_paper_trades.py` is the one-time book repair that voided historical duplicates
+and re-closed trades against real bars.
+
 ### Pipeline Overview
 
 ```mermaid
@@ -468,7 +482,7 @@ email:
   smtp_server: "smtp.gmail.com"
   smtp_port: 587
   sender: "your-email@gmail.com"
-  password: "your-app-password"   # Use app password for Gmail
+  password: "your-app-password"   # placeholder example - use a Gmail app password
   recipients:
     - "your-email@gmail.com"
 
