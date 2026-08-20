@@ -48,3 +48,14 @@ def test_close_history_ascending(db):
 
 def test_empty_insert(db):
     assert db.insert_price_bars([]) == 0
+
+
+def test_signal_and_trade_tickers(db):
+    conn = db.connect()
+    conn.execute("INSERT INTO signals (ticker, signal_type, conviction_score, created_at) "
+                 "VALUES ('AAA', 'insider_cluster', 50, '2026-08-01')")
+    conn.execute("""INSERT INTO paper_trades
+        (ticker, entry_date, entry_price, shares, conviction, signal_types, position_size)
+        VALUES ('BBB', '2026-08-01', 10.0, 5, 50, '["insider_cluster"]', 50.0)""")
+    conn.commit()
+    assert db.get_signal_and_trade_tickers() == ['AAA', 'BBB']

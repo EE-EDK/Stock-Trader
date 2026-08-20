@@ -26,6 +26,7 @@ from src.reporters.email import EmailReporter
 from src.reporters.dashboard_v2 import ModernDashboardGenerator as DashboardGenerator
 from src.trading.paper_trading import PaperTradingManager
 from src.utils.single_instance import acquire_lock, release_lock
+from src.collectors.bars_backfill import backfill_price_bars
 
 # Setup logging first (before other imports that may need it)
 def setup_logging(log_level: str = 'INFO', project_root: str = '.'):
@@ -383,6 +384,20 @@ def run_pipeline(config: dict, skip_email: bool = False):
                     else:
                         logger.info("  [SKIP] FRED: API key not configured")
 
+
+        # ========== Step 1c: Backfill daily bars (the market-date spine) ==========
+        logger.info("Step 1c: Backfilling daily price bars...")
+        if YFINANCE_AVAILABLE:
+            try:
+                bar_tickers = set(tracked_tickers) | set(db.get_signal_and_trade_tickers())
+                yf_bars = YFinanceCollector()
+                written = backfill_price_bars(db, yf_bars, sorted(bar_tickers))
+                yf_bars.close()
+                logger.info(f"  [OK] Bars: {sum(written.values())} bars across {len(written)} tickers")
+            except Exception as e:
+                logger.error(f"  [ERROR] Bar backfill failed: {e}")
+        else:
+            logger.warning("  [WARN] yfinance not available - price_bars not updated")
 
         # ========== Update Paper Trading Positions ==========
         if paper_trading.enabled:

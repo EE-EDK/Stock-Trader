@@ -503,6 +503,19 @@ class Database:
         return [{'date': r[0], 'open': r[1], 'high': r[2], 'low': r[3],
                  'close': r[4], 'volume': r[5]} for r in cursor.fetchall()]
 
+    def get_signal_and_trade_tickers(self) -> List[str]:
+        """@brief Distinct tickers ever seen in signals or paper_trades (sorted)."""
+        cursor = self.connect().cursor()
+        tickers = set()
+        cursor.execute("SELECT DISTINCT ticker FROM signals")
+        tickers.update(row[0] for row in cursor.fetchall())
+        try:
+            cursor.execute("SELECT DISTINCT ticker FROM paper_trades")
+            tickers.update(row[0] for row in cursor.fetchall())
+        except Exception:
+            pass  # paper_trades not created yet (paper trading disabled)
+        return sorted(tickers)
+
     def insert_macro_indicators(self, indicators: Dict[str, Dict[str, Any]]):
         """
         @brief Insert macro economic indicators
