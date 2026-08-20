@@ -190,22 +190,10 @@ class TestBreakout:
 class MockDatabase:
     """Mock database for testing TechnicalAnalyzer"""
 
-    def get_price_history(self, ticker, days):
-        """Return mock price history"""
-        # Generate realistic price history
+    def get_close_history(self, ticker, days):
+        """Return mock daily closes (ascending)"""
         base_price = 100
-        prices = []
-        for i in range(days):
-            price = base_price + i * 0.5  # Slight uptrend
-            prices.append({
-                'price': price,
-                'high': price + 1,
-                'low': price - 1,
-                'open': price - 0.5,
-                'volume': 1000000 + i * 1000,
-                'collected_at': f'2024-01-{i+1:02d}'
-            })
-        return prices
+        return [base_price + i * 0.5 for i in range(days)]  # Slight uptrend
 
 
 class TestTechnicalAnalyzer:
@@ -237,7 +225,7 @@ class TestTechnicalAnalyzer:
     def test_analyze_ticker_insufficient_data(self):
         """Test with insufficient price data"""
         class EmptyDB:
-            def get_price_history(self, ticker, days):
+            def get_close_history(self, ticker, days):
                 return []
 
         db = EmptyDB()
