@@ -50,6 +50,16 @@ pyinstaller main.spec
 - [ ] Phase 4 of the market-date-spine plan (`docs/superpowers/plans/2026-08-19-market-date-spine-spec.md`):
       re-weight conviction scoring empirically once ~50 outcomes per trigger type accumulate in the
       signal edge table (dashboard "Signal Edge by Trigger Type")
+- [ ] **Trade page (actionable order tickets).** Make the system usable for real trades: a page
+      (dashboard section or standalone) that turns each confirmed signal/paper trade into a concrete
+      order ticket — ticker, action (buy), share count and dollar size (conviction-sized, scaled to a
+      configurable real-money account size rather than the $1000 paper base), suggested order type
+      (limit at/near signal price vs market), and the exact stop-loss and take-profit prices to place
+      with the broker so real exits mirror the engine's rules. Flow: review open paper trades →
+      mark one "taking this live" → get the ticket; record the real fill back against the same
+      signal_id so real results, paper results, and backtest results stay comparable in one lineage.
+      Prerequisite for sizing confidence: the per-trigger edge table (Phase 4) should have enough
+      samples to trust before real money follows it.
 
 ## graphify
 
