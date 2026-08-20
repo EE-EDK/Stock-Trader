@@ -283,3 +283,26 @@ class DatabaseQueries:
             })
 
         return result
+
+    def get_signal_edge_by_type(self) -> List[Dict[str, Any]]:
+        """
+        @brief Per-trigger-type edge: average forward returns and 10d hit rate.
+        @return Rows ordered by sample size, only signals with a 10d outcome.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT signal_type,
+                   COUNT(*)                                        AS n,
+                   ROUND(AVG(fwd_return_5d), 2)                    AS avg_fwd_5d,
+                   ROUND(AVG(fwd_return_10d), 2)                   AS avg_fwd_10d,
+                   ROUND(AVG(fwd_return_30d), 2)                   AS avg_fwd_30d,
+                   ROUND(AVG(CASE WHEN fwd_return_10d > 0 THEN 100.0 ELSE 0.0 END), 1)
+                                                                   AS hit_rate_10d
+            FROM signals
+            WHERE fwd_return_10d IS NOT NULL
+            GROUP BY signal_type
+            ORDER BY n DESC
+        """)
+        return [{'signal_type': r[0], 'n': r[1], 'avg_fwd_5d': r[2],
+                 'avg_fwd_10d': r[3], 'avg_fwd_30d': r[4], 'hit_rate_10d': r[5]}
+                for r in cursor.fetchall()]
