@@ -59,3 +59,11 @@ def test_signal_and_trade_tickers(db):
         VALUES ('BBB', '2026-08-01', 10.0, 5, 50, '["insider_cluster"]', 50.0)""")
     conn.commit()
     assert db.get_signal_and_trade_tickers() == ['AAA', 'BBB']
+
+
+def test_pipeline_run_ledger(db):
+    run_id = db.start_pipeline_run()
+    db.finish_pipeline_run(run_id, 'ok', 'signals=4')
+    row = db.connect().execute(
+        "SELECT status, notes, finished_at FROM pipeline_runs WHERE id=?", (run_id,)).fetchone()
+    assert row[0] == 'ok' and row[1] == 'signals=4' and row[2] is not None

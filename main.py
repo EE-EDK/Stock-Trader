@@ -247,6 +247,10 @@ def run_pipeline(config: dict, skip_email: bool = False):
     db.initialize()
     logger.info(f"Database initialized at {db_path}")
 
+    run_id = db.start_pipeline_run()
+    run_status = 'error'
+    signals = []
+
     try:
 
         # Initialize paper trading manager
@@ -591,8 +595,13 @@ def run_pipeline(config: dict, skip_email: bool = False):
 
         logger.info("=" * 60)
 
+        run_status = 'ok'
         return signals
     finally:
+        try:
+            db.finish_pipeline_run(run_id, run_status, f"signals={len(signals)}")
+        except Exception as e:
+            logger.warning(f"Could not record pipeline run outcome: {e}")
         db.close()
 
 

@@ -194,6 +194,17 @@ class Database:
         self._ensure_column(cursor, 'signals', 'fwd_return_10d', 'REAL')
         self._ensure_column(cursor, 'signals', 'fwd_return_30d', 'REAL')
 
+        # Pipeline run ledger (cadence visibility)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS pipeline_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                started_at TEXT NOT NULL,
+                finished_at TEXT,
+                status TEXT DEFAULT 'running',
+                notes TEXT
+            )
+        """)
+
         # Macro indicators tables (Phase 2 - enhanced)
         macro_schema_path = Path(__file__).parent / "macro_schema.sql"
         if macro_schema_path.exists():
@@ -537,6 +548,21 @@ class Database:
         except Exception:
             pass  # paper_trades not created yet (paper trading disabled)
         return sorted(tickers)
+
+    def start_pipeline_run(self) -> int:
+        """@brief Record a pipeline run start; returns the run id."""
+        cursor = self.connect().cursor()
+        cursor.execute("INSERT INTO pipeline_runs (started_at) VALUES (?)",
+                       (datetime.now().isoformat(),))
+        self.connect().commit()
+        return cursor.lastrowid
+
+    def finish_pipeline_run(self, run_id: int, status: str, notes: Optional[str] = None):
+        """@brief Close out a pipeline run record."""
+        self.connect().execute(
+            "UPDATE pipeline_runs SET finished_at = ?, status = ?, notes = ? WHERE id = ?",
+            (datetime.now().isoformat(), status, notes, run_id))
+        self.connect().commit()
 
     def insert_macro_indicators(self, indicators: Dict[str, Dict[str, Any]]):
         """
