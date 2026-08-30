@@ -266,3 +266,36 @@ class TestQueryEdgeCases:
         results = sample_velocity_data.get_top_velocity_gainers(limit=10, hours=0)
         # Should return empty or very recent data
         assert isinstance(results, list)
+
+
+def test_insert_signals_returns_ids(tmp_path):
+    from datetime import datetime
+    from src.database.models import Database
+    from src.signals.generator import Signal
+    db = Database(str(tmp_path / "t.db"))
+    db.initialize()
+    now = datetime(2026, 8, 19, 21, 30)
+    sigs = [Signal(ticker='AAA', signal_type='insider_cluster', conviction_score=50,
+                   price_at_signal=10.0, triggers=['insider_cluster'], notes='n', created_at=now)]
+    ids = db.insert_signals(sigs)
+    assert set(ids.keys()) == {'AAA'} and isinstance(ids['AAA'], int)
+    db.close()
+
+
+def test_signal_edge_by_type(tmp_path):
+    from src.database.models import Database
+    from src.database.queries import DatabaseQueries
+    db = Database(str(tmp_path / "t.db"))
+    db.initialize()
+    conn = db.connect()
+    rows = [('A', 'insider_cluster', 5.0, 2.0), ('B', 'insider_cluster', -1.0, -3.0),
+            ('C', 'velocity_spike', 8.0, 12.0)]
+    for i, (t, st, f10, f30) in enumerate(rows):
+        conn.execute("INSERT INTO signals (ticker, signal_type, conviction_score, created_at, "
+                     "fwd_return_10d, fwd_return_30d) VALUES (?, ?, 50, ?, ?, ?)",
+                     (t, st, '2026-06-0%d 12:00:00' % (i + 1), f10, f30))
+    conn.commit()
+    edge = DatabaseQueries(conn).get_signal_edge_by_type()
+    ic = next(r for r in edge if r['signal_type'] == 'insider_cluster')
+    assert ic['n'] == 2 and ic['avg_fwd_10d'] == 2.0 and ic['hit_rate_10d'] == 50.0
+    db.close()

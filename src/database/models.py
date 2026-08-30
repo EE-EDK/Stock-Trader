@@ -49,6 +49,13 @@ class Database:
             self.conn.close()
             self.conn = None
 
+    @staticmethod
+    def _ensure_column(cursor, table: str, column: str, decl: str):
+        """@brief Add a column if it doesn't exist (idempotent migration)."""
+        cols = [r[1] for r in cursor.execute(f"PRAGMA table_info({table})").fetchall()]
+        if column not in cols:
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+
     def initialize(self):
         """
         @brief Initialize database schema
@@ -165,6 +172,37 @@ class Database:
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_signals_ticker_date
             ON signals(ticker, created_at)
+        """)
+
+        # Daily OHLCV bars - the market-date spine (see docs/superpowers/plans/2026-08-19-market-date-spine-spec.md)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS price_bars (
+                ticker TEXT NOT NULL,
+                date TEXT NOT NULL,
+                open REAL, high REAL, low REAL, close REAL,
+                volume INTEGER,
+                source TEXT DEFAULT 'yfinance',
+                PRIMARY KEY (ticker, date)
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_price_bars_date ON price_bars(date)
+        """)
+
+        # Forward-return outcome columns (learning loop)
+        self._ensure_column(cursor, 'signals', 'fwd_return_5d', 'REAL')
+        self._ensure_column(cursor, 'signals', 'fwd_return_10d', 'REAL')
+        self._ensure_column(cursor, 'signals', 'fwd_return_30d', 'REAL')
+
+        # Pipeline run ledger (cadence visibility)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS pipeline_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                started_at TEXT NOT NULL,
+                finished_at TEXT,
+                status TEXT DEFAULT 'running',
+                notes TEXT
+            )
         """)
 
         # Macro indicators tables (Phase 2 - enhanced)
@@ -350,13 +388,14 @@ class Database:
         conn.commit()
         logger.info(f"Inserted {len(velocity_data)} velocity records")
 
-    def insert_signals(self, signals: List[Any]):
+    def insert_signals(self, signals: List[Any]) -> Dict[str, int]:
         """
         @brief Insert generated signals
         @param signals List of Signal objects
+        @return Dict mapping ticker -> signals.id for this batch (for trade linkage)
         """
         if not signals:
-            return
+            return {}
 
         conn = self.connect()
         cursor = conn.cursor()
@@ -377,7 +416,16 @@ class Database:
             ))
 
         conn.commit()
+
+        ids: Dict[str, int] = {}
+        for signal in signals:
+            row = cursor.execute(
+                "SELECT id FROM signals WHERE ticker = ? AND created_at = ?",
+                (signal.ticker, signal.created_at)).fetchone()
+            if row:
+                ids[signal.ticker] = row[0]
         logger.info(f"Inserted {len(signals)} signal records")
+        return ids
 
     def get_tracked_tickers(self, days: int = 7) -> List[str]:
         """
@@ -440,6 +488,81 @@ class Database:
         from src.database.queries import DatabaseQueries
         queries = DatabaseQueries(self.connect())
         return queries.get_sentiment_history(ticker, days)
+
+    def insert_price_bars(self, bars: List[Dict[str, Any]]) -> int:
+        """
+        @brief Upsert daily OHLCV bars into the market-date spine.
+        @param bars Dicts with ticker, date ('YYYY-MM-DD'), open, high, low, close, volume
+        @return Number of bars written
+        """
+        if not bars:
+            return 0
+        conn = self.connect()
+        cursor = conn.cursor()
+        cursor.executemany("""
+            INSERT OR REPLACE INTO price_bars (ticker, date, open, high, low, close, volume)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, [(b['ticker'], b['date'], b.get('open'), b.get('high'),
+               b.get('low'), b.get('close'), b.get('volume')) for b in bars])
+        conn.commit()
+        return len(bars)
+
+    def get_last_bar_date(self, ticker: str) -> Optional[str]:
+        """@brief Most recent bar date for a ticker, or None."""
+        cursor = self.connect().cursor()
+        cursor.execute("SELECT MAX(date) FROM price_bars WHERE ticker = ?", (ticker,))
+        row = cursor.fetchone()
+        return row[0] if row else None
+
+    def get_close_history(self, ticker: str, days: int = 250) -> List[float]:
+        """@brief Closing prices ascending by date over the last `days` calendar days."""
+        cutoff = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+        cursor = self.connect().cursor()
+        cursor.execute("""
+            SELECT close FROM price_bars
+            WHERE ticker = ? AND date >= ? AND close IS NOT NULL
+            ORDER BY date ASC
+        """, (ticker, cutoff))
+        return [row[0] for row in cursor.fetchall()]
+
+    def get_bars_since(self, ticker: str, start_date: str) -> List[Dict[str, Any]]:
+        """@brief Bars strictly after start_date ('YYYY-MM-DD'), ascending."""
+        cursor = self.connect().cursor()
+        cursor.execute("""
+            SELECT date, open, high, low, close, volume FROM price_bars
+            WHERE ticker = ? AND date > ?
+            ORDER BY date ASC
+        """, (ticker, start_date))
+        return [{'date': r[0], 'open': r[1], 'high': r[2], 'low': r[3],
+                 'close': r[4], 'volume': r[5]} for r in cursor.fetchall()]
+
+    def get_signal_and_trade_tickers(self) -> List[str]:
+        """@brief Distinct tickers ever seen in signals or paper_trades (sorted)."""
+        cursor = self.connect().cursor()
+        tickers = set()
+        cursor.execute("SELECT DISTINCT ticker FROM signals")
+        tickers.update(row[0] for row in cursor.fetchall())
+        try:
+            cursor.execute("SELECT DISTINCT ticker FROM paper_trades")
+            tickers.update(row[0] for row in cursor.fetchall())
+        except Exception:
+            pass  # paper_trades not created yet (paper trading disabled)
+        return sorted(tickers)
+
+    def start_pipeline_run(self) -> int:
+        """@brief Record a pipeline run start; returns the run id."""
+        cursor = self.connect().cursor()
+        cursor.execute("INSERT INTO pipeline_runs (started_at) VALUES (?)",
+                       (datetime.now().isoformat(),))
+        self.connect().commit()
+        return cursor.lastrowid
+
+    def finish_pipeline_run(self, run_id: int, status: str, notes: Optional[str] = None):
+        """@brief Close out a pipeline run record."""
+        self.connect().execute(
+            "UPDATE pipeline_runs SET finished_at = ?, status = ?, notes = ? WHERE id = ?",
+            (datetime.now().isoformat(), status, notes, run_id))
+        self.connect().commit()
 
     def insert_macro_indicators(self, indicators: Dict[str, Dict[str, Any]]):
         """

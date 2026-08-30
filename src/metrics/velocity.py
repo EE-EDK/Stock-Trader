@@ -180,15 +180,22 @@ class VelocityCalculator:
             # Get mention history
             mention_history = self.db.get_mention_history(ticker, days=7)
 
-            # Calculate 24h velocity
+            # Date-normalized 24h velocity: compare the two most recent distinct
+            # observation days as a per-day rate, so irregular run cadence
+            # degrades gracefully instead of reading zero.
             vel_24h = 0.0
-            if len(mention_history) >= 2:
-                current = mention_history[-1][1]  # Latest mentions
-                # Find mention count from ~24h ago
-                day_ago = datetime.now() - timedelta(hours=24)
-                prev_mentions = [count for ts, count in mention_history if ts <= day_ago]
-                if prev_mentions:
-                    vel_24h = mention_velocity_pct(current, prev_mentions[-1])
+            observation_gap_days = 0
+            by_day = {}
+            for ts, count in mention_history:
+                by_day[ts.date()] = count  # last observation of each day wins
+            days_seen = sorted(by_day)
+            if len(days_seen) >= 2:
+                observation_gap_days = max(1, (days_seen[-1] - days_seen[-2]).days)
+                total_pct = mention_velocity_pct(by_day[days_seen[-1]], by_day[days_seen[-2]])
+                vel_24h = total_pct / observation_gap_days
+                if observation_gap_days > 3:
+                    logger.warning(f"{ticker}: velocity computed over a "
+                                   f"{observation_gap_days}-day gap - treat as stale")
 
             # Calculate 7d trend
             vel_7d = mention_velocity_trend(mention_history, window_days=7)
@@ -231,7 +238,8 @@ class VelocityCalculator:
                 'mention_velocity_7d': vel_7d,
                 'sentiment_velocity': sent_vel,
                 'volume_price_divergence': divergence,
-                'composite_score': comp_score
+                'composite_score': comp_score,
+                'observation_gap_days': observation_gap_days
             }
 
         except Exception as e:
@@ -241,7 +249,8 @@ class VelocityCalculator:
                 'mention_velocity_7d': 0.0,
                 'sentiment_velocity': 0.0,
                 'volume_price_divergence': 0.0,
-                'composite_score': 0.0
+                'composite_score': 0.0,
+                'observation_gap_days': 0
             }
 
     def calculate_all_velocities(self, min_mentions: int = 5) -> Dict[str, Dict[str, float]]:

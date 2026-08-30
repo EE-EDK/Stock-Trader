@@ -221,13 +221,8 @@ class TechnicalAnalyzer:
         @param days Number of days of price data to analyze
         @return Dictionary with all technical indicators
         """
-        # Get price history
-        price_history = self.db.get_price_history(ticker, days=days)
-
-        if not price_history:
-            return {}
-
-        prices = [p['price'] for p in price_history if p.get('price') is not None and p['price'] > 0]
+        # Get real daily closes from the market-date spine (price_bars)
+        prices = [p for p in self.db.get_close_history(ticker, days=days) if p and p > 0]
 
         if len(prices) < 5:
             logger.debug(f"Insufficient price data for {ticker}")

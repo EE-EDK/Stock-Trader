@@ -11,6 +11,8 @@ from typing import List, Dict, Optional
 import logging
 import contextlib
 
+from src.trading.engine import walk_bars
+
 logger = logging.getLogger(__name__)
 
 
@@ -48,6 +50,10 @@ class PaperTradingManager:
 
             with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
                 conn.executescript(schema_sql)
+                cursor = conn.cursor()
+                cols = [r[1] for r in cursor.execute("PRAGMA table_info(paper_trades)").fetchall()]
+                if 'last_evaluated_date' not in cols:
+                    cursor.execute("ALTER TABLE paper_trades ADD COLUMN last_evaluated_date TEXT")
                 conn.commit()
             logger.info("Paper trading tables initialized")
         except Exception as e:
@@ -88,6 +94,11 @@ class PaperTradingManager:
             logger.debug(f"Paper trade already exists for {ticker} on {entry_date}, skipping")
             return None
 
+        # One open position per ticker - a second signal doesn't double the bet
+        if self._has_open_position(ticker):
+            logger.info(f"Open position already exists for {ticker}, skipping new trade")
+            return None
+
         # Check max open positions
         open_count = self._count_open_positions()
         if open_count >= self.max_open_positions:
@@ -97,6 +108,10 @@ class PaperTradingManager:
         # Calculate position details
         position_size = self.calculate_position_size(conviction)
         shares = int(position_size / entry_price)
+        if shares == 0:
+            logger.warning(f"Position size ${position_size:.2f} buys 0 shares of "
+                           f"{ticker} @ ${entry_price:.2f}, skipping")
+            return None
         actual_position_size = shares * entry_price
 
         # Calculate exit prices
@@ -141,6 +156,14 @@ class PaperTradingManager:
             exists = cursor.fetchone() is not None
         return exists
 
+    def _has_open_position(self, ticker: str) -> bool:
+        """@brief True if an open paper trade already exists for this ticker."""
+        with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM paper_trades WHERE ticker = ? AND status = 'open' LIMIT 1",
+                           (ticker,))
+            return cursor.fetchone() is not None
+
     def _count_open_positions(self) -> int:
         """Count currently open positions"""
         with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
@@ -149,68 +172,58 @@ class PaperTradingManager:
             count = cursor.fetchone()[0]
         return count
 
-    def update_positions(self, current_prices: Dict[str, float], current_date: datetime):
+    def update_positions_from_bars(self, db, current_date: datetime):
         """
-        @brief Update all open positions with current prices and check exit conditions
-        @param current_prices Dict of {ticker: current_price}
-        @param current_date Current date
+        @brief Replay daily bars since each position's last evaluation and
+               apply stop/target/time exits exactly where a resting order
+               would have filled - regardless of pipeline run cadence.
+        @param db Database instance exposing get_bars_since(ticker, start_date)
+        @param current_date Now (used for logging only; exits use bar dates)
         """
         if not self.enabled:
             return
 
         with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
             cursor = conn.cursor()
-
-            # Get all open positions
             cursor.execute("""
-                SELECT id, ticker, entry_date, entry_price, shares, stop_loss, target_price
-                FROM paper_trades
-                WHERE status = 'open'
+                SELECT id, ticker, entry_date, entry_price, shares, stop_loss,
+                       target_price, last_evaluated_date
+                FROM paper_trades WHERE status = 'open'
             """)
             open_trades = cursor.fetchall()
 
-            for trade in open_trades:
-                trade_id, ticker, entry_date_str, entry_price, shares, stop_loss, target_price = trade
-
-                # Get current price (extract from dict)
-                price_data = current_prices.get(ticker, {})
-                if not price_data or not isinstance(price_data, dict) or 'price' not in price_data:
-                    logger.warning(f"No current price for {ticker}, skipping update")
+            closed = 0
+            for (trade_id, ticker, entry_date_str, entry_price, shares,
+                 stop_loss, target_price, last_eval) in open_trades:
+                entry_day = entry_date_str[:10]
+                start = last_eval if last_eval and last_eval > entry_day else entry_day
+                bars = db.get_bars_since(ticker, start)
+                if not bars:
                     continue
 
-                current_price = price_data['price']
-
-                # Create snapshot
-                unrealized_pnl = (current_price - entry_price) * shares
-                unrealized_pct = ((current_price - entry_price) / entry_price) * 100
-
-                try:
+                exit_event = walk_bars(entry_day, entry_price, stop_loss,
+                                       target_price, self.hold_days, bars)
+                if exit_event:
+                    days_held = exit_event.days_held
+                    self._close_position(cursor, trade_id, exit_event.price,
+                                         datetime.strptime(exit_event.date, '%Y-%m-%d'),
+                                         exit_event.reason, entry_price, shares, days_held)
+                    closed += 1
+                else:
+                    last_bar = bars[-1]
+                    unrealized_pnl = (last_bar['close'] - entry_price) * shares
+                    unrealized_pct = ((last_bar['close'] - entry_price) / entry_price) * 100
                     cursor.execute("""
                         INSERT OR REPLACE INTO paper_trade_snapshots
                         (trade_id, snapshot_date, current_price, unrealized_pnl, unrealized_pct)
                         VALUES (?, ?, ?, ?, ?)
-                    """, (trade_id, current_date.isoformat(), current_price, unrealized_pnl, unrealized_pct))
-                except Exception as e:
-                    logger.error(f"Failed to create snapshot for trade {trade_id}: {e}")
-
-                # Check exit conditions
-                entry_date = datetime.fromisoformat(entry_date_str)
-                days_held = (current_date - entry_date).days
-
-                exit_reason = None
-                if current_price <= stop_loss:
-                    exit_reason = 'stop_loss'
-                elif current_price >= target_price:
-                    exit_reason = 'take_profit'
-                elif days_held >= self.hold_days:
-                    exit_reason = 'time_limit'
-
-                if exit_reason:
-                    self._close_position(cursor, trade_id, current_price, current_date,
-                                       exit_reason, entry_price, shares, days_held)
-
+                    """, (trade_id, last_bar['date'], last_bar['close'],
+                          unrealized_pnl, unrealized_pct))
+                    cursor.execute("UPDATE paper_trades SET last_evaluated_date = ? WHERE id = ?",
+                                   (last_bar['date'], trade_id))
             conn.commit()
-        logger.info(f"Updated {len(open_trades)} open paper trading positions")
+        logger.info(f"Evaluated {len(open_trades)} open positions against bars "
+                    f"({closed} closed)")
 
     def _close_position(self, cursor, trade_id: int, exit_price: float, exit_date: datetime,
                        exit_reason: str, entry_price: float, shares: int, days_held: int):
@@ -284,18 +297,15 @@ class PaperTradingManager:
         logger.info(f"Backfill complete: {created_count} trades created, {skipped_count} skipped")
 
     def _get_historical_price(self, ticker: str, date: datetime) -> Optional[float]:
-        """Get historical price for a ticker on a specific date"""
+        """@brief Close of the first bar on/after the date (within 5 days)."""
         with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
             cursor = conn.cursor()
-
-            # Get price closest to the date (within 1 day)
             cursor.execute("""
-                SELECT price FROM prices
-                WHERE ticker = ? AND collected_at >= ? AND collected_at < ?
-                ORDER BY collected_at ASC
-                LIMIT 1
-            """, (ticker, date.isoformat(), (date + timedelta(days=1)).isoformat()))
-
+                SELECT close FROM price_bars
+                WHERE ticker = ? AND date >= ? AND date < ?
+                ORDER BY date ASC LIMIT 1
+            """, (ticker, date.strftime('%Y-%m-%d'),
+                  (date + timedelta(days=5)).strftime('%Y-%m-%d')))
             result = cursor.fetchone()
         return result[0] if result else None
 

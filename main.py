@@ -25,6 +25,9 @@ from src.signals.generator import SignalGenerator
 from src.reporters.email import EmailReporter
 from src.reporters.dashboard_v2 import ModernDashboardGenerator as DashboardGenerator
 from src.trading.paper_trading import PaperTradingManager
+from src.utils.single_instance import acquire_lock, release_lock
+from src.collectors.bars_backfill import backfill_price_bars
+from src.analysis.outcomes import update_signal_outcomes
 
 # Setup logging first (before other imports that may need it)
 def setup_logging(log_level: str = 'INFO', project_root: str = '.'):
@@ -244,6 +247,10 @@ def run_pipeline(config: dict, skip_email: bool = False):
     db.initialize()
     logger.info(f"Database initialized at {db_path}")
 
+    run_id = db.start_pipeline_run()
+    run_status = 'error'
+    signals = []
+
     try:
 
         # Initialize paper trading manager
@@ -383,14 +390,33 @@ def run_pipeline(config: dict, skip_email: bool = False):
                         logger.info("  [SKIP] FRED: API key not configured")
 
 
+        # ========== Step 1c: Backfill daily bars (the market-date spine) ==========
+        logger.info("Step 1c: Backfilling daily price bars...")
+        if YFINANCE_AVAILABLE:
+            try:
+                bar_tickers = set(tracked_tickers) | set(db.get_signal_and_trade_tickers())
+                yf_bars = YFinanceCollector()
+                written = backfill_price_bars(db, yf_bars, sorted(bar_tickers))
+                yf_bars.close()
+                logger.info(f"  [OK] Bars: {sum(written.values())} bars across {len(written)} tickers")
+            except Exception as e:
+                logger.error(f"  [ERROR] Bar backfill failed: {e}")
+        else:
+            logger.warning("  [WARN] yfinance not available - price_bars not updated")
+
+        # Backfill signal outcomes now that bars are current (learning loop)
+        try:
+            n = update_signal_outcomes(db)
+            logger.info(f"  [OK] Signal outcomes updated for {n} signals")
+        except Exception as e:
+            logger.error(f"  [ERROR] Outcome backfill failed: {e}")
+
         # ========== Update Paper Trading Positions ==========
         if paper_trading.enabled:
-            logger.info("Updating paper trading positions with current prices...")
+            logger.info("Updating paper trading positions against daily bars...")
             try:
-                # Get latest prices for all open positions
-                current_prices = db.get_latest_prices()
-                paper_trading.update_positions(current_prices, datetime.now())
-                logger.info(f"  [OK] Paper trading positions updated")
+                paper_trading.update_positions_from_bars(db, datetime.now())
+                logger.info("  [OK] Paper trading positions updated")
             except Exception as e:
                 logger.error(f"  [ERROR] Paper trading update failed: {e}")
 
@@ -450,8 +476,9 @@ def run_pipeline(config: dict, skip_email: bool = False):
             )
 
             # Insert ALL signals into database for historical analysis
+            signal_ids = {}
             if all_signals:
-                db.insert_signals(all_signals)
+                signal_ids = db.insert_signals(all_signals)
                 logger.info(f"  [OK] Inserted {len(all_signals)} signals into database")
 
             # Filter by minimum conviction for reporting/trading
@@ -481,7 +508,8 @@ def run_pipeline(config: dict, skip_email: bool = False):
                                 entry_price=price_data['price'],
                                 conviction=int(signal.conviction_score),
                                 signal_types=signal.triggers,
-                                entry_date=datetime.now()
+                                entry_date=datetime.now(),
+                                signal_id=signal_ids.get(signal.ticker)
                             )
                             if trade_id:
                                 created_count += 1
@@ -567,8 +595,13 @@ def run_pipeline(config: dict, skip_email: bool = False):
 
         logger.info("=" * 60)
 
+        run_status = 'ok'
         return signals
     finally:
+        try:
+            db.finish_pipeline_run(run_id, run_status, f"signals={len(signals)}")
+        except Exception as e:
+            logger.warning(f"Could not record pipeline run outcome: {e}")
         db.close()
 
 
@@ -700,8 +733,15 @@ def main():
             logger.info("Database initialized successfully")
             sys.exit(0)
 
-        # Run full pipeline
-        signals = run_pipeline(config, skip_email=args.skip_email)
+        # Run full pipeline (single instance at a time)
+        lock_path = os.path.join(project_root, "data", "pipeline.lock")
+        if not acquire_lock(lock_path):
+            logger.error("Another pipeline instance is already running (data/pipeline.lock). Exiting.")
+            sys.exit(2)
+        try:
+            signals = run_pipeline(config, skip_email=args.skip_email)
+        finally:
+            release_lock(lock_path)
         sys.exit(0)
 
     except FileNotFoundError as e:
