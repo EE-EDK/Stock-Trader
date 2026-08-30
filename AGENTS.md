@@ -9,13 +9,16 @@ Read project docs in this order (load only what the task needs):
 
 1. **`GROK.md`** — Grok execution context and project mandates (**read first in Grok sessions**)
 2. **`AGENTS.md`** — this startup brief
-3. **`CLAUDE.md`** — build commands, directory structure, conventions
-4. **`GEMINI.md`** — governance mandates (overrides CLAUDE within the same directory tier)
+3. **`docs/memory/LEDGER.md`** — **what has already been tried here.** Read at least the
+   "Read this first" block: the do-not-repeat list and the open blockers. This is not
+   optional context — several entries record approaches that were measured and found
+   harmful, or that fail for environmental reasons you cannot infer from the code.
+4. **`CLAUDE.md`** — build commands, directory structure, conventions
 
 Load only what is scoped to this project; do **not** import sibling project context.
 
 
-**Doc precedence (same tier):** `GROK.md` → `AGENTS.md` → `CLAUDE.md` → `GEMINI.md`
+**Doc precedence (same tier):** `GROK.md` → `AGENTS.md` → `CLAUDE.md`
 
 ## Project Identity
 
@@ -42,6 +45,21 @@ Summary: do **not** infer "commit and push everything" unless the user explicitl
 
 - Always verify with tests, linters, DRC/ERC, or build scripts before declaring done.
 - Never claim success without running the relevant verification suite.
+
+## Recording What You Learn
+
+Before ending a session, append anything a future session would otherwise have to
+rediscover to the project memory ledger:
+
+```
+python docs/memory/memory.py add --kind failure --status validated \
+    --confidence VERIFIED --title "..." --detail "..." --evidence "..." --tags ...
+```
+
+The bar is *"would someone waste an hour without this?"* — measured results, dead ends,
+environmental gotchas, and reversible decisions with their reasoning. Corrections
+**supersede** (`--supersedes N`); they never edit or delete, per the red line above.
+Contract and field reference: `docs/memory/README.md`.
 
 ## Parent Context
 
