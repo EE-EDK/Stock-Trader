@@ -299,3 +299,74 @@ def test_signal_edge_by_type(tmp_path):
     ic = next(r for r in edge if r['signal_type'] == 'insider_cluster')
     assert ic['n'] == 2 and ic['avg_fwd_10d'] == 2.0 and ic['hit_rate_10d'] == 50.0
     db.close()
+
+
+def test_get_latest_bar_closes_returns_most_recent_close_per_ticker(tmp_path):
+    """New method backing the main.py price fallback for insider-only
+    tickers (the `prices`/Finnhub table doesn't cover them, price_bars does)."""
+    from src.database.models import Database
+    db = Database(str(tmp_path / "t.db"))
+    db.initialize()
+    db.insert_price_bars([
+        {'ticker': 'GO', 'date': '2026-08-30', 'close': 20.10},
+        {'ticker': 'GO', 'date': '2026-08-31', 'close': 21.50},
+        {'ticker': 'ZZZ', 'date': '2026-08-31', 'close': 5.00},
+    ])
+    closes = db.get_latest_bar_closes(['GO', 'ZZZ', 'NOPE'])
+    assert closes == {'GO': 21.50, 'ZZZ': 5.00}
+    db.close()
+
+
+def test_get_latest_bar_closes_with_no_tickers_arg_covers_everything(tmp_path):
+    from src.database.models import Database
+    db = Database(str(tmp_path / "t.db"))
+    db.initialize()
+    db.insert_price_bars([{'ticker': 'A', 'date': '2026-08-31', 'close': 1.0}])
+    assert db.get_latest_bar_closes() == {'A': 1.0}
+    db.close()
+
+
+def test_get_latest_bar_closes_empty_ticker_list_returns_empty(tmp_path):
+    from src.database.models import Database
+    db = Database(str(tmp_path / "t.db"))
+    db.initialize()
+    assert db.get_latest_bar_closes([]) == {}
+    db.close()
+
+
+def test_insider_count_column_round_trips_through_insert_insiders(tmp_path):
+    """Ledger #21 fix: the 'Ins' column captured by the collector must
+    survive the insert into the insiders table."""
+    from src.database.models import Database
+    db = Database(str(tmp_path / "t.db"))
+    db.initialize()
+    db.insert_insiders([{
+        'ticker': 'GO', 'insider_name': '', 'insider_title': '',
+        'trade_type': 'P', 'trade_date': '2026-09-01', 'filing_date': '2026-09-01',
+        'shares': 100, 'price': 21.0, 'value': 403900,
+        'ownership_change_pct': 26.0, 'is_cluster_buy': True,
+        'insider_count': 2,
+    }])
+    conn = db.connect()
+    row = conn.execute("SELECT insider_count, ownership_change_pct FROM insiders "
+                       "WHERE ticker='GO'").fetchone()
+    assert row[0] == 2
+    assert row[1] == 26.0   # sane percent, not a raw share count
+    db.close()
+
+
+def test_insider_count_defaults_to_null_for_legacy_style_rows(tmp_path):
+    """A row that omits insider_count (as every row did before 2026-09-02)
+    must insert cleanly as NULL, not error."""
+    from src.database.models import Database
+    db = Database(str(tmp_path / "t.db"))
+    db.initialize()
+    db.insert_insiders([{
+        'ticker': 'OLD', 'insider_name': 'A', 'insider_title': 'CEO',
+        'trade_type': 'P', 'trade_date': '2026-01-01', 'filing_date': '2026-01-01',
+        'shares': 100, 'price': 10.0, 'value': 100000,
+    }])
+    conn = db.connect()
+    row = conn.execute("SELECT insider_count FROM insiders WHERE ticker='OLD'").fetchone()
+    assert row[0] is None
+    db.close()

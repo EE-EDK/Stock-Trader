@@ -269,7 +269,8 @@ def run_pipeline(config: dict, skip_email: bool = False):
 
         # Get tracked tickers first (needed by multiple collectors)
         tracked_tickers = db.get_tracked_tickers(days=7)
-        top_tickers = list(tracked_tickers)[:20]
+        alpha_top_n = config.get('collection', {}).get('alphavantage', {}).get('top_n', 20)
+        top_tickers = list(tracked_tickers)[:alpha_top_n]
 
         # Run initial collectors in parallel
         mentions = []
@@ -435,6 +436,16 @@ def run_pipeline(config: dict, skip_email: bool = False):
         except Exception as e:
             logger.error(f"  [ERROR] Velocity calculation failed: {e}")
 
+        # Pulled forward (was built inside the Step 3 try-block) so the
+        # technical/sentiment steps below can cover insider-only tickers too --
+        # otherwise a cluster-only ticker enters generate_signals() (fix for
+        # ledger #12) but can never clear minimum_conviction: insider_cluster
+        # alone is worth 25 points against a 40-point floor, and it had zero
+        # chance at technical_breakout/rsi/golden_cross/news_sentiment because
+        # those loops were also scoped to velocity_data.keys() only.
+        insider_data = db.get_recent_insiders(days=14)
+        all_ticker_universe = set(velocity_data.keys()) | set(insider_data.keys())
+
         # ========== NEW: Technical Analysis (Zero API calls!) ==========
         logger.info("Step 2b: Running technical analysis...")
 
@@ -442,22 +453,25 @@ def run_pipeline(config: dict, skip_email: bool = False):
         if config.get('collection', {}).get('technical_analysis', {}).get('enabled', True):
             try:
                 tech_analyzer = TechnicalAnalyzer(db)
-                for ticker in velocity_data.keys():
+                for ticker in all_ticker_universe:
                     tech_analysis = tech_analyzer.analyze_ticker(ticker)
                     if tech_analysis:
                         tech_score = tech_analyzer.get_technical_score(tech_analysis)
                         tech_analysis['technical_score'] = tech_score
                         technical_data[ticker] = tech_analysis
-                logger.info(f"  [OK] Technical analysis for {len(technical_data)} tickers")
+                logger.info(f"  [OK] Technical analysis for {len(technical_data)} tickers "
+                            f"({len(all_ticker_universe) - len(velocity_data)} insider-only)")
             except Exception as e:
                 logger.error(f"  [ERROR] Technical analysis failed: {e}")
 
         # ========== Step 3: Generate Signals with FREE Data ==========
         logger.info("Step 3: Generating signals with FREE data sources...")
 
-        # Merge sentiment data (prefer Alpha Vantage, fallback to VADER)
+        # Merge sentiment data (prefer Alpha Vantage, fallback to VADER). Free
+        # to widen -- this only re-keys sentiment already fetched earlier, it
+        # does not place new API calls.
         sentiment_data = {}
-        for ticker in velocity_data.keys():
+        for ticker in all_ticker_universe:
             if ticker in alpha_sentiment:
                 sentiment_data[ticker] = alpha_sentiment[ticker]
             elif ticker in vader_sentiment:
@@ -465,12 +479,27 @@ def run_pipeline(config: dict, skip_email: bool = False):
 
         signals = []
         all_signals = []
+        signal_price_data = {}
         try:
             gen = SignalGenerator(thresholds=config.get('thresholds', {}))
+            signal_price_data = db.get_latest_prices()
+
+            # Cluster-only tickers (insider data but no mention velocity) need a
+            # price too, or the signal gets recorded at $0.00. The `prices`
+            # table (Finnhub) only covers tracked_tickers; price_bars (free)
+            # already covers the wider insider universe -- fall back to it.
+            missing_price = all_ticker_universe - set(signal_price_data.keys())
+            if missing_price:
+                fallback = db.get_latest_bar_closes(list(missing_price))
+                for t, close in fallback.items():
+                    signal_price_data[t] = {'price': close}
+                logger.info(f"  [OK] Bar-close price fallback for "
+                            f"{len(fallback)}/{len(missing_price)} insider-only tickers")
+
             all_signals = gen.generate_signals(
                 velocity_data=velocity_data,
-                insider_data=db.get_recent_insiders(days=14),
-                price_data=db.get_latest_prices(),
+                insider_data=insider_data,
+                price_data=signal_price_data,
                 technical_data=technical_data,      # NEW!
                 sentiment_data=sentiment_data,      # NEW!
             )
@@ -480,6 +509,28 @@ def run_pipeline(config: dict, skip_email: bool = False):
             if all_signals:
                 signal_ids = db.insert_signals(all_signals)
                 logger.info(f"  [OK] Inserted {len(all_signals)} signals into database")
+
+            # Ledger pre-flight: surface signals whose trigger has a recorded,
+            # measured failure against it (docs/memory/). Advisory here by design
+            # — this reports, it does not drop signals. The hard gate lives at the
+            # trade chokepoint in docs/memory/journal.py:open_trade().
+            try:
+                import sys as _sys
+                _sys.path.insert(0, str(Path(__file__).resolve().parent / 'docs' / 'memory'))
+                from guard import check as _ledger_check
+                _flagged = {}
+                for _sig in all_signals:
+                    _v = _ledger_check(f'trigger:{_sig.signal_type}', 'action:buy')
+                    if _v.blocked:
+                        _flagged.setdefault(_sig.signal_type, []).append(_sig.ticker)
+                for _t, _tk in _flagged.items():
+                    logger.warning(
+                        f"  [LEDGER] {len(_tk)} '{_t}' signals have a recorded failure "
+                        f"against them: {', '.join(_tk[:8])}"
+                        f"{'...' if len(_tk) > 8 else ''} "
+                        f"(see docs/memory/LEDGER.md)")
+            except Exception as _e:                      # never block the pipeline
+                logger.debug(f"  ledger pre-flight unavailable: {_e}")
 
             # Filter by minimum conviction for reporting/trading
             min_conviction = config.get('thresholds', {}).get('minimum_conviction', 40)
@@ -500,12 +551,15 @@ def run_pipeline(config: dict, skip_email: bool = False):
                 for signal in signals:
                     # Check if signal meets paper trading conviction threshold
                     if signal.conviction_score >= paper_trading.min_conviction:
-                        # Get current price for this ticker
-                        price_data = db.get_latest_prices().get(signal.ticker)
-                        if price_data and 'price' in price_data:
+                        # Reuse the same merged price data signal generation used
+                        # (includes the bar-close fallback) instead of a fresh
+                        # Finnhub-only lookup per ticker, which silently dropped
+                        # every insider-only candidate from paper trading too.
+                        sig_price = signal_price_data.get(signal.ticker)
+                        if sig_price and 'price' in sig_price:
                             trade_id = paper_trading.create_paper_trade(
                                 ticker=signal.ticker,
-                                entry_price=price_data['price'],
+                                entry_price=sig_price['price'],
                                 conviction=int(signal.conviction_score),
                                 signal_types=signal.triggers,
                                 entry_date=datetime.now(),

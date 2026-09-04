@@ -5,6 +5,8 @@
 """
 
 import sqlite3
+
+from src.analysis.insider_grain import CHANNEL_UNVERIFIED, classify_grain
 import json
 import logging
 from pathlib import Path
@@ -56,6 +58,31 @@ class Database:
         if column not in cols:
             cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
 
+    @staticmethod
+    def _try_unique_index(cursor, name: str, table: str, columns: str) -> bool:
+        """
+        @brief Create a UNIQUE index if the existing rows allow it (idempotent).
+        @param cursor Open sqlite3 cursor
+        @param name Index name
+        @param table Target table
+        @param columns Comma-separated index expression list
+        @return True if the index exists after the call, False if pre-existing
+                duplicates blocked it
+        @warning A False return means the de-duplication guard is NOT active.
+                 Run utils/repair_outcomes_and_dupes.py once, then restart.
+        """
+        try:
+            cursor.execute(
+                f"CREATE UNIQUE INDEX IF NOT EXISTS {name} ON {table}({columns})")
+            return True
+        except sqlite3.IntegrityError:
+            logger.warning(
+                "Unique index %s on %s blocked by pre-existing duplicate rows. "
+                "De-duplication is NOT enforced. Run "
+                "utils/repair_outcomes_and_dupes.py once to clean the table.",
+                name, table)
+            return False
+
     def initialize(self):
         """
         @brief Initialize database schema
@@ -106,6 +133,18 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_insiders_ticker_date
             ON insiders(ticker, trade_date)
         """)
+
+        # Natural key of a Form 4 line. OpenInsider's cluster / CEO-CFO /
+        # purchase views overlap, so one trade arrives several times per run and
+        # again on every later run covering the same window. Without this the
+        # table duplicates without bound (observed 2026-08-23: 3,400 rows ->
+        # 753 distinct, 78% duplicated), which inflates the insider_cluster
+        # buyer count and dollar total the signal notes report. Paired with
+        # INSERT OR IGNORE in insert_insiders().
+        self._try_unique_index(
+            cursor, 'ux_insiders_trade', 'insiders',
+            "ticker, trade_date, COALESCE(insider_name,''), "
+            "COALESCE(insider_title,''), trade_type, shares, price")
 
         # Price and sentiment table
         cursor.execute("""
@@ -174,6 +213,15 @@ class Database:
             ON signals(ticker, created_at)
         """)
 
+        # UNIQUE(ticker, created_at) above does not stop same-day duplicates:
+        # created_at carries microseconds, so every pipeline run in a day
+        # inserts a fresh row for the same ticker+type. One signal per ticker
+        # per type per day is the intended grain for the edge table; without
+        # this, a ticker signalled by four runs counts as four samples.
+        self._try_unique_index(
+            cursor, 'ux_signals_daily', 'signals',
+            "ticker, signal_type, substr(created_at,1,10)")
+
         # Daily OHLCV bars - the market-date spine (see docs/superpowers/plans/2026-08-19-market-date-spine-spec.md)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS price_bars (
@@ -193,6 +241,22 @@ class Database:
         self._ensure_column(cursor, 'signals', 'fwd_return_5d', 'REAL')
         self._ensure_column(cursor, 'signals', 'fwd_return_10d', 'REAL')
         self._ensure_column(cursor, 'signals', 'fwd_return_30d', 'REAL')
+
+        # Insider row grain and acquisition channel (see src/analysis/insider_grain.py).
+        # row_grain separates individual Form 4 filings from OpenInsider cluster
+        # roll-ups that aggregate several of them - counting both double-counts.
+        # acquisition_code preserves OpenInsider's qualified trade-type string,
+        # which the collector previously flattened to 'P' and discarded.
+        # acquisition_channel records whether the open market set the price:
+        # Form 4 code 'P' covers offerings and exercises at strike too.
+        self._ensure_column(cursor, 'insiders', 'row_grain', "TEXT")
+        self._ensure_column(cursor, 'insiders', 'acquisition_code', 'TEXT')
+        self._ensure_column(cursor, 'insiders', 'acquisition_channel', 'TEXT')
+        self._ensure_column(cursor, 'insiders', 'insider_count', 'INTEGER')
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_insiders_grain_channel
+            ON insiders(ticker, row_grain, acquisition_channel)
+        """)
 
         # Pipeline run ledger (cadence visibility)
         cursor.execute("""
@@ -297,13 +361,15 @@ class Database:
 
         conn = self.connect()
         cursor = conn.cursor()
+        _before = conn.total_changes
 
         for insider in insiders:
             cursor.execute("""
-                INSERT INTO insiders (ticker, insider_name, insider_title, trade_type,
+                INSERT OR IGNORE INTO insiders (ticker, insider_name, insider_title, trade_type,
                                      trade_date, filing_date, shares, price, value,
-                                     ownership_change_pct, is_cluster_buy, collected_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                     ownership_change_pct, is_cluster_buy, collected_at,
+                                     row_grain, acquisition_code, acquisition_channel, insider_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 insider.get('ticker'),
                 insider.get('insider_name'),
@@ -316,11 +382,17 @@ class Database:
                 insider.get('value'),
                 insider.get('ownership_change_pct'),
                 insider.get('is_cluster_buy', False),
-                insider.get('collected_at', datetime.now())
+                insider.get('collected_at', datetime.now()),
+                insider.get('row_grain') or classify_grain(insider.get('is_cluster_buy')),
+                insider.get('acquisition_code'),
+                insider.get('acquisition_channel') or CHANNEL_UNVERIFIED,
+                insider.get('insider_count')
             ))
 
         conn.commit()
-        logger.info(f"Inserted {len(insiders)} insider trade records")
+        logger.info(
+            f"Offered {len(insiders)} insider trade records "
+            f"({conn.total_changes - _before} newly stored, rest already present)")
 
     def insert_prices(self, prices: List[Dict[str, Any]]):
         """
@@ -536,8 +608,52 @@ class Database:
         return [{'date': r[0], 'open': r[1], 'high': r[2], 'low': r[3],
                  'close': r[4], 'volume': r[5]} for r in cursor.fetchall()]
 
+    def get_latest_bar_closes(self, tickers: Optional[List[str]] = None) -> Dict[str, float]:
+        """
+        @brief Latest price_bars close per ticker -- a free fallback quote source.
+        @param tickers Optional subset to restrict to; None returns every ticker
+               that has a bar.
+        @return Dict mapping ticker to its most recent close (tickers with a
+                NULL close are omitted, never returned as 0.0).
+        @details The `prices` table (Finnhub) only covers tracked_tickers, not
+                 the wider insider universe. price_bars (free, yfinance/urllib
+                 shim) already covers get_signal_and_trade_tickers(), so a
+                 ticker with only insider data can still get a usable
+                 price_at_signal instead of silently defaulting to $0.00.
+        @see main.py Step 3 (price_data fallback merge), src/signals/generator.py
+        """
+        cursor = self.connect().cursor()
+        if tickers:
+            tickers = list(tickers)
+            if not tickers:
+                return {}
+            placeholders = ','.join('?' * len(tickers))
+            cursor.execute(f"""
+                SELECT p1.ticker, p1.close FROM price_bars p1
+                INNER JOIN (
+                    SELECT ticker, MAX(date) as max_date FROM price_bars
+                    WHERE ticker IN ({placeholders}) GROUP BY ticker
+                ) p2 ON p1.ticker = p2.ticker AND p1.date = p2.max_date
+            """, tickers)
+        else:
+            cursor.execute("""
+                SELECT p1.ticker, p1.close FROM price_bars p1
+                INNER JOIN (
+                    SELECT ticker, MAX(date) as max_date FROM price_bars GROUP BY ticker
+                ) p2 ON p1.ticker = p2.ticker AND p1.date = p2.max_date
+            """)
+        return {row[0]: row[1] for row in cursor.fetchall() if row[1] is not None}
+
     def get_signal_and_trade_tickers(self) -> List[str]:
-        """@brief Distinct tickers ever seen in signals or paper_trades (sorted)."""
+        """
+        @brief Distinct tickers ever seen in signals, paper_trades or insiders.
+        @return Sorted ticker list for the bar backfill to cover
+        @details Insider tickers are included because the acquisition-channel
+                 test (src/analysis/insider_grain.py) needs a bar for the trade
+                 date to tell an open-market fill from an offering or an
+                 exercise at strike. Without them the test was applicable to
+                 only 23 of 401 Form 4 rows (measured 2026-08-23).
+        """
         cursor = self.connect().cursor()
         tickers = set()
         cursor.execute("SELECT DISTINCT ticker FROM signals")
@@ -547,7 +663,12 @@ class Database:
             tickers.update(row[0] for row in cursor.fetchall())
         except Exception:
             pass  # paper_trades not created yet (paper trading disabled)
-        return sorted(tickers)
+        try:
+            cursor.execute("SELECT DISTINCT ticker FROM insiders")
+            tickers.update(row[0] for row in cursor.fetchall())
+        except Exception:
+            pass  # insiders not created yet
+        return sorted(t for t in tickers if t)
 
     def start_pipeline_run(self) -> int:
         """@brief Record a pipeline run start; returns the run id."""
