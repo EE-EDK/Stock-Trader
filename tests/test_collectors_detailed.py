@@ -176,6 +176,97 @@ class TestOpenInsiderCollector:
         assert collector._parse_int('1,234,567') == 1234567
         assert collector._parse_int('$1,000') == 1000
         assert collector._parse_int('invalid') == 0
+    @patch('requests.Session.get')
+    def test_cluster_buys_header_detection_gets_ownership_pct_and_ins_count_right(self, mock_get):
+        """Regression, discovered 2026-09-02: 'owned' as a substring pattern
+        for ownership_change_pct matched OpenInsider's 'Owned' (raw share
+        count) header, which sits one column before the real 'DeltaOwn' (percent)
+        header, on every OpenInsider table -- ownership_change_pct was being
+        stored as a 7-8 digit share count, not a percent. Fixture mirrors the
+        real openinsider.com/latest-cluster-buys header and a live LILA row
+        captured 2026-09-02 (Ins=5, Owned=36,086,707, DeltaOwn=+12%)."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.text = """
+        <table class="tinytable">
+            <tr>
+                <th>X</th><th>Filing Date</th><th>Trade Date</th><th>Ticker</th>
+                <th>Company Name</th><th>Industry</th><th>Ins</th><th>Trade Type</th>
+                <th>Price</th><th>Qty</th><th>Owned</th><th>&#916;Own</th><th>Value</th>
+            </tr>
+            <tr>
+                <td>M</td>
+                <td>2026-09-01 18:25:28</td>
+                <td>2026-06-26</td>
+                <td><a href="http://openinsider.com/screener?s=LILA">LILA</a></td>
+                <td>Liberty Latin America Ltd.</td>
+                <td>Cable &amp; Other Pay Television Services</td>
+                <td>5</td>
+                <td>P - Purchase</td>
+                <td>$10.11</td>
+                <td>+3,743,854</td>
+                <td>36,086,707</td>
+                <td>+12%</td>
+                <td>+$37,846,079</td>
+            </tr>
+        </table>
+        """
+        mock_get.return_value = mock_response
+
+        collector = OpenInsiderCollector()
+        results = collector.collect_cluster_buys()
+
+        assert len(results) == 1
+        row = results[0]
+        assert row['ticker'] == 'LILA'
+        assert row['insider_count'] == 5
+        # The percent (12.0), not the raw owned-share count (36,086,707+).
+        assert row['ownership_change_pct'] == 12.0
+        assert row['value'] == 37846079
+        assert row['acquisition_code'] == 'P - Purchase'
+
+    @patch('requests.Session.get')
+    def test_non_cluster_table_has_no_insider_count_column(self, mock_get):
+        """The CEO/CFO and screener tables have no 'Ins' column at all --
+        insider_count must come back None, not a misparsed neighboring field."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.text = """
+        <table class="tinytable">
+            <tr>
+                <th>X</th><th>Filing Date</th><th>Trade Date</th><th>Ticker</th>
+                <th>Company Name</th><th>Insider Name</th><th>Title</th>
+                <th>Trade Type</th><th>Price</th><th>Qty</th><th>Owned</th>
+                <th>&#916;Own</th><th>Value</th>
+            </tr>
+            <tr>
+                <td>M</td>
+                <td>2026-09-01 17:07:55</td>
+                <td>2026-08-28</td>
+                <td><a href="http://openinsider.com/screener?s=EQPT">EQPT</a></td>
+                <td>Equipmentshare.Com Inc</td>
+                <td>Schlacks Jabbok</td>
+                <td>Founder, CEO</td>
+                <td>P - Purchase</td>
+                <td>$17.62</td>
+                <td>+25,000</td>
+                <td>14,381,548</td>
+                <td>0%</td>
+                <td>+$440,395</td>
+            </tr>
+        </table>
+        """
+        mock_get.return_value = mock_response
+
+        collector = OpenInsiderCollector()
+        results = collector.collect_ceo_cfo_buys()
+
+        assert len(results) == 1
+        row = results[0]
+        assert row.get('insider_count') is None
+        assert row['ownership_change_pct'] == 0.0
+        assert row['insider_name'] == 'Schlacks Jabbok'
+
 
 
 class TestFinnhubCollector:
