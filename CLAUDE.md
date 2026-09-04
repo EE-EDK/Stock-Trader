@@ -14,6 +14,8 @@ Multi-source stock trading signal generator using 100% free APIs. Combines socia
 - `src/trading/engine.py` — Shared bar-walking exit engine (paper trading + backtester)
 - `src/collectors/bars_backfill.py` — Gap-aware daily OHLCV backfill into `price_bars`
 - `src/analysis/outcomes.py` — Signal forward-return backfill (+5/+10/+30 trading days)
+- `docs/memory/LEDGER.md` — project memory: what has been tried, what works, what does not (read at session start)
+- `docs/memory/memory.py` — append-only memory CLI (`add` / `list` / `supersede`)
 - `tests/` — Test modules covering all subsystems (295 tests, `pytest --collect-only -q`, 2026-08-27)
 - `web/` — HTML dashboard generation
 - `utils/backtest.py` — Backtesting utilities
