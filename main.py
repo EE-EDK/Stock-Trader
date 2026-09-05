@@ -247,6 +247,11 @@ def run_pipeline(config: dict, skip_email: bool = False):
     db.initialize()
     logger.info(f"Database initialized at {db_path}")
 
+    healed = db.reconcile_stale_pipeline_runs()
+    if healed:
+        logger.warning(f"  [OK] Healed {healed} stale pipeline_runs row(s) left "
+                       f"'running' by a prior interrupted run")
+
     run_id = db.start_pipeline_run()
     run_status = 'error'
     signals = []

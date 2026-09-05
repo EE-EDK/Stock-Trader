@@ -3,7 +3,7 @@
 > **Generated file. Do not edit.** Written by `docs/memory/memory.py`.
 > Source of truth is `ledger.jsonl`. Add entries with `python docs/memory/memory.py add ...`.
 
-**37 live entries · 6 superseded · last updated 2026-09-04**
+**40 live entries · 6 superseded · last updated 2026-09-05**
 
 ## Read this first
 
@@ -14,6 +14,7 @@
 - `#4` SQLite cannot be written over the device mount — work in the container and commit the file
 - `#5` yfinance transport is blocked in the cloud container — use plain-TLS urllib for bars
 - `#35` Editing this repo's .py files with plain Python text-mode read/write silently flattens CRLF to LF
+- `#44` 2026-09-03 scheduled run never finished -- pipeline_runs id=11 stuck at status='running', zero signals that day
 
 **Unresolved:**
 - `#11` Sample independence is the binding constraint — 45 of 54 outcomes share one date
@@ -48,6 +49,14 @@ The edge table looks like n=54 but 45 outcomes come from a single observation da
 ## What does not work
 
 *Tried and failed, or measured and found harmful. Do not repeat these.*
+
+#### `#44` 2026-09-03 scheduled run never finished -- pipeline_runs id=11 stuck at status='running', zero signals that day
+
+*2026-09-05 · VERIFIED · validated* · `reliability` `pipeline` `open`
+
+Found during 2026-09-05 review. logs/pipeline.log shows the run starting normally at 18:30:04, then a long unbroken run of Finnhub quote-endpoint failures (503 Service Unavailable and 10s read-timeouts, ~15+ consecutive tickers: NOW, ZM, MT, ANY, INTC, GOOGL, IWM, ADBE, IBKR, UP, IG, SOXX, VT...) -- then the log goes completely silent. No further lines, no traceback, no completion message, until the NEXT day's scheduled run starts at 2026-09-04 18:33. pipeline_runs row id=11 (started_at 2026-09-03T18:30:04) has finished_at=NULL and status='running' to this day -- it was never marked done, success or failure. price_bars does have 616 rows for 2026-09-03 (bars backfill ran before the hang), but the signals table has zero rows for that date -- signal generation never ran that day. Root cause not confirmed: could be the pipeline process genuinely hanging on a stuck network call despite the per-request 10s timeout (e.g. a retry loop or thread join with no outer timeout), or the Windows machine (KunzPrime, not an always-on server) sleeping/losing network mid-run -- no Windows Event Log access from this session to distinguish the two. Either way there is no watchdog around the overall pipeline run: nothing detects or logs a stall, and nothing marks pipeline_runs as failed/stale after a stall. Checked whether this is connected to the same-day sentiment top_n widen (#43): it is not -- the hang happened during the earlier Finnhub price-quote step, before sentiment collection. Separately confirmed the top_n widen did not worsen Google News 429 rate-limiting: 10 occurrences on 09-04 (post-widen) vs. 80 on 05-17 and 21 on 08-19, both pre-widen -- the 429s are a pre-existing, intermittent Google-side throttle, not a new regression from raising top_n 20->50.
+
+**Evidence:** logs/pipeline.log lines ~4558-4791 (2026-09-03/04 boundary); pipeline_runs id=11; price_bars/signals row counts for 2026-09-03
 
 #### `#35` Editing this repo's .py files with plain Python text-mode read/write silently flattens CRLF to LF
 
@@ -207,6 +216,14 @@ Re-running the historical insider_cluster signals through grain and channel filt
 
 *Defects found and corrected, with what proved them.*
 
+#### `#46` Pipeline self-heals stuck pipeline_runs rows: reconcile_stale_pipeline_runs() added
+
+*2026-09-05 · VERIFIED · validated* · `reliability` `pipeline` `fix`
+
+Implements the reliability gap identified in #44 (2026-09-03 run stuck at status='running' forever). Database.reconcile_stale_pipeline_runs(stale_seconds=1800) added to src/database/models.py, called from main.py's run_pipeline() immediately after db.initialize() and before start_pipeline_run() creates the new row. On each run it finds pipeline_runs rows still status='running' with started_at older than stale_seconds (default 1800s / 30min) and marks them finished_at=now, status='interrupted', with an explanatory note. 1800s was chosen to match utils/register_daily_task.ps1's existing Task Scheduler ExecutionTimeLimit of 30 minutes -- a row still 'running' past its own scheduled time limit was killed externally, not still in progress. This is a pure DB-reconciliation fix, not a subprocess watchdog: Task Scheduler already bounds the worst case by killing a hung process at 30 minutes, so no re-registration of the scheduled task is needed -- the fix activates automatically the next time main.py runs. 3 new tests added to tests/test_database_models.py (heals an old running row; leaves a genuinely-recent running row alone; never reclassifies an already-finished ok/error row). Full suite: 329 passed, 1 pre-existing skip (up from 326). Both models.py and main.py are Windows CRLF; edited via binary-safe rb/wb replace with CRLF count verified before/after (models.py 1079->1109, main.py 813->818, 0 LF-only leaks in either), ast.parse confirmed clean on both. Attempted to also manually heal the currently-stuck live row (id=11, data/sentiment.db) immediately rather than waiting for the next scheduled run: staged the live DB (22,212,608 bytes) into the cloud container, applied the identical UPDATE there (row 11 -> status='interrupted', finished_at=2026-09-05T20:55:19, integrity_check ok both before and after), but device_commit_files rejected writing it back with 'file exceeds 20MB per-file commit limit' -- confirms the risk flagged in #44's session notes. Checked whether VACUUM could shrink it under the cap first: PRAGMA freelist_count returned 0 (zero free pages, file is fully packed), so VACUUM would not have helped. Did not pursue further workarounds (e.g. raw byte-patching the live file over the device mount, which bypasses SQLite's transaction/locking model entirely and risks corruption) given the fix is self-healing by design: row 11 will be automatically reconciled to status='interrupted' the very next time the real scheduled task runs main.py, with zero further action needed. Code changes committed to git in the same commit as this ledger entry; the live DB itself was left untouched by this session (still shows row 11 as 'running' until that next run).
+
+**Evidence:** src/database/models.py:688 reconcile_stale_pipeline_runs(); main.py:250 call site; utils/register_daily_task.ps1 ExecutionTimeLimit=30min; pytest tests/ -q -> 329 passed, 1 skipped; device_commit_files error 'file exceeds 20MB per-file commit limit' on data/sentiment.db (22,212,608 bytes); PRAGMA freelist_count=0 on that file
+
 #### `#43` Sentiment collection top_n raised 20->50 and wired to config (was a dead, hardcoded-20 knob despite gui.py exposing it)
 
 *2026-09-04 · VERIFIED · validated* · `fix` `sentiment` `config` `dead-code`
@@ -292,6 +309,14 @@ src/analysis/outcomes.py used price_at_signal (captured live, unadjusted) as the
 ## Decisions
 
 *Choices made, with the reasoning that would reverse them.*
+
+#### `#45` Reviewed 2026-09-05: still no live trade. insider_cluster now 7/20 independent dates
+
+*2026-09-05 · VERIFIED · validated* · `execution` `review` `decision`
+
+Routine review, user asked 'what is next, review stock trader'. Account unchanged: 197.12 cash, no positions, no orders since 09-01. Git remains clean and 4 commits ahead of origin (unpushed) from the 09-03 session -- holding correctly. guard.check('action:live_trade') still BLOCKED by #19. Edge-by-type update: insider_cluster n=14/7 independent dates (was 10/5), avg_fwd_10d +2.82%% (down from +4.57%%), hit_rate_10d 50%% (down from 60%%) -- still the closest candidate, now over a third of the way to the 20-date bar, edge continuing to soften as the sample grows (expected early-sample noise, not a reason to override). velocity_spike n=59/3 dates, avg -0.86%%, hit 44.1%% -- still negative, still far below its own 20-date retest bar, continues to replicate entry #1. news_sentiment_bullish unchanged at n=9/3 dates -- only one full pipeline cycle (09-04) has run since the top_n widen (#43), and 09-03's run never completed (see sibling failure entry) -- too early to judge whether the widen helps; needs more cycles before any conclusion. No order proposed.
+
+**Evidence:** get_portfolio/get_equity_orders 651470783 2026-09-05T17:33Z; signals edge-by-type query same session; git status clean
 
 #### `#42` User decided both open questions from #38/#41: leave paper admission trigger-blind, partially widen sentiment top_n 20->50
 

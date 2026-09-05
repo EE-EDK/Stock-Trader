@@ -370,3 +370,74 @@ def test_insider_count_defaults_to_null_for_legacy_style_rows(tmp_path):
     row = conn.execute("SELECT insider_count FROM insiders WHERE ticker='OLD'").fetchone()
     assert row[0] is None
     db.close()
+
+
+def test_reconcile_stale_pipeline_runs_heals_old_running_row(tmp_path):
+    """A run killed externally (observed cause: Windows Task Scheduler's
+    ExecutionTimeLimit) never reaches finish_pipeline_run()'s finally block,
+    so it is left at status='running' forever. reconcile_stale_pipeline_runs()
+    is the self-healing check called at the start of the next run."""
+    from datetime import datetime, timedelta
+    from src.database.models import Database
+    db = Database(str(tmp_path / "t.db"))
+    db.initialize()
+    old_started = (datetime.now() - timedelta(hours=2)).isoformat()
+    conn = db.connect()
+    conn.execute("INSERT INTO pipeline_runs (started_at, status) VALUES (?, 'running')",
+                 (old_started,))
+    conn.commit()
+
+    healed = db.reconcile_stale_pipeline_runs(stale_seconds=1800)
+
+    assert healed == 1
+    row = conn.execute(
+        "SELECT status, finished_at, notes FROM pipeline_runs WHERE started_at = ?",
+        (old_started,)).fetchone()
+    assert row[0] == 'interrupted'
+    assert row[1] is not None
+    assert 'ExecutionTimeLimit' in row[2] or 'interrupted' in row[2]
+    db.close()
+
+
+def test_reconcile_stale_pipeline_runs_leaves_recent_running_row_alone(tmp_path):
+    """A run that is genuinely still in progress (started seconds ago) must
+    not be touched -- only rows older than stale_seconds are stale."""
+    from datetime import datetime
+    from src.database.models import Database
+    db = Database(str(tmp_path / "t.db"))
+    db.initialize()
+    conn = db.connect()
+    conn.execute("INSERT INTO pipeline_runs (started_at, status) VALUES (?, 'running')",
+                 (datetime.now().isoformat(),))
+    conn.commit()
+
+    healed = db.reconcile_stale_pipeline_runs(stale_seconds=1800)
+
+    assert healed == 0
+    row = conn.execute("SELECT status FROM pipeline_runs").fetchone()
+    assert row[0] == 'running'
+    db.close()
+
+
+def test_reconcile_stale_pipeline_runs_ignores_already_finished_rows(tmp_path):
+    """A row already marked 'ok' or 'error' (finish_pipeline_run ran fine)
+    must never be reclassified, no matter how old."""
+    from datetime import datetime, timedelta
+    from src.database.models import Database
+    db = Database(str(tmp_path / "t.db"))
+    db.initialize()
+    old_started = (datetime.now() - timedelta(days=1)).isoformat()
+    conn = db.connect()
+    conn.execute(
+        "INSERT INTO pipeline_runs (started_at, finished_at, status, notes) "
+        "VALUES (?, ?, 'ok', 'signals=5')",
+        (old_started, old_started))
+    conn.commit()
+
+    healed = db.reconcile_stale_pipeline_runs(stale_seconds=1800)
+
+    assert healed == 0
+    row = conn.execute("SELECT status, notes FROM pipeline_runs").fetchone()
+    assert row[0] == 'ok'
+    assert row[1] == 'signals=5'
+    db.close()

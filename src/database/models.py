@@ -685,6 +685,36 @@ class Database:
             (datetime.now().isoformat(), status, notes, run_id))
         self.connect().commit()
 
+    def reconcile_stale_pipeline_runs(self, stale_seconds: int = 1800) -> int:
+        """
+        @brief Close out pipeline_runs rows abandoned by a killed/crashed prior run.
+        @details A run interrupted by an external kill (observed: Windows Task Scheduler's
+                 ExecutionTimeLimit terminating a hung process -- register_daily_task.ps1 sets
+                 that to 30 minutes) never reaches finish_pipeline_run()'s try/finally, so the
+                 row is left at status='running' forever with finished_at=NULL. Call this at
+                 the START of every run, before start_pipeline_run() creates the new row, so a
+                 stale leftover from last time gets healed rather than accumulating silently.
+                 stale_seconds default (1800s / 30min) matches that ExecutionTimeLimit -- a row
+                 still 'running' past its own scheduled time limit is not still in progress.
+        @param stale_seconds Age past which a 'running' row is considered abandoned.
+        @return Number of rows healed.
+        """
+        cursor = self.connect().cursor()
+        cutoff = (datetime.now() - timedelta(seconds=stale_seconds)).isoformat()
+        cursor.execute(
+            "SELECT id, started_at FROM pipeline_runs WHERE status = 'running' AND started_at < ?",
+            (cutoff,))
+        stale_rows = cursor.fetchall()
+        for run_id, started_at in stale_rows:
+            note = (f"auto-marked interrupted: still 'running' more than {stale_seconds}s after "
+                    f"started_at={started_at}; likely killed externally (e.g. Task Scheduler's "
+                    f"ExecutionTimeLimit) before its own finish_pipeline_run() could run")
+            cursor.execute(
+                "UPDATE pipeline_runs SET finished_at = ?, status = ?, notes = ? WHERE id = ?",
+                (datetime.now().isoformat(), 'interrupted', note, run_id))
+        self.connect().commit()
+        return len(stale_rows)
+
     def insert_macro_indicators(self, indicators: Dict[str, Dict[str, Any]]):
         """
         @brief Insert macro economic indicators
