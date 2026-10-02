@@ -3,7 +3,7 @@
 > **Generated file. Do not edit.** Written by `docs/memory/memory.py`.
 > Source of truth is `ledger.jsonl`. Add entries with `python docs/memory/memory.py add ...`.
 
-**40 live entries · 6 superseded · last updated 2026-09-05**
+**42 live entries · 6 superseded · last updated 2026-09-18**
 
 ## Read this first
 
@@ -309,6 +309,22 @@ src/analysis/outcomes.py used price_at_signal (captured live, unadjusted) as the
 ## Decisions
 
 *Choices made, with the reasoning that would reverse them.*
+
+#### `#48` Automated weekly scheduled task abandoned 2026-09-18 -- stock-trader checks are manual/on-request only going forward
+
+*2026-09-18 · VERIFIED · validated* · `automation` `process` `decision`
+
+User explicitly deleted the recurring Claude Cowork scheduled task (trig_01TDiaDBnqRRsKgzBmo2qd8G, 'Stock-trader weekly paper-trading check') and instructed: 'i killed the task that repeats. lets just run updates here.' Proximate cause was the binding-loss incident documented in #47 (device binding silently revoked between the 09-12 and 09-14 runs, root cause unconfirmed but suspected tied to a prompt-update requiring re-approval that was not given), plus a standing product-level gap: there is no tool to retrieve a completed scheduled-task run's report content, only whether it succeeded and how long it took (list_triggers' last_run field). The 09-14 degraded run also self-rewrote its own future trigger prompt without being asked to, which was noted but not the deciding factor. Decision: do not recreate a scheduled/automated check for this project unless the user raises it first. Future Claude sessions asked to 'run a check' should do a fresh manual pass (guard.check, edge-by-type query, pipeline_runs health, Robinhood account sanity) and report it in-conversation using the fixed template now documented in CLAUDE.md's new 'Status Check Report Template' section. That same CLAUDE.md commit also adds a 'Claude Cowork Sessions' section documenting operational gotchas discovered this session: the real device-mount path (not literally 'stock-trader'), the git submodule GIT_DIR/GIT_WORK_TREE workaround needed because the .git file's relative path doesn't resolve across the mount boundary, the phantom CRLF/mtime git-diff artifact and its whitespace-ignored verification command, the read-only SQLite URI pattern for reads over the mount, and the heredoc-file workaround for multi-line Python via device_bash (inline python3 -c with embedded quotes breaks under the bash -c wrapper).
+
+**Evidence:** User message 2026-09-18: 'i killed the task that repeats. lets just run updates here'; prior binding-loss detail in ledger #47; CLAUDE.md 'Claude Cowork Sessions' + 'Status Check Report Template' sections appended same session (184 lines, up from 73, LF-only verified, no CRLF introduced).
+
+#### `#47` Weekly check 2026-09-17 (manual, filling a gap left by a degraded automated run): still no live trade; scheduled task lost its device binding
+
+*2026-09-17 · VERIFIED · validated* · `weekly-check` `review` `infra`
+
+Ran manually after the user asked for an update and the automated weekly task's last firing (2026-09-14) turned out to be a DEGRADED RUN -- list_triggers showed derived_state.folders_state='FOLDERS_STATE_NONE' and a 68-second run duration (vs ~21min for a real check), meaning it could not reach the device at all and could not write this ledger. The 09-14 run self-diagnosed this (correctly) and rewrote its own future trigger prompt via update_trigger to document the failure mode and add explicit DEGRADED RUN handling -- a reasonable adaptation, done without being asked to self-modify, worth knowing about. Root cause of the lost binding is unconfirmed: it worked for the 09-07 and 09-12 manual/automated checks, so something between 09-12 and 09-14 revoked it -- possibly needing re-approval after the 09-13 prompt update (adding ledger-logging) per the tool's own re-signing requirement, though that is not proven, just the most likely candidate. guard.check('action:live_trade'): still BLOCKED by #19, unchanged. Edge-by-type vs the 2026-09-12 baseline: velocity_spike n=87 (was 59), 5 independent dates (was 3), avg -0.03% (was -0.86%, edge moved toward flat), hit 43.7%. combined n=16 (was 13), 5 dates (was 4), avg +1.03%, hit 56.3%. insider_cluster UNCHANGED: n=14, 7 independent dates, avg +2.82%, hit 50% -- flat for 12 days now (since 09-05), still short of the 20-date bar, still the closest candidate. news_sentiment_bullish UNCHANGED: n=9, 3 independent dates, avg +2.61%, hit 77.8% -- flat for a month (last matured signal 08-19), thinnest sample, no read yet on whether the top_n widen (#43) actually helps it. Pipeline: runs 12-20 all completed 'ok' with real signal counts. One anomaly: run id=19 started 2026-09-16T06:27 UTC (~1:27am Central) -- well outside the normal 18:30 UTC schedule, a SECOND run that day alongside the normal id=20 at 18:30. Cause unconfirmed (manual trigger vs scheduler anomaly); noting it, not alarming on one occurrence. Account (651470783) verified clean: $197.12 cash, zero positions, zero orders since the 08-31 REFI exit. Action item for the user, not resolvable from here: the scheduled task needs device binding re-approved in the Claude desktop app on KunzPrime before its next firing (2026-09-21) can do a real check instead of a degraded one.
+
+**Evidence:** guard.check() 2026-09-17; edge-by-type query same session; pipeline_runs ids 11-20; get_portfolio/get_equity_positions/get_equity_orders account 651470783; list_triggers trig_01TDiaDBnqRRsKgzBmo2qd8G showing last_run duration 68s and folders_state=FOLDERS_STATE_NONE as of 2026-09-17
 
 #### `#45` Reviewed 2026-09-05: still no live trade. insider_cluster now 7/20 independent dates
 
