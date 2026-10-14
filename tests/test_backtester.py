@@ -106,17 +106,22 @@ class TestGetHistoricalPrice:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute("""
-            CREATE TABLE prices (
-                ticker TEXT,
-                price REAL,
-                collected_at DATETIME
+            CREATE TABLE price_bars (
+                ticker TEXT NOT NULL,
+                date TEXT NOT NULL,
+                open REAL, high REAL, low REAL, close REAL,
+                volume INTEGER,
+                source TEXT DEFAULT 'yfinance',
+                PRIMARY KEY (ticker, date)
             )
         """)
 
-        # Insert test prices
+        # Insert test bars
         test_date = datetime(2025, 1, 15)
-        cursor.execute("INSERT INTO prices VALUES (?, ?, ?)", ('AAPL', 150.0, test_date.strftime('%Y-%m-%d %H:%M:%S')))
-        cursor.execute("INSERT INTO prices VALUES (?, ?, ?)", ('AAPL', 155.0, (test_date + timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')))
+        cursor.execute("INSERT INTO price_bars (ticker, date, open, high, low, close) VALUES (?, ?, ?, ?, ?, ?)",
+                       ('AAPL', test_date.strftime('%Y-%m-%d'), 150.0, 150.0, 150.0, 150.0))
+        cursor.execute("INSERT INTO price_bars (ticker, date, open, high, low, close) VALUES (?, ?, ?, ?, ?, ?)",
+                       ('AAPL', (test_date + timedelta(days=1)).strftime('%Y-%m-%d'), 155.0, 155.0, 155.0, 155.0))
 
         conn.commit()
         conn.close()
@@ -170,18 +175,23 @@ class TestSimulateTrade:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute("""
-            CREATE TABLE prices (
-                ticker TEXT,
-                price REAL,
-                collected_at DATETIME
+            CREATE TABLE price_bars (
+                ticker TEXT NOT NULL,
+                date TEXT NOT NULL,
+                open REAL, high REAL, low REAL, close REAL,
+                volume INTEGER,
+                source TEXT DEFAULT 'yfinance',
+                PRIMARY KEY (ticker, date)
             )
         """)
 
-        # Insert price series for testing
+        # Insert daily bar series for testing (flat OHLC per day)
         base_date = datetime(2025, 1, 1)
         prices = [100, 105, 110, 115, 120, 125, 130, 135, 140, 145]  # Uptrend
         for i, price in enumerate(prices):
-            cursor.execute("INSERT INTO prices VALUES (?, ?, ?)", ('AAPL', price, (base_date + timedelta(days=i)).strftime('%Y-%m-%d %H:%M:%S')))
+            cursor.execute("INSERT INTO price_bars (ticker, date, open, high, low, close) VALUES (?, ?, ?, ?, ?, ?)",
+                           ('AAPL', (base_date + timedelta(days=i)).strftime('%Y-%m-%d'),
+                            price, price, price, price))
 
         conn.commit()
         conn.close()
@@ -431,12 +441,15 @@ class TestRunBacktest:
             )
         """)
 
-        # Prices table
+        # Daily bars table (market-date spine)
         cursor.execute("""
-            CREATE TABLE prices (
-                ticker TEXT,
-                price REAL,
-                collected_at DATETIME
+            CREATE TABLE price_bars (
+                ticker TEXT NOT NULL,
+                date TEXT NOT NULL,
+                open REAL, high REAL, low REAL, close REAL,
+                volume INTEGER,
+                source TEXT DEFAULT 'yfinance',
+                PRIMARY KEY (ticker, date)
             )
         """)
 
@@ -446,14 +459,18 @@ class TestRunBacktest:
         # Signal for AAPL
         cursor.execute("INSERT INTO signals VALUES (?, ?, ?, ?, ?)", ('AAPL', 80, '["test"]', 100.0, base_date.strftime('%Y-%m-%d %H:%M:%S')))
 
-        # Price series for AAPL (goes up 25% over 10 days - hits take profit)
+        # Bar series for AAPL (goes up 25% over 15 days - hits take profit)
         for i in range(15):
             price = 100 + (i * 2)  # 100, 102, 104... 128
-            cursor.execute("INSERT INTO prices VALUES (?, ?, ?)", ('AAPL', price, (base_date + timedelta(days=i)).strftime('%Y-%m-%d %H:%M:%S')))
+            cursor.execute("INSERT INTO price_bars (ticker, date, open, high, low, close) VALUES (?, ?, ?, ?, ?, ?)",
+                           ('AAPL', (base_date + timedelta(days=i)).strftime('%Y-%m-%d'),
+                            price, price, price, price))
 
         # SPY for benchmark
-        cursor.execute("INSERT INTO prices VALUES (?, ?, ?)", ('SPY', 400.0, base_date.strftime('%Y-%m-%d %H:%M:%S')))
-        cursor.execute("INSERT INTO prices VALUES (?, ?, ?)", ('SPY', 420.0, (base_date + timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S')))
+        cursor.execute("INSERT INTO price_bars (ticker, date, open, high, low, close) VALUES (?, ?, ?, ?, ?, ?)",
+                       ('SPY', base_date.strftime('%Y-%m-%d'), 400.0, 400.0, 400.0, 400.0))
+        cursor.execute("INSERT INTO price_bars (ticker, date, open, high, low, close) VALUES (?, ?, ?, ?, ?, ?)",
+                       ('SPY', (base_date + timedelta(days=30)).strftime('%Y-%m-%d'), 420.0, 420.0, 420.0, 420.0))
 
         conn.commit()
         conn.close()

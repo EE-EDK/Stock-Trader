@@ -296,3 +296,25 @@ class TestVelocityCalculator:
 
         # Should return zeros on error
         assert result['composite_score'] == 0.0
+
+
+def test_vel_24h_normalized_per_day():
+    """A 3-day gap with +30% total change reads as +10%/day, not 0 and not +30."""
+    from datetime import datetime, timedelta
+    from src.metrics.velocity import VelocityCalculator
+
+    class GapDB:
+        def get_mention_history(self, ticker, days=7):
+            now = datetime.now()
+            return [(now - timedelta(days=3), 100), (now, 130)]
+
+        def get_sentiment_history(self, ticker, days=7):
+            return []
+
+        def get_price_history(self, ticker, days=7):
+            return []
+
+    calc = VelocityCalculator(GapDB())
+    result = calc.calculate_ticker_velocity('GAP')
+    assert abs(result['mention_velocity_24h'] - 10.0) < 0.01
+    assert result['observation_gap_days'] == 3

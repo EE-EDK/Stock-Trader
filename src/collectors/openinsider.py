@@ -11,6 +11,8 @@ from typing import List, Dict, Optional
 import logging
 import time
 
+from src.analysis.insider_grain import classify_channel, classify_grain
+
 logger = logging.getLogger(__name__)
 
 
@@ -93,7 +95,7 @@ class OpenInsiderCollector:
         'trade_type': ['trade type', 'trade\ntype', 'tradetype', 'type'],
         'price': ['price'],
         'shares': ['qty', 'shares', 'quantity'],
-        'ownership_change_pct': ['owned', 'δown', 'own change', 'ownchange', '%own'],
+        'ownership_change_pct': ['δown', 'own change', 'ownchange', '%own'],
         'value': ['value', 'value (usd)', 'value(usd)'],
     }
 
@@ -156,6 +158,17 @@ class OpenInsiderCollector:
             if field not in column_map:
                 logger.debug(f"OpenInsider: column '{field}' not found in headers, using default index {default_idx}")
                 column_map[field] = default_idx
+
+        # 'Ins' (buyer count) exists only on the cluster-buys table. Matched
+        # by exact cell text, not substring -- 'ins' is also a substring of
+        # 'insider name' on the non-cluster tables, which have no count
+        # column at all. Confirmed live 2026-09-02: openinsider.com's
+        # latest-cluster-buys header row is ['X','Filing Date','Trade Date',
+        # 'Ticker','Company Name','Industry','Ins','Trade Type',...].
+        for idx, header_text in enumerate(headers):
+            if header_text.strip() == 'ins':
+                column_map['insider_count'] = idx
+                break
 
         logger.info(f"OpenInsider: header detection successful, mapped {len(column_map)} columns")
         return column_map
@@ -239,6 +252,11 @@ class OpenInsiderCollector:
                         'value': self._parse_int(cells[col['value']].text) if len(cells) > col['value'] else 0,
                         'ownership_change_pct': self._parse_float(cells[col['ownership_change_pct']].text) if len(cells) > col['ownership_change_pct'] else 0.0,
                         'is_cluster_buy': is_cluster,
+                        'insider_count': (
+                            self._parse_int(cells[col['insider_count']].text)
+                            if is_cluster and 'insider_count' in col
+                            and len(cells) > col['insider_count'] else None
+                        ),
                         'collected_at': datetime.now()
                     }
 
@@ -256,8 +274,17 @@ class OpenInsiderCollector:
                     # Only collect purchases (P - Purchase)
                     trade_type_full = trade_data['trade_type'].upper()
                     if ('P' in trade_type_full or 'PURCHASE' in trade_type_full) and trade_data['value'] > 0:
-                        # Normalize trade_type to 'P' for database consistency
+                        # Preserve the qualified code BEFORE flattening. OpenInsider
+                        # distinguishes "P - Purchase" from "P - Purchase+OE"
+                        # (option exercise); collapsing both to 'P' destroyed the
+                        # only direct evidence that the open market did not set
+                        # the price. trade_type stays 'P' for query compatibility.
+                        trade_data['acquisition_code'] = trade_data['trade_type']
                         trade_data['trade_type'] = 'P'
+                        trade_data['row_grain'] = classify_grain(trade_data.get('is_cluster_buy'))
+                        trade_data['acquisition_channel'] = classify_channel(
+                            trade_data['row_grain'], trade_data.get('price'),
+                            None, None, trade_data['acquisition_code'])
                         results.append(trade_data)
 
                 except (IndexError, ValueError, AttributeError) as e:

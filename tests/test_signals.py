@@ -69,14 +69,53 @@ class TestSignalGenerator:
                 "trade_type": "P",
                 "trade_date": now - timedelta(days=5),
                 "value": 60000,
+                "insider_name": "DOE JANE",
+                "insider_title": "CEO",
             },
             {
                 "trade_type": "P",
                 "trade_date": now - timedelta(days=3),
                 "value": 50000,
+                "insider_name": "ROE RICHARD",
+                "insider_title": "CFO",
             },
         ]
         assert gen._check_insider_cluster(insiders) is True
+
+    def test_check_insider_cluster_same_person_twice_is_not_a_cluster(self):
+        """Two filings by ONE insider must not read as two buyers.
+
+        Regression for the 2026-08-23 defect: the trigger counted rows, so a
+        single Intel CEO purchase duplicated across scraped views reported as
+        "7 insiders bought $69,999,895".
+        """
+        gen = SignalGenerator()
+        now = datetime.now()
+        insiders = [
+            {"trade_type": "P", "trade_date": now - timedelta(days=5),
+             "value": 60000, "insider_name": "DOE JANE", "insider_title": "CEO"},
+            {"trade_type": "P", "trade_date": now - timedelta(days=3),
+             "value": 50000, "insider_name": "DOE JANE", "insider_title": "CEO"},
+        ]
+        assert gen._check_insider_cluster(insiders) is False
+
+    def test_check_insider_cluster_excludes_off_market_fill(self):
+        """A fill the open market did not price must not count as conviction.
+
+        Regression for Intel 2026-08-11: the CEO's 105,263 shares at $95.00
+        were bought inside a $20B upsized offering, not on the open market.
+        """
+        gen = SignalGenerator()
+        now = datetime.now()
+        insiders = [
+            {"trade_type": "P", "trade_date": now - timedelta(days=5),
+             "value": 9999985, "insider_name": "TAN LIP-BU", "insider_title": "CEO",
+             "row_grain": "form4", "acquisition_channel": "off_market_suspected"},
+            {"trade_type": "P", "trade_date": now - timedelta(days=3),
+             "value": 60000, "insider_name": "ROE RICHARD", "insider_title": "CFO",
+             "row_grain": "form4", "acquisition_channel": "open_market"},
+        ]
+        assert gen._check_insider_cluster(insiders) is False
 
     def test_check_insider_cluster_fail_not_enough_insiders(self):
         """Test insider cluster detection - too few insiders"""
@@ -158,12 +197,16 @@ class TestSignalGenerator:
         gen = SignalGenerator()
         vel = {"composite_score": 65}
         insiders = [
-            {"trade_type": "P", "value": 60000},
-            {"trade_type": "P", "value": 50000},
+            {"trade_type": "P", "value": 60000, "insider_name": "DOE JANE",
+             "insider_title": "CEO", "trade_date": datetime.now() - timedelta(days=4)},
+            {"trade_type": "P", "value": 50000, "insider_name": "ROE RICHARD",
+             "insider_title": "CFO", "trade_date": datetime.now() - timedelta(days=2)},
         ]
         notes = gen._generate_notes("AAPL", vel, insiders, ["insider_cluster"])
         assert "2 insiders" in notes
         assert "110,000" in notes
+        # The note must name the grain the total came from.
+        assert "form4" in notes
 
     def test_generate_notes_combined(self):
         """Test note generation for combined signals"""
@@ -173,12 +216,17 @@ class TestSignalGenerator:
             "sentiment_velocity": 0.4,
             "composite_score": 75,
         }
-        insiders = [{"trade_type": "P", "value": 100000}]
+        insiders = [
+            {"trade_type": "P", "value": 100000, "insider_name": "DOE JANE",
+             "insider_title": "CEO", "trade_date": datetime.now() - timedelta(days=4)},
+            {"trade_type": "P", "value": 60000, "insider_name": "ROE RICHARD",
+             "insider_title": "CFO", "trade_date": datetime.now() - timedelta(days=2)},
+        ]
         triggers = ["velocity_spike", "insider_cluster", "sentiment_flip"]
         notes = gen._generate_notes("AAPL", vel, insiders, triggers)
 
         assert "Mentions up 200%" in notes
-        assert "1 insiders" in notes
+        assert "2 insiders" in notes
         assert "bullish" in notes
 
     def test_generate_signals_velocity_spike_only(self):
@@ -220,11 +268,15 @@ class TestSignalGenerator:
                     "trade_type": "P",
                     "trade_date": now - timedelta(days=5),
                     "value": 70000,
+                    "insider_name": "DOE JANE",
+                    "insider_title": "CEO",
                 },
                 {
                     "trade_type": "P",
                     "trade_date": now - timedelta(days=3),
                     "value": 60000,
+                    "insider_name": "ROE RICHARD",
+                    "insider_title": "CFO",
                 },
             ]
         }
@@ -255,6 +307,93 @@ class TestSignalGenerator:
         signals = gen.generate_signals(velocity_data, insider_data, price_data)
 
         assert len(signals) == 0
+
+    def test_generate_signals_insider_cluster_only_ticker_not_in_velocity_data(self):
+        """Regression for ledger #12: a ticker with a qualifying insider
+        cluster but no mention velocity (no ApeWisdom chatter) used to be
+        structurally invisible because generate_signals() only iterated
+        velocity_data.keys(). It must now be *reachable* on the union of both.
+        Uses a lowered minimum_conviction to isolate the visibility fix from
+        the separate conviction-floor question covered below."""
+        gen = SignalGenerator(thresholds={"minimum_conviction": 20})
+
+        velocity_data = {}  # no mention/velocity data collected for this ticker at all
+        insider_data = {
+            "GO": [
+                {
+                    "trade_type": "P",
+                    "trade_date": datetime.now() - timedelta(days=1),
+                    "value": 403900,
+                    "is_cluster_buy": True,
+                    "insider_count": 2,
+                    "acquisition_channel": "unverified",
+                }
+            ]
+        }
+        price_data = {"GO": {"price": 21.50}}
+
+        signals = gen.generate_signals(velocity_data, insider_data, price_data)
+
+        assert len(signals) == 1
+        assert signals[0].ticker == "GO"
+        assert "insider_cluster" in signals[0].triggers
+        assert signals[0].price_at_signal == 21.50
+
+    def test_generate_signals_insider_only_ticker_without_price_gets_zero_not_crash(self):
+        """A cluster-only ticker missing from price_data must not crash the
+        loop (vel/price now default via .get(), not direct indexing)."""
+        gen = SignalGenerator(thresholds={"minimum_conviction": 20})
+
+        insider_data = {
+            "NOPRICE": [
+                {
+                    "trade_type": "P",
+                    "trade_date": datetime.now() - timedelta(days=1),
+                    "value": 500000,
+                    "is_cluster_buy": True,
+                    "insider_count": 3,
+                    "acquisition_channel": "unverified",
+                }
+            ]
+        }
+
+        signals = gen.generate_signals({}, insider_data, {})
+
+        assert len(signals) == 1
+        assert signals[0].price_at_signal == 0.0
+
+    def test_generate_signals_insider_only_ticker_clears_production_conviction_floor(self):
+        """insider_cluster alone is worth 25 points -- below the production
+        minimum_conviction of 40 (config/config.yaml). Reachability (#12)
+        is necessary but not sufficient: a cluster-only ticker only actually
+        fires end-to-end once it can also pick up a second trigger, which
+        requires main.py's technical_data to be built over the same insider-
+        inclusive ticker universe (companion fix, main.py Step 2b). This test
+        proves the combination clears the real 40-point floor with DEFAULT
+        thresholds -- no test-only threshold override."""
+        gen = SignalGenerator()  # default thresholds, i.e. minimum_conviction=40
+
+        insider_data = {
+            "GO": [
+                {
+                    "trade_type": "P",
+                    "trade_date": datetime.now() - timedelta(days=1),
+                    "value": 403900,
+                    "is_cluster_buy": True,
+                    "insider_count": 2,
+                    "acquisition_channel": "unverified",
+                }
+            ]
+        }
+        price_data = {"GO": {"price": 21.50}}
+        technical_data = {"GO": {"breakout_detected": True, "technical_score": 0}}
+
+        signals = gen.generate_signals(
+            {}, insider_data, price_data, technical_data=technical_data)
+
+        assert len(signals) == 1
+        assert set(signals[0].triggers) == {"insider_cluster", "technical_breakout"}
+        assert signals[0].conviction_score >= 40
 
     def test_generate_signals_sorting(self):
         """Test that signals are sorted by conviction"""

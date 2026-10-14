@@ -417,187 +417,74 @@ class TestCreatePaperTrade:
         assert trade_id is None
 
 
-class TestUpdatePositions:
-    """Test cases for updating open positions"""
+class TestUpdatePositionsFromBars:
+    """Test cases for bar-replay position updates via the shared exit engine"""
 
-    def setup_method(self):
-        """Setup test manager with trades"""
-        config = {
-            'paper_trading': {
-                'enabled': True,
-                'hold_days': 30,
-                'stop_loss_pct': -10,
-                'take_profit_pct': 20
-            }
-        }
+    def _make(self, tmp_path):
+        from src.database.models import Database
+        db = Database(str(tmp_path / "t.db"))
+        db.initialize()
+        config = {'paper_trading': {'enabled': True, 'min_conviction': 25,
+                                    'position_size': 1000, 'max_open_positions': 10,
+                                    'hold_days': 30, 'stop_loss_pct': -10,
+                                    'take_profit_pct': 20}}
+        mgr = PaperTradingManager(db.db_path, config)
+        return db, mgr
 
-        self.tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
-        self.db_path = self.tmp_file.name
-        self.tmp_file.close()
+    def test_stop_fires_on_the_bar_that_crossed_it(self, tmp_path):
+        db, mgr = self._make(tmp_path)
+        mgr.create_paper_trade('XYZ', 10.0, 50, ['insider_cluster'],
+                               datetime(2026, 6, 1, 12, 0))
+        db.insert_price_bars([
+            {'ticker': 'XYZ', 'date': '2026-06-02', 'open': 9.8, 'high': 9.9, 'low': 8.5, 'close': 8.8, 'volume': 1},
+            {'ticker': 'XYZ', 'date': '2026-06-03', 'open': 8.8, 'high': 9.0, 'low': 8.0, 'close': 8.2, 'volume': 1},
+        ])
+        mgr.update_positions_from_bars(db, datetime(2026, 8, 19))
+        import contextlib
+        with contextlib.closing(sqlite3.connect(mgr.db_path)) as conn:
+            row = conn.execute("SELECT status, exit_reason, exit_price, exit_date, days_held "
+                               "FROM paper_trades WHERE ticker='XYZ'").fetchone()
+        assert row[0] == 'closed' and row[1] == 'stop_loss'
+        assert row[2] == 9.0                      # stop price, not the months-later snapshot
+        assert row[3].startswith('2026-06-02')    # the bar that crossed it
+        assert row[4] == 1
+        db.close()
 
-        # Create schema
-        conn = sqlite3.connect(self.db_path)
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS paper_trades (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ticker TEXT NOT NULL,
-                entry_date DATETIME NOT NULL,
-                entry_price REAL NOT NULL,
-                shares INTEGER NOT NULL,
-                conviction INTEGER NOT NULL,
-                signal_types TEXT NOT NULL,
-                position_size REAL NOT NULL,
-                stop_loss REAL,
-                target_price REAL,
-                signal_id INTEGER,
-                exit_date DATETIME,
-                exit_price REAL,
-                exit_reason TEXT,
-                return_pct REAL,
-                profit_loss REAL,
-                days_held INTEGER,
-                status TEXT DEFAULT 'open',
-                notes TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(ticker, entry_date)
-            );
+    def test_open_position_records_progress(self, tmp_path):
+        db, mgr = self._make(tmp_path)
+        mgr.create_paper_trade('ABC', 10.0, 50, ['insider_cluster'],
+                               datetime(2026, 8, 10, 12, 0))
+        db.insert_price_bars([
+            {'ticker': 'ABC', 'date': '2026-08-11', 'open': 10.1, 'high': 10.5, 'low': 10.0, 'close': 10.4, 'volume': 1},
+        ])
+        mgr.update_positions_from_bars(db, datetime(2026, 8, 19))
+        import contextlib
+        with contextlib.closing(sqlite3.connect(mgr.db_path)) as conn:
+            status, last_eval = conn.execute(
+                "SELECT status, last_evaluated_date FROM paper_trades WHERE ticker='ABC'").fetchone()
+            snap = conn.execute("SELECT current_price FROM paper_trade_snapshots").fetchone()
+        assert status == 'open' and last_eval == '2026-08-11'
+        assert snap[0] == 10.4
+        db.close()
 
-            CREATE TABLE IF NOT EXISTS paper_trade_snapshots (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                trade_id INTEGER NOT NULL,
-                snapshot_date DATETIME NOT NULL,
-                current_price REAL NOT NULL,
-                unrealized_pnl REAL,
-                unrealized_pct REAL,
-                FOREIGN KEY (trade_id) REFERENCES paper_trades(id),
-                UNIQUE(trade_id, snapshot_date)
-            );
-        """)
-        conn.commit()
-        conn.close()
+    def test_no_bars_leaves_position_untouched(self, tmp_path):
+        db, mgr = self._make(tmp_path)
+        mgr.create_paper_trade('QQQ', 10.0, 50, ['insider_cluster'],
+                               datetime(2026, 8, 10, 12, 0))
+        mgr.update_positions_from_bars(db, datetime(2026, 8, 19))
+        import contextlib
+        with contextlib.closing(sqlite3.connect(mgr.db_path)) as conn:
+            status = conn.execute("SELECT status FROM paper_trades WHERE ticker='QQQ'").fetchone()[0]
+        assert status == 'open'
+        db.close()
 
-        self.manager = PaperTradingManager(self.db_path, config)
-
-    def teardown_method(self):
-        """Cleanup"""
-        os.unlink(self.db_path)
-
-    def test_update_creates_snapshot(self):
-        """Test that update creates price snapshot"""
-        # Create a trade
-        entry_date = datetime.now() - timedelta(days=5)
-        trade_id = self.manager.create_paper_trade(
-            ticker='AAPL',
-            entry_price=100.0,
-            conviction=80,
-            signal_types=['test'],
-            entry_date=entry_date
-        )
-
-        # Update with current price
-        current_prices = {'AAPL': {'price': 110.0, 'date': '2025-12-22'}}
-        self.manager.update_positions(current_prices, datetime.now())
-
-        # Check snapshot was created
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM paper_trade_snapshots WHERE trade_id = ?", (trade_id,))
-        snapshot = cursor.fetchone()
-        conn.close()
-
-        assert snapshot is not None
-        assert snapshot[3] == 110.0  # current_price
-        # Unrealized P/L should be positive (110 - 100) * shares
-        assert snapshot[4] > 0  # unrealized_pnl
-
-    def test_update_closes_on_take_profit(self):
-        """Test that position closes when take profit is hit"""
-        # Create a trade at $100
-        entry_date = datetime.now() - timedelta(days=5)
-        trade_id = self.manager.create_paper_trade(
-            ticker='AAPL',
-            entry_price=100.0,
-            conviction=80,
-            signal_types=['test'],
-            entry_date=entry_date
-        )
-
-        # Update with price at target ($120 = 20% profit)
-        current_prices = {'AAPL': {'price': 121.0, 'date': '2025-12-22'}}  # Above target
-        self.manager.update_positions(current_prices, datetime.now())
-
-        # Check trade was closed
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT status, exit_reason, profit_loss FROM paper_trades WHERE id = ?", (trade_id,))
-        status, exit_reason, profit_loss = cursor.fetchone()
-        conn.close()
-
-        assert status == 'closed'
-        assert exit_reason == 'take_profit'
-        assert profit_loss > 0
-
-    def test_update_closes_on_stop_loss(self):
-        """Test that position closes when stop loss is hit"""
-        # Create a trade at $100
-        entry_date = datetime.now() - timedelta(days=5)
-        trade_id = self.manager.create_paper_trade(
-            ticker='AAPL',
-            entry_price=100.0,
-            conviction=80,
-            signal_types=['test'],
-            entry_date=entry_date
-        )
-
-        # Update with price at stop loss ($90 = -10%)
-        current_prices = {'AAPL': {'price': 89.0, 'date': '2025-12-22'}}  # Below stop loss
-        self.manager.update_positions(current_prices, datetime.now())
-
-        # Check trade was closed
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT status, exit_reason, profit_loss FROM paper_trades WHERE id = ?", (trade_id,))
-        status, exit_reason, profit_loss = cursor.fetchone()
-        conn.close()
-
-        assert status == 'closed'
-        assert exit_reason == 'stop_loss'
-        assert profit_loss < 0
-
-    def test_update_closes_on_time_limit(self):
-        """Test that position closes after hold period"""
-        # Create a trade 31 days ago (past the 30 day limit)
-        entry_date = datetime.now() - timedelta(days=31)
-        trade_id = self.manager.create_paper_trade(
-            ticker='AAPL',
-            entry_price=100.0,
-            conviction=80,
-            signal_types=['test'],
-            entry_date=entry_date
-        )
-
-        # Update with current price
-        current_prices = {'AAPL': {'price': 105.0, 'date': '2025-12-22'}}
-        self.manager.update_positions(current_prices, datetime.now())
-
-        # Check trade was closed
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT status, exit_reason, days_held FROM paper_trades WHERE id = ?", (trade_id,))
-        status, exit_reason, days_held = cursor.fetchone()
-        conn.close()
-
-        assert status == 'closed'
-        assert exit_reason == 'time_limit'
-        assert days_held >= 30
-
-    def test_update_disabled(self):
-        """Test that update does nothing when disabled"""
+    def test_update_disabled(self, tmp_path):
+        db, _ = self._make(tmp_path)
         config = {'paper_trading': {'enabled': False}}
-        manager = PaperTradingManager(self.db_path, config)
-
+        manager = PaperTradingManager(db.db_path, config)
         # Should not raise error
-        manager.update_positions({'AAPL': 100.0}, datetime.now())
+        manager.update_positions_from_bars(db, datetime.now())
+        db.close()
 
 
 class TestBackfillFromSignals:
@@ -650,10 +537,13 @@ class TestBackfillFromSignals:
                 created_at TIMESTAMP
             );
 
-            CREATE TABLE IF NOT EXISTS prices (
-                ticker TEXT,
-                price REAL,
-                collected_at TIMESTAMP
+            CREATE TABLE IF NOT EXISTS price_bars (
+                ticker TEXT NOT NULL,
+                date TEXT NOT NULL,
+                open REAL, high REAL, low REAL, close REAL,
+                volume INTEGER,
+                source TEXT DEFAULT 'yfinance',
+                PRIMARY KEY (ticker, date)
             );
         """)
         conn.commit()
@@ -677,9 +567,9 @@ class TestBackfillFromSignals:
         """, ('AAPL', 80, json.dumps(['velocity_spike']), signal_date.isoformat()))
 
         cursor.execute("""
-            INSERT INTO prices (ticker, price, collected_at)
+            INSERT INTO price_bars (ticker, date, close)
             VALUES (?, ?, ?)
-        """, ('AAPL', 150.0, signal_date.isoformat()))
+        """, ('AAPL', signal_date.strftime('%Y-%m-%d'), 150.0))
 
         conn.commit()
         conn.close()
@@ -716,8 +606,8 @@ class TestBackfillFromSignals:
         """, ('HIGH', 80, json.dumps(['test']), signal_date.isoformat()))
 
         # Add prices
-        cursor.execute("INSERT INTO prices VALUES (?, ?, ?)", ('LOW', 100.0, signal_date.isoformat()))
-        cursor.execute("INSERT INTO prices VALUES (?, ?, ?)", ('HIGH', 100.0, signal_date.isoformat()))
+        cursor.execute("INSERT INTO price_bars (ticker, date, close) VALUES (?, ?, ?)", ('LOW', signal_date.strftime('%Y-%m-%d'), 100.0))
+        cursor.execute("INSERT INTO price_bars (ticker, date, close) VALUES (?, ?, ?)", ('HIGH', signal_date.strftime('%Y-%m-%d'), 100.0))
 
         conn.commit()
         conn.close()
@@ -747,9 +637,9 @@ class TestBackfillFromSignals:
         """, ('AAPL', 80, json.dumps(['test']), signal_date.isoformat()))
 
         cursor.execute("""
-            INSERT INTO prices (ticker, price, collected_at)
+            INSERT INTO price_bars (ticker, date, close)
             VALUES (?, ?, ?)
-        """, ('AAPL', 150.0, signal_date.isoformat()))
+        """, ('AAPL', signal_date.strftime('%Y-%m-%d'), 150.0))
 
         conn.commit()
         conn.close()
@@ -1011,3 +901,42 @@ class TestEdgeCases:
         )
 
         assert trade_id is not None
+
+
+class TestBookHygiene:
+    """One open position per ticker, zero-share guard, signal_id linkage"""
+
+    def _mgr(self, tmp_path):
+        from src.database.models import Database
+        db = Database(str(tmp_path / "t.db"))
+        db.initialize()
+        config = {'paper_trading': {'enabled': True, 'min_conviction': 25,
+                                    'position_size': 1000, 'max_open_positions': 10,
+                                    'hold_days': 30, 'stop_loss_pct': -10,
+                                    'take_profit_pct': 20}}
+        return db, PaperTradingManager(db.db_path, config)
+
+    def test_second_open_position_same_ticker_rejected(self, tmp_path):
+        db, mgr = self._mgr(tmp_path)
+        t1 = mgr.create_paper_trade('DUP', 10.0, 50, ['insider_cluster'], datetime(2026, 8, 1))
+        t2 = mgr.create_paper_trade('DUP', 10.5, 50, ['insider_cluster'],
+                                    datetime(2026, 8, 1) + timedelta(minutes=5))
+        assert t1 is not None and t2 is None
+        db.close()
+
+    def test_zero_share_trade_rejected(self, tmp_path):
+        db, mgr = self._mgr(tmp_path)
+        # conviction 25 -> $500 position; price $679 -> 0 shares (the VOO case)
+        assert mgr.create_paper_trade('VOO', 679.46, 25, ['news_sentiment_bullish'],
+                                      datetime(2026, 8, 1)) is None
+        db.close()
+
+    def test_signal_id_is_stored(self, tmp_path):
+        db, mgr = self._mgr(tmp_path)
+        tid = mgr.create_paper_trade('LNK', 10.0, 50, ['insider_cluster'],
+                                     datetime(2026, 8, 1), signal_id=77)
+        import contextlib
+        with contextlib.closing(sqlite3.connect(mgr.db_path)) as conn:
+            sid = conn.execute("SELECT signal_id FROM paper_trades WHERE id=?", (tid,)).fetchone()[0]
+        assert sid == 77
+        db.close()

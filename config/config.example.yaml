@@ -93,8 +93,8 @@ backtesting:
 # Signal thresholds (tuned for better quality - based on backtest results)
 thresholds:
   velocity_spike:
-    mention_vel_24h_min: 150     # 150%+ increase in 24h (more selective than 100%)
-    composite_score_min: 70       # Minimum composite score (stricter)
+    mention_vel_24h_min: 20      # per-day rate (velocity is date-normalized)
+    composite_score_min: 40       # Minimum composite score
   insider_cluster:
     min_insiders: 2               # At least 2 insiders buying
     lookback_days: 14             # Within 14 days
@@ -105,7 +105,7 @@ thresholds:
   combined:
     velocity_score_min: 50        # Lower threshold when combined with insider
     requires_insider: true        # Must have insider activity
-  minimum_conviction: 70          # Only report high-quality signals (was 40)
+  minimum_conviction: 40          # Honest reporting floor
 
 # Email settings
 email:
@@ -113,7 +113,7 @@ email:
   smtp_server: "smtp.gmail.com"
   smtp_port: 587
   sender: "your-email@gmail.com"
-  password: "your-app-password"  # Use Gmail app password, not regular password
+  password: "your-app-password"  # placeholder example - Gmail app password, not regular password
   recipients:
     - "your-email@gmail.com"
 

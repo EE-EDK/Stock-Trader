@@ -57,6 +57,7 @@ class ModernDashboardGenerator:
         emerging_tickers = []
         vix_history = []
         treasury_history = []
+        edge_rows = []
 
         if db:
             try:
@@ -73,6 +74,12 @@ class ModernDashboardGenerator:
             except Exception as e:
                 import logging
                 logging.getLogger(__name__).warning(f"Could not fetch enhanced dashboard data: {e}")
+            try:
+                from src.database.queries import DatabaseQueries
+                edge_rows = DatabaseQueries(db.connect()).get_signal_edge_by_type()
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Signal edge section skipped: {e}")
 
         # Generate sections
         header_html = self._generate_header(market_score, market_assessment)
@@ -87,6 +94,7 @@ class ModernDashboardGenerator:
         insider_panel_html = self._generate_insider_panel(insider_trades, insider_ratio)
         technical_deepdive_html = self._generate_technical_deepdive(technical_data, velocity_data)
         performance_html = self._generate_performance_section(signal_performance, equity_curve, paper_trading_stats)
+        signal_edge_html = self._render_signal_edge_section(edge_rows)
         sentiment_breakdown_html = self._generate_sentiment_breakdown(sentiment_data, sentiment_shifts)
         macro_trends_html = self._generate_macro_trends(vix_history, treasury_history, macro_indicators, market_assessment)
         social_insights_html = self._generate_social_insights(social_mentions, emerging_tickers, top_velocity)
@@ -113,6 +121,7 @@ class ModernDashboardGenerator:
         {insider_panel_html}
         {technical_deepdive_html}
         {performance_html}
+        {signal_edge_html}
         {sentiment_breakdown_html}
         {macro_trends_html}
         {social_insights_html}
@@ -1260,6 +1269,50 @@ class ModernDashboardGenerator:
                     }}
                 }});
             </script>
+        </div>"""
+
+    def _render_signal_edge_section(self, edge_rows: List) -> str:
+        """Generate signal-edge table: which trigger types actually make money (from price_bars forward returns)"""
+        if not edge_rows:
+            return ""
+
+        rows_html = ""
+        for r in edge_rows:
+            avg10 = r.get('avg_fwd_10d')
+            hit = r.get('hit_rate_10d') or 0
+            cls10 = "positive" if (avg10 or 0) > 0 else "negative"
+            hit_cls = "positive" if hit >= 50 else "negative"
+            fmt = lambda v: f"{v:+.2f}%" if v is not None else "–"
+            rows_html += f"""
+                <tr>
+                    <td><strong>{html.escape(str(r.get('signal_type') or 'N/A'))}</strong></td>
+                    <td>{r.get('n') or 0}</td>
+                    <td>{fmt(r.get('avg_fwd_5d'))}</td>
+                    <td><span class="badge {cls10}">{fmt(avg10)}</span></td>
+                    <td>{fmt(r.get('avg_fwd_30d'))}</td>
+                    <td><span class="badge {hit_cls}">{hit:.1f}%</span></td>
+                </tr>"""
+
+        return f"""<div class="section">
+            <h2 class="section-title">🎯 Signal Edge by Trigger Type</h2>
+            <div class="card">
+                <h3 class="card-title">Forward returns measured from daily bars - judge trigger types here before trusting their conviction weights</h3>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Trigger</th>
+                                <th>N</th>
+                                <th>+5d Avg</th>
+                                <th>+10d Avg</th>
+                                <th>+30d Avg</th>
+                                <th>10d Hit Rate</th>
+                            </tr>
+                        </thead>
+                        <tbody>{rows_html}</tbody>
+                    </table>
+                </div>
+            </div>
         </div>"""
 
     def _generate_performance_section(self, signal_performance: List, equity_curve: List, paper_stats: Dict) -> str:

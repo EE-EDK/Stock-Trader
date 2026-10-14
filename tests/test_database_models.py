@@ -266,3 +266,178 @@ class TestQueryEdgeCases:
         results = sample_velocity_data.get_top_velocity_gainers(limit=10, hours=0)
         # Should return empty or very recent data
         assert isinstance(results, list)
+
+
+def test_insert_signals_returns_ids(tmp_path):
+    from datetime import datetime
+    from src.database.models import Database
+    from src.signals.generator import Signal
+    db = Database(str(tmp_path / "t.db"))
+    db.initialize()
+    now = datetime(2026, 8, 19, 21, 30)
+    sigs = [Signal(ticker='AAA', signal_type='insider_cluster', conviction_score=50,
+                   price_at_signal=10.0, triggers=['insider_cluster'], notes='n', created_at=now)]
+    ids = db.insert_signals(sigs)
+    assert set(ids.keys()) == {'AAA'} and isinstance(ids['AAA'], int)
+    db.close()
+
+
+def test_signal_edge_by_type(tmp_path):
+    from src.database.models import Database
+    from src.database.queries import DatabaseQueries
+    db = Database(str(tmp_path / "t.db"))
+    db.initialize()
+    conn = db.connect()
+    rows = [('A', 'insider_cluster', 5.0, 2.0), ('B', 'insider_cluster', -1.0, -3.0),
+            ('C', 'velocity_spike', 8.0, 12.0)]
+    for i, (t, st, f10, f30) in enumerate(rows):
+        conn.execute("INSERT INTO signals (ticker, signal_type, conviction_score, created_at, "
+                     "fwd_return_10d, fwd_return_30d) VALUES (?, ?, 50, ?, ?, ?)",
+                     (t, st, '2026-06-0%d 12:00:00' % (i + 1), f10, f30))
+    conn.commit()
+    edge = DatabaseQueries(conn).get_signal_edge_by_type()
+    ic = next(r for r in edge if r['signal_type'] == 'insider_cluster')
+    assert ic['n'] == 2 and ic['avg_fwd_10d'] == 2.0 and ic['hit_rate_10d'] == 50.0
+    db.close()
+
+
+def test_get_latest_bar_closes_returns_most_recent_close_per_ticker(tmp_path):
+    """New method backing the main.py price fallback for insider-only
+    tickers (the `prices`/Finnhub table doesn't cover them, price_bars does)."""
+    from src.database.models import Database
+    db = Database(str(tmp_path / "t.db"))
+    db.initialize()
+    db.insert_price_bars([
+        {'ticker': 'GO', 'date': '2026-08-30', 'close': 20.10},
+        {'ticker': 'GO', 'date': '2026-08-31', 'close': 21.50},
+        {'ticker': 'ZZZ', 'date': '2026-08-31', 'close': 5.00},
+    ])
+    closes = db.get_latest_bar_closes(['GO', 'ZZZ', 'NOPE'])
+    assert closes == {'GO': 21.50, 'ZZZ': 5.00}
+    db.close()
+
+
+def test_get_latest_bar_closes_with_no_tickers_arg_covers_everything(tmp_path):
+    from src.database.models import Database
+    db = Database(str(tmp_path / "t.db"))
+    db.initialize()
+    db.insert_price_bars([{'ticker': 'A', 'date': '2026-08-31', 'close': 1.0}])
+    assert db.get_latest_bar_closes() == {'A': 1.0}
+    db.close()
+
+
+def test_get_latest_bar_closes_empty_ticker_list_returns_empty(tmp_path):
+    from src.database.models import Database
+    db = Database(str(tmp_path / "t.db"))
+    db.initialize()
+    assert db.get_latest_bar_closes([]) == {}
+    db.close()
+
+
+def test_insider_count_column_round_trips_through_insert_insiders(tmp_path):
+    """Ledger #21 fix: the 'Ins' column captured by the collector must
+    survive the insert into the insiders table."""
+    from src.database.models import Database
+    db = Database(str(tmp_path / "t.db"))
+    db.initialize()
+    db.insert_insiders([{
+        'ticker': 'GO', 'insider_name': '', 'insider_title': '',
+        'trade_type': 'P', 'trade_date': '2026-09-01', 'filing_date': '2026-09-01',
+        'shares': 100, 'price': 21.0, 'value': 403900,
+        'ownership_change_pct': 26.0, 'is_cluster_buy': True,
+        'insider_count': 2,
+    }])
+    conn = db.connect()
+    row = conn.execute("SELECT insider_count, ownership_change_pct FROM insiders "
+                       "WHERE ticker='GO'").fetchone()
+    assert row[0] == 2
+    assert row[1] == 26.0   # sane percent, not a raw share count
+    db.close()
+
+
+def test_insider_count_defaults_to_null_for_legacy_style_rows(tmp_path):
+    """A row that omits insider_count (as every row did before 2026-09-02)
+    must insert cleanly as NULL, not error."""
+    from src.database.models import Database
+    db = Database(str(tmp_path / "t.db"))
+    db.initialize()
+    db.insert_insiders([{
+        'ticker': 'OLD', 'insider_name': 'A', 'insider_title': 'CEO',
+        'trade_type': 'P', 'trade_date': '2026-01-01', 'filing_date': '2026-01-01',
+        'shares': 100, 'price': 10.0, 'value': 100000,
+    }])
+    conn = db.connect()
+    row = conn.execute("SELECT insider_count FROM insiders WHERE ticker='OLD'").fetchone()
+    assert row[0] is None
+    db.close()
+
+
+def test_reconcile_stale_pipeline_runs_heals_old_running_row(tmp_path):
+    """A run killed externally (observed cause: Windows Task Scheduler's
+    ExecutionTimeLimit) never reaches finish_pipeline_run()'s finally block,
+    so it is left at status='running' forever. reconcile_stale_pipeline_runs()
+    is the self-healing check called at the start of the next run."""
+    from datetime import datetime, timedelta
+    from src.database.models import Database
+    db = Database(str(tmp_path / "t.db"))
+    db.initialize()
+    old_started = (datetime.now() - timedelta(hours=2)).isoformat()
+    conn = db.connect()
+    conn.execute("INSERT INTO pipeline_runs (started_at, status) VALUES (?, 'running')",
+                 (old_started,))
+    conn.commit()
+
+    healed = db.reconcile_stale_pipeline_runs(stale_seconds=1800)
+
+    assert healed == 1
+    row = conn.execute(
+        "SELECT status, finished_at, notes FROM pipeline_runs WHERE started_at = ?",
+        (old_started,)).fetchone()
+    assert row[0] == 'interrupted'
+    assert row[1] is not None
+    assert 'ExecutionTimeLimit' in row[2] or 'interrupted' in row[2]
+    db.close()
+
+
+def test_reconcile_stale_pipeline_runs_leaves_recent_running_row_alone(tmp_path):
+    """A run that is genuinely still in progress (started seconds ago) must
+    not be touched -- only rows older than stale_seconds are stale."""
+    from datetime import datetime
+    from src.database.models import Database
+    db = Database(str(tmp_path / "t.db"))
+    db.initialize()
+    conn = db.connect()
+    conn.execute("INSERT INTO pipeline_runs (started_at, status) VALUES (?, 'running')",
+                 (datetime.now().isoformat(),))
+    conn.commit()
+
+    healed = db.reconcile_stale_pipeline_runs(stale_seconds=1800)
+
+    assert healed == 0
+    row = conn.execute("SELECT status FROM pipeline_runs").fetchone()
+    assert row[0] == 'running'
+    db.close()
+
+
+def test_reconcile_stale_pipeline_runs_ignores_already_finished_rows(tmp_path):
+    """A row already marked 'ok' or 'error' (finish_pipeline_run ran fine)
+    must never be reclassified, no matter how old."""
+    from datetime import datetime, timedelta
+    from src.database.models import Database
+    db = Database(str(tmp_path / "t.db"))
+    db.initialize()
+    old_started = (datetime.now() - timedelta(days=1)).isoformat()
+    conn = db.connect()
+    conn.execute(
+        "INSERT INTO pipeline_runs (started_at, finished_at, status, notes) "
+        "VALUES (?, ?, 'ok', 'signals=5')",
+        (old_started, old_started))
+    conn.commit()
+
+    healed = db.reconcile_stale_pipeline_runs(stale_seconds=1800)
+
+    assert healed == 0
+    row = conn.execute("SELECT status, notes FROM pipeline_runs").fetchone()
+    assert row[0] == 'ok'
+    assert row[1] == 'signals=5'
+    db.close()

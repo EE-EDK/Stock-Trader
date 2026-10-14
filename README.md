@@ -13,6 +13,20 @@
 
 ## 📊 System Architecture
 
+### Market-Date Spine (2026-08)
+
+All time-series logic keys on **market dates**, not pipeline-run timestamps. The `price_bars`
+table (daily OHLCV per ticker, backfilled from yfinance on every run in Step 1c) is the canonical
+spine: technical indicators compute on real daily closes, paper-trade exits replay every bar since
+the last evaluation through the shared engine (`src/trading/engine.py` — the same rules the
+backtester uses), and every signal is graded with +5/+10/+30 trading-day forward returns
+(`src/analysis/outcomes.py`), surfaced as the per-trigger edge table in the dashboard. Runs are
+gap-tolerant — skip a week and the next run fills every missed trading day and applies exits where
+a resting order would actually have filled. A single-instance lock (`data/pipeline.lock`) prevents
+concurrent runs; `utils/register_daily_task.ps1` registers a weekday 6:30 PM scheduled run;
+`utils/revalidate_paper_trades.py` is the one-time book repair that voided historical duplicates
+and re-closed trades against real bars.
+
 ### Pipeline Overview
 
 ```mermaid
@@ -343,7 +357,7 @@ Stock-Trader/
 │   ├── type_check.py               # Type verification system
 │   ├── verify_version.py           # Bug fix validator
 │   └── test_runtime.py             # Runtime validation
-├── tests/                          # Unit tests (238 tests, 50% coverage)
+├── tests/                          # Unit tests (295 tests as of 2026-08-27, 50% coverage)
 ├── reports/                        # Generated dashboards
 ├── logs/                          # Application logs
 ├── data/                          # SQLite database
@@ -468,7 +482,7 @@ email:
   smtp_server: "smtp.gmail.com"
   smtp_port: 587
   sender: "your-email@gmail.com"
-  password: "your-app-password"   # Use app password for Gmail
+  password: "your-app-password"   # placeholder example - use a Gmail app password
   recipients:
     - "your-email@gmail.com"
 
@@ -752,7 +766,7 @@ The 154 warnings found by the type checker are mostly intentional `.get()` usage
 
 ## 🧪 Test Coverage
 
-**Comprehensive unit testing with 238 test cases**
+**Comprehensive unit testing with 295 test cases** (measured via `pytest --collect-only -q` on 2026-08-27, branch `feat/market-date-spine`)
 
 | Component | Tests | Coverage | Status |
 |-----------|-------|----------|--------|
@@ -767,9 +781,9 @@ The 154 warnings found by the type checker are mostly intentional `.get()` usage
 | Finnhub Collector | 5 | 76% | ✅ All passing |
 | OpenInsider Collector | 5 | 74% | ✅ All passing |
 | Velocity Calculator | 4 | 92% | ✅ All passing |
-| **Total** | **238+** | **~50%** | **✅ passing** |
+| **Total** | **295** | **~50%** | **✅ passing** |
 
-*Test and coverage numbers can be updated after running the full suite.*
+*Per-component breakdown above predates the current total and was not re-itemized this pass — only the total was re-measured (2026-08-27). Test and coverage numbers can be updated after running the full suite.*
 
 ### Run Tests
 
@@ -887,6 +901,15 @@ MIT License - See LICENSE file for details
 ---
 
 ## 📚 Version History
+
+### 2026-08 (`feat/market-date-spine`, unreleased)
+- **Market-date spine** - All time-series joins now key on `price_bars.date` (market date) instead of `collected_at`; technical analysis computes on real daily bars, not run snapshots (2026-08-19, `bf07be0`).
+- **Shared bar-walking exit engine** - New `src/trading/engine.py` (`walk_bars`/`ExitEvent`) used by both paper trading and the backtester (2026-08-19, `7f71380`, `47b26c4`); paper trading now replays daily bars through it (`a22d253`).
+- **Paper trading integrity fixes** - One open position per ticker, zero-share guard, `signal_id` linkage (`62a5df1`); revalidation utility to void duplicate/zero-share trades and re-close against bars (`4e37163`, `utils/revalidate_paper_trades.py`).
+- **Signal edge tracking** - Backfill of signal forward returns from bars for a learning loop (`f4174a7`), surfaced as a per-trigger signal edge table on the dashboard (`a4809bd`).
+- **Date-normalized velocity + run ledger** (`24f1296`); honest thresholds, daily scheduled run, and market-date-spine docs (`a405ffc`).
+- **Docs** - Trade-page TODO for actionable order tickets going real-money (2026-08-19, `f7e2e6b`); agent/context file updates (2026-08-27, `e3a59ff`).
+- Full log: `git log --format="%h %ad %s" --date=short -12` on `feat/market-date-spine`.
 
 ### v1.3.2 (2026-03-19) - Windows Compatibility & Upstream Integration
 - **Full Upstream Integration** - Merged all 8 unmerged Jules branches from upstream (rate limiting, dashboard v2, signals refactor, backtester optimizations).
@@ -1019,8 +1042,8 @@ MIT License - See LICENSE file for details
 - [x] **Backtesting module** - ✅ Complete (v1.2.0)
 - [x] **Enhanced dashboard** - ✅ Complete (v1.2.0)
 
-### Phase 3 - 🚧 UNDER CONSIDERATION
-- [ ] Web dashboard (Flask/FastAPI) – browser-based view of reports/signals; can coexist with the PyQt5 GUI (GUI for config & pipeline, web for viewing) or later replace static HTML with a served app.
+### Phase 3 - ✅ COMPLETE
+- [x] **Web dashboard (FastAPI)** – `web/main.py`, a browser-based dashboard/run/settings/backtest/utilities app served via `uvicorn web.main:app` (see Quick Start); coexists with the PyQt5 GUI.
 
 ### Phase 4 (Long-term)
 - [ ] Machine learning for signal optimization

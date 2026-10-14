@@ -23,6 +23,8 @@ except ImportError:
     YFINANCE_AVAILABLE = False
     logger.warning("yfinance/pandas not available - on-the-fly signal generation disabled")
 
+from src.trading.engine import walk_bars
+
 
 @dataclass
 class BacktestTrade:
@@ -123,16 +125,14 @@ class Backtester:
         with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
             cursor = conn.cursor()
 
-            # Get price from database (within 7 days of target date)
-            target_date_str = target_date.strftime('%Y-%m-%d %H:%M:%S')
+            # Close of the first daily bar on/after the target date (within 7 days)
             cursor.execute("""
-                SELECT price
-                FROM prices
-                WHERE ticker = ?
-                AND DATE(collected_at) BETWEEN DATE(?) AND DATE(?, '+7 days')
-                ORDER BY ABS(JULIANDAY(collected_at) - JULIANDAY(?))
+                SELECT close FROM price_bars
+                WHERE ticker = ? AND date >= ? AND date <= ? AND close IS NOT NULL
+                ORDER BY date ASC
                 LIMIT 1
-            """, (ticker, target_date_str, target_date_str, target_date_str))
+            """, (ticker, target_date.strftime('%Y-%m-%d'),
+                  (target_date + timedelta(days=7)).strftime('%Y-%m-%d')))
 
             row = cursor.fetchone()
 
@@ -163,92 +163,35 @@ class Backtester:
         stop_loss = entry_price * (1 + self.stop_loss_pct / 100)
         target_price = entry_price * (1 + self.take_profit_pct / 100)
 
-        # Fetch all possible prices for the hold period in one query
-        end_date = entry_date + timedelta(days=self.hold_days + 7)  # Add buffer for missing days
-        
+        # Fetch daily bars from the market-date spine
+        entry_day = entry_date.strftime('%Y-%m-%d')
+        end_day = (entry_date + timedelta(days=self.hold_days + 14)).strftime('%Y-%m-%d')
         with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
             cursor = conn.cursor()
-            
-            # Using strftime to avoid datetime parameter deprecation
-            entry_date_str = entry_date.strftime('%Y-%m-%d %H:%M:%S')
-            end_date_str = end_date.strftime('%Y-%m-%d %H:%M:%S')
-            
             cursor.execute("""
-                SELECT collected_at, price
-                FROM prices
-                WHERE ticker = ?
-                AND DATE(collected_at) >= DATE(?) AND DATE(collected_at) <= DATE(?)
-                ORDER BY collected_at ASC
-            """, (ticker, entry_date_str, end_date_str))
-            
-            rows = cursor.fetchall()
-            
-        prices_by_date = {}
-        for row in rows:
-            try:
-                # Handle both ISO format and simple string format
-                date_obj = datetime.fromisoformat(row[0].replace('Z', '+00:00'))
-            except ValueError:
-                # Fallback parser if not standard iso
-                try:
-                    date_obj = datetime.strptime(row[0], '%Y-%m-%d %H:%M:%S')
-                except ValueError:
-                    date_obj = datetime.strptime(row[0].split()[0], '%Y-%m-%d')
-            
-            date_key = date_obj.date()
-            if date_key not in prices_by_date:
-                prices_by_date[date_key] = row[1]
+                SELECT date, open, high, low, close FROM price_bars
+                WHERE ticker = ? AND date > ? AND date <= ?
+                ORDER BY date ASC
+            """, (ticker, entry_day, end_day))
+            bars = [{'date': r[0], 'open': r[1], 'high': r[2], 'low': r[3], 'close': r[4]}
+                    for r in cursor.fetchall()]
 
-        # Simulate daily price checks
-        exit_date = None
-        exit_price = None
-        exit_reason = None
+        if not bars:
+            return None
 
-        for day in range(1, self.hold_days + 1):
-            current_date = entry_date + timedelta(days=day)
-            
-            # Look for price on current day or up to 7 days ahead
-            current_price = None
-            for offset in range(8):
-                check_date = current_date + timedelta(days=offset)
-                if check_date.date() in prices_by_date:
-                    current_price = prices_by_date[check_date.date()]
-                    current_date = check_date
-                    break
-
-            if current_price is None:
-                continue
-
-            # Check exit conditions
-            if current_price <= stop_loss:
-                exit_date = current_date
-                exit_price = current_price
-                exit_reason = 'stop_loss'
-                break
-            elif current_price >= target_price:
-                exit_date = current_date
-                exit_price = current_price
-                exit_reason = 'take_profit'
-                break
-
-        # If no exit condition hit, exit at time limit
-        if exit_date is None:
-            exit_date = entry_date + timedelta(days=self.hold_days)
-            
-            # Try to get exit price
-            exit_price = None
-            for offset in range(8):
-                check_date = exit_date + timedelta(days=offset)
-                if check_date.date() in prices_by_date:
-                    exit_price = prices_by_date[check_date.date()]
-                    exit_date = check_date
-                    break
-                    
-            if exit_price is None:
-                # Fallback to standard get_historical_price if bulk fetch didn't catch it
-                exit_price = self.get_historical_price(ticker, exit_date)
-            
+        # Shared exit engine - identical rules to paper trading
+        exit_event = walk_bars(entry_day, entry_price, stop_loss, target_price,
+                               self.hold_days, bars)
+        if exit_event is None:
+            # Ran out of bars before any exit rule fired - force-close at the last bar
+            last = bars[-1]
+            exit_date = datetime.strptime(last['date'], '%Y-%m-%d')
+            exit_price = last['close']
             exit_reason = 'time_limit'
+        else:
+            exit_date = datetime.strptime(exit_event.date, '%Y-%m-%d')
+            exit_price = exit_event.price
+            exit_reason = exit_event.reason
 
         if exit_price is None:
             return None
@@ -256,7 +199,7 @@ class Backtester:
         # Calculate P/L
         profit_loss = (exit_price - entry_price) * shares
         return_pct = ((exit_price - entry_price) / entry_price) * 100
-        days_held = (exit_date - entry_date).days
+        days_held = (exit_date.date() - entry_date.date()).days
 
         return BacktestTrade(
             ticker=ticker,
@@ -392,24 +335,27 @@ class Backtester:
                 with conn:
                     cursor = conn.cursor()
 
-                    # Check if prices table exists, if not create it
+                    # Ensure the market-date spine exists
                     cursor.execute("""
-                        CREATE TABLE IF NOT EXISTS prices (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        CREATE TABLE IF NOT EXISTS price_bars (
                             ticker TEXT NOT NULL,
-                            price REAL,
-                            collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                            date TEXT NOT NULL,
+                            open REAL, high REAL, low REAL, close REAL,
+                            volume INTEGER,
+                            source TEXT DEFAULT 'yfinance',
+                            PRIMARY KEY (ticker, date)
                         )
                     """)
 
-                    # Insert historical prices
+                    # Insert daily bars
                     for date, row in hist.iterrows():
                         cursor.execute("""
-                            INSERT OR IGNORE INTO prices (ticker, price, collected_at)
-                            VALUES (?, ?, ?)
-                        """, (ticker, float(row['Close']), date.strftime('%Y-%m-%d %H:%M:%S')))
+                            INSERT OR REPLACE INTO price_bars (ticker, date, open, high, low, close, volume)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """, (ticker, date.strftime('%Y-%m-%d'), float(row['Open']), float(row['High']),
+                              float(row['Low']), float(row['Close']), int(row['Volume'])))
         except Exception as e:
-            logger.debug(f"Failed to store prices for {ticker}: {e}")
+            logger.debug(f"Failed to store bars for {ticker}: {e}")
 
     def _analyze_historical_data(self, ticker: str, hist, start_date: datetime, end_date: datetime) -> List[Dict]:
         """

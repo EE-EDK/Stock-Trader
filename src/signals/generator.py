@@ -10,6 +10,8 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 import logging
 
+from src.analysis.insider_grain import ClusterVerdict, evaluate_cluster
+
 logger = logging.getLogger(__name__)
 
 
@@ -97,8 +99,15 @@ class SignalGenerator:
         technical_data = technical_data or {}
         sentiment_data = sentiment_data or {}
 
-        for ticker in velocity_data.keys():
-            vel = velocity_data[ticker]
+        # Iterate the UNION of velocity and insider tickers, not velocity_data
+        # alone. A ticker with a qualifying insider cluster but no mention
+        # velocity (no ApeWisdom chatter) used to be structurally invisible --
+        # evaluate_cluster() ran, could return fires=True, and the result was
+        # simply never reached because the ticker was never a loop candidate.
+        # Measured 2026-08-24: 44 live qualifying clusters, most unreachable.
+        all_tickers = set(velocity_data.keys()) | set(insider_data.keys())
+        for ticker in all_tickers:
+            vel = velocity_data.get(ticker, {})
             insiders = insider_data.get(ticker, [])
             price = price_data.get(ticker, {})
             tech = technical_data.get(ticker, {})
@@ -112,8 +121,10 @@ class SignalGenerator:
                 triggers.append("velocity_spike")
                 conviction += 20
 
-            # Check insider cluster
-            if self._check_insider_cluster(insiders):
+            # Evaluate the insider cluster once and reuse the verdict for the
+            # note, so the trigger and the text it produces can never disagree.
+            cluster_verdict = evaluate_cluster(insiders, self.thresholds)
+            if cluster_verdict.fires:
                 triggers.append("insider_cluster")
                 conviction += 25
 
@@ -164,7 +175,8 @@ class SignalGenerator:
             min_sig_conviction = (self.thresholds.get("minimum_conviction") or 40)
             if triggers and conviction >= min_sig_conviction:
                 notes_text = self._generate_notes(
-                    ticker, vel, insiders, triggers, tech, sentiment
+                    ticker, vel, insiders, triggers, tech, sentiment,
+                    cluster_verdict=cluster_verdict,
                 )
                 sig_type = "combined" if len(triggers) > 1 else triggers[0]
                 created = signal_date if signal_date else datetime.now()
@@ -183,9 +195,11 @@ class SignalGenerator:
         # Sort by conviction descending
         signals.sort(key=lambda s: s.conviction_score, reverse=True)
 
+        insider_only = len(all_tickers) - len(velocity_data)
         logger.info(
             f"Generated {len(signals)} signals "
-            f"from {len(velocity_data)} tickers"
+            f"from {len(all_tickers)} tickers "
+            f"({len(velocity_data)} velocity, {insider_only} insider-only)"
         )
         return signals
 
@@ -205,41 +219,17 @@ class SignalGenerator:
 
     def _check_insider_cluster(self, insiders: List[Dict[str, Any]]) -> bool:
         """
-        @brief Check if insider buying meets cluster criteria
-        @param insiders List of insider trade dictionaries
+        @brief Check if insider buying meets cluster criteria.
+        @param insiders List of insider trade dictionaries for one ticker
         @return True if insider cluster criteria are met
+        @details Delegates to src.analysis.insider_grain.evaluate_cluster, which
+                 keeps Form 4 filings and OpenInsider cluster roll-ups on separate
+                 grains (this method used to count both, so one CEO purchase read
+                 as a seven-buyer cluster) and drops fills the open market did not
+                 price (offerings, exercises at strike).
+        @see src/analysis/insider_grain.py
         """
-        if not insiders:
-            return False
-
-        threshold = self.thresholds.get("insider_cluster", {})
-        lookback_days = (threshold.get("lookback_days") or 14)
-        min_insiders = (threshold.get("min_insiders") or 2)
-        min_value_total = (threshold.get("min_value_total") or 100000)
-
-        cutoff = datetime.now() - timedelta(days=lookback_days)
-
-        # Filter for recent purchases
-        recent_buys = []
-        for insider in insiders:
-            trade_date = insider.get("trade_date")
-            if isinstance(trade_date, str):
-                try:
-                    trade_date = datetime.fromisoformat(trade_date)
-                except ValueError:
-                    continue
-
-            is_purchase = insider.get("trade_type") == "P"
-            is_recent = trade_date is not None and trade_date >= cutoff
-
-            if is_purchase and is_recent:
-                recent_buys.append(insider)
-
-        if len(recent_buys) < min_insiders:
-            return False
-
-        total_value = sum((buy.get("value") or 0) for buy in recent_buys)
-        return total_value >= min_value_total
+        return evaluate_cluster(insiders, self.thresholds).fires
 
     def _check_sentiment_flip(self, vel: Dict[str, float]) -> bool:
         """
@@ -260,6 +250,7 @@ class SignalGenerator:
         triggers: List[str],
         tech: Optional[Dict[str, Any]] = None,
         sentiment: Optional[Dict[str, Any]] = None,
+        cluster_verdict: Optional[ClusterVerdict] = None,
     ) -> str:
         """
         @brief Generate human-readable notes for the signal
@@ -269,6 +260,9 @@ class SignalGenerator:
         @param triggers List of trigger types
         @param tech Technical analysis data
         @param sentiment Sentiment analysis data
+        @param cluster_verdict Verdict already computed by generate_signals.
+               Pass it so the note cannot disagree with the trigger that fired;
+               omitted, it is recomputed from `insiders`.
         @return Formatted note string
         """
         notes = []
@@ -278,10 +272,10 @@ class SignalGenerator:
             notes.append(f"Mentions up {vel_24h:.0f}% in 24h")
 
         if "insider_cluster" in triggers:
-            purchases = [i for i in insiders if i.get("trade_type") == "P"]
-            buy_count = len(purchases)
-            total_val = sum((i.get("value") or 0) for i in purchases)
-            notes.append(f"{buy_count} insiders bought ${total_val:,.0f}")
+            # Grain-aware: the total comes from one grain only, never a
+            # roll-up plus the individual filings it already summarises.
+            verdict = cluster_verdict or evaluate_cluster(insiders, self.thresholds)
+            notes.append(verdict.note())
 
         if "sentiment_flip" in triggers:
             sent_vel = (vel.get("sentiment_velocity") or 0)

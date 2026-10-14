@@ -74,3 +74,6 @@ type_check_report.txt
 # Ephemeral graph outputs (root GEMINI — do not commit)
 graphify-out/
 **/graphify-out/
+
+# Local backup snapshots written by repair/patch utilities (contains DB copies)
+archive/
